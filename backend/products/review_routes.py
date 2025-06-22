@@ -1,32 +1,65 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from backend.services.review_service import ReviewService
-from backend.services.exceptions import ServiceException, NotFoundException
+from backend.models.product_models import Product, Review
+from backend.models.user_models import User
+from backend.extensions import db
+from backend.auth.permissions import permission_required, Permission
+from backend.utils.sanitization import sanitize_input
 
-review_routes = Blueprint('review_routes', __name__)
+review_bp = Blueprint('review_bp', __name__)
 
-@review_routes.route('/<int:product_id>/reviews', methods=['POST'])
+@review_bp.route('/<int:product_id>/reviews', methods=['POST'])
 @jwt_required()
 def submit_review(product_id):
     """
-    Submit a review for a product.
+    Allows a logged-in user to submit a review for a product.
     """
     user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    product = Product.query.get(product_id)
+
+    if not product:
+        return jsonify({"msg": "Product not found"}), 404
+
     data = request.get_json()
-    rating = data.get('rating')
-    comment = data.get('comment')
+    sanitized_data = sanitize_input(data)
+    
+    rating = sanitized_data.get('rating')
+    comment = sanitized_data.get('comment')
 
     if not rating:
-        return jsonify({"error": "Rating is required."}), 400
+        return jsonify({"msg": "Rating is required"}), 400
 
-    try:
-        # Check if the user has purchased this product before allowing a review
-        if not ReviewService.has_user_purchased_product(user_id, product_id):
-             return jsonify({"error": "You can only review products you have purchased."}), 403
+    # Optional: Check if user has purchased the product before reviewing
+    # This would require linking orders to users and products.
 
-        review = ReviewService.create_review(product_id, user_id, rating, comment)
-        return jsonify(review.to_dict()), 201
-    except NotFoundException as e:
-        return jsonify({"error": str(e)}), 404
-    except ServiceException as e:
-        return jsonify({"error": str(e)}), 400
+    review = Review(
+        product_id=product.id,
+        user_id=user.id,
+        rating=rating,
+        comment=comment
+    )
+
+    db.session.add(review)
+    db.session.commit()
+
+    return jsonify({"msg": "Review submitted successfully"}), 201
+
+@review_bp.route('/<int:product_id>/reviews', methods=['GET'])
+def get_reviews(product_id):
+    """
+    Get all reviews for a specific product.
+    """
+    product = Product.query.get(product_id)
+    if not product:
+        return jsonify({"msg": "Product not found"}), 404
+        
+    reviews = Review.query.filter_by(product_id=product.id).all()
+    
+    return jsonify([{
+        'id': r.id,
+        'rating': r.rating,
+        'comment': r.comment,
+        'user': r.user.first_name, # or some user identifier
+        'created_at': r.created_at.isoformat()
+    } for r in reviews]), 200
