@@ -6,7 +6,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 cart_bp = Blueprint('cart_bp', __name__)
 
 @cart_bp.route('/cart/items', methods=['POST'])
-@auth_required
+@permission_required() # Replaced auth_required with the new permission decorator
 def add_item_to_cart():
     """
     Adds a specific product variant to the user's active cart.
@@ -15,7 +15,7 @@ def add_item_to_cart():
     data = request.get_json()
     variant_id = data.get('variant_id')
     quantity = data.get('quantity')
-    user_id = g.user['id']
+    user_id = get_jwt_identity() # Updated to use the identity from the JWT
 
     if not all([variant_id, quantity]):
         return jsonify({'error': 'variant_id and quantity are required.'}), 400
