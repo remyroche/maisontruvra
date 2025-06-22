@@ -4,6 +4,10 @@ from backend.services.order_service import OrderService
 from backend.services.exceptions import ServiceException
 from backend.auth.permissions import permission_required
 import datetime
+from flask import Blueprint, request, jsonify
+from backend.models.user_models import User
+from backend.extensions import db
+from backend.utils.sanitization import sanitize_input
 
 
 account_bp = Blueprint('account_bp', __name__)
@@ -12,13 +16,20 @@ account_bp = Blueprint('account_bp', __name__)
 @jwt_required()
 def get_profile():
     user_id = get_jwt_identity()
-    try:
-        user = UserService.get_user_by_id(user_id)
-        if not user:
-            return jsonify({"msg": "User not found"}), 404
-        return jsonify(user.to_dict()), 200
-    except ServiceException as e:
-        return jsonify({"msg": str(e)}), 500
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"msg": "User not found"}), 404
+
+    return jsonify({
+        "id": user.id,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "phone_number": user.phone_number,
+        "address": user.address,
+        "siret_number": user.siret_number
+        # Add other user fields as needed
+    }), 200
 
 
 @account_bp.route('/orders', methods=['GET'])
@@ -140,8 +151,13 @@ def update_profile():
     Allows a logged-in user to update their personal information.
     """
     user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"msg": "User not found"}), 404
+
     data = request.get_json()
-    
+    sanitized_data = sanitize_input(data)
+
     # Define which fields are updatable to prevent unwanted changes.
     updatable_fields = ['name', 'shipping_address', 'phone_number']
     update_data = {key: value for key, value in data.items() if key in updatable_fields}
