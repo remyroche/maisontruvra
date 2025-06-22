@@ -1,19 +1,22 @@
 from flask import Blueprint, jsonify
 from backend.services.passport_service import PassportService
-from backend.auth.permissions import admin_required
+from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required
+from backend.auth.permissions import permission_required, Permission, admin_required
+from backend.models.passport_models import ProductPassport
+from backend.extensions import db
 
-passport_routes = Blueprint('admin_passport_routes', __name__)
+passport_bp = Blueprint('admin_passport_bp', __name__, url_prefix='/passports')
 
-@passport_routes.route('/passports', methods=['GET'])
-@admin_required
-def get_all_passports():
-    passports = PassportService.get_all_passports()
-    return jsonify([p.to_dict() for p in passports]), 200
+@passport_bp.route('/', methods=['POST'])
+@jwt_required()
+@permission_required(Permission.MANAGE_PASSPORTS)
+def create_passport():
+    data = request.get_json()
+    # Add validation for required fields
+    new_passport = ProductPassport(**data)
+    db.session.add(new_passport)
+    db.session.commit()
+    return jsonify(new_passport.to_dict()), 201
 
-@passport_routes.route('/passports/<string:passport_id>', methods=['GET'])
-@admin_required
-def get_passport_details(passport_id):
-    passport = PassportService.get_passport_by_id(passport_id)
-    if passport:
-        return jsonify(passport.to_dict_detailed()), 200
-    return jsonify({"error": "Passport not found"}), 404
+
