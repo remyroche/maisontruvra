@@ -1,25 +1,40 @@
 from flask import Blueprint, request, jsonify
-from backend.services.b2b_partnership_service import B2BPartnershipService
-from backend.services.auth_service import AuthService
-from backend.services.exceptions import ServiceException
 from flask_jwt_extended import create_access_token
-import pyotp
-import datetime
+from backend.models.b2b_models import B2BUser
+from backend.extensions import db, bcrypt, limiter
+from backend.utils.sanitization import sanitize_input
 
-auth_routes = Blueprint('b2b_auth_routes', __name__)
+b2b_auth_bp = Blueprint('b2b_auth_bp', __name__)
 
 @auth_routes.route('/register', methods=['POST'])
+@limiter.limit("10/hour")
 def b2b_register_request():
     """
     Submits a request to become a B2B partner.
     This does not create a user account immediately.
     """
-    data = request.get_json()
-    try:
-        partnership_request = B2BPartnershipService.create_request(data)
-        return jsonify(partnership_request.to_dict()), 202 # 202 Accepted
-    except ServiceException as e:
-        return jsonify({"msg": str(e)}), 400
+    data = sanitize_input(request.get_json())    company_name = data.get('company_name')
+    email = data.get('email')
+    password = data.get('password')
+
+    if not all([company_name, email, password]):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    if B2BUser.query.filter_by(email=email).first():
+        return jsonify({'error': 'Email already registered'}), 409
+
+    hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+    new_b2b_user = B2BUser(
+        company_name=company_name,
+        email=email,
+        password=hashed_password
+        # Set other fields as necessary, potentially with defaults or after admin approval
+    )
+    db.session.add(new_b2b_user)
+    db.session.commit()
+
+    return jsonify({'message': 'B2B user registered successfully. Waiting for approval.'}), 201
+
 
 @b2b_auth_bp.route('/pro/login', methods=['POST'])
 @limiter.limit("5 per minute") # Apply rate limiting to prevent brute-force attacks
@@ -28,9 +43,10 @@ def b2b_login():
     Handles the initial B2B login with email and password.
     This is the first step and checks for MFA requirements.
     """
-    data = request.get_json()
+    data = sanitize_input(request.get_json())
     email = data.get('email')
     password = data.get('password')
+    user = B2BUser.query.filter_by(email=email).first()
 
     if not email or not password:
         return jsonify({"error": "Email and password are required."}), 400
