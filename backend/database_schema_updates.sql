@@ -78,3 +78,20 @@ CREATE TABLE `mfa_recovery_codes` (
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 );
 
+
+CREATE TABLE `invoices` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `order_id` INT NOT NULL,
+    `user_id` INT NOT NULL,
+    `invoice_number` VARCHAR(255) UNIQUE NOT NULL,
+    `file_path` VARCHAR(1024) NOT NULL, -- Path to the invoice file in secure storage (e.g., S3 key)
+    `generated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP NULL,
+    PRIMARY KEY (`id`),
+    FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`),
+    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`)
+);
+
+-- It's also a good idea to add an index on user_id for fast lookups.
+CREATE INDEX idx_invoices_user_id ON `invoices` (`user_id`);
+
