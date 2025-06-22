@@ -1,15 +1,17 @@
 from flask import Blueprint, request, jsonify
 from backend.services.newsletter_service import NewsletterService
-from backend.auth.permissions import admin_required
+from backend.auth.permissions import admin_required, permission_required, Permission
 
 newsletter_routes = Blueprint('admin_newsletter_routes', __name__)
 
+@permission_required(Permission.MANAGE_NEWSLETTER)
 @newsletter_routes.route('/newsletter/subscribers', methods=['GET'])
 @admin_required
 def get_subscribers():
     subscribers = NewsletterService.get_all_subscribers()
     return jsonify([s.to_dict() for s in subscribers]), 200
 
+@permission_required(Permission.MANAGE_NEWSLETTER)
 @newsletter_routes.route('/newsletter/send', methods=['POST'])
 @admin_required
 def send_newsletter():
