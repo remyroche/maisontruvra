@@ -22,23 +22,77 @@ def register():
 @auth_bp.route('/login', methods=['POST'])
 def login():
     """
-    Authenticate a B2C user and return an access token.
+    Handles the initial login with email and password.
+    If the user is a staff member with MFA enabled, it returns a temporary
+    token prompting for an MFA code instead of a full access token.
     """
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
 
-    if not email or not password:
-        return jsonify({"msg": "Email and password are required"}), 400
+    # 1. Authenticate user by email and password.
+    user = User.authenticate(email, password)
+    if not user:
+        return jsonify({"error": "Invalid credentials"}), 401
     
+    # 2. Check if the user is staff AND has MFA enabled.
+    # The 'is_staff' check should be based on their role (e.g., from RBACService).
+    if user.is_staff and user.is_mfa_enabled:
+        # User needs to complete the second factor of authentication.
+        # Issue a short-lived temporary token that includes a claim indicating
+        # that the next step is MFA verification.
+        additional_claims = {"mfa_required": True}
+        temp_token = create_access_token(
+            identity=user.id,
+            expires_delta=datetime.timedelta(minutes=5),
+            additional_claims=additional_claims
+        )
+        return jsonify({
+            "message": "MFA code required.",
+            "mfa_token": temp_token
+        }), 202 # 202 Accepted indicates the process is not yet complete.
+    
+    # 3. For non-MFA users or non-staff, issue a standard access token.
+    access_token = create_access_token(identity=user.id)
+    return jsonify(access_token=access_token), 200
+@auth_bp.route('/login/verify-mfa', methods=['POST'])
+def verify_login_mfa():
+    """
+    Verifies the MFA token for a staff user.
+    Requires the temporary 'mfa_token' from the first login step.
+    """
+    data = request.get_json()
+    mfa_token = data.get('mfa_token')
+    totp_code = data.get('totp_code')
+
+    # This endpoint must be accessed with the temporary token.
+    # A custom decorator would be ideal here. For simplicity:
     try:
-        user = AuthService.authenticate_user(email, password)
-        if user:
-            access_token = create_access_token(identity=user.id)
-            return jsonify(access_token=access_token, user=user.to_dict()), 200
-        return jsonify({"msg": "Invalid credentials"}), 401
-    except ServiceException as e:
-        return jsonify({"msg": str(e)}), 401
+        # Decode the token to verify it and get the user identity.
+        decoded_token = decode_token(mfa_token)
+        if not decoded_token['mfa_required']:
+             return jsonify({"error": "Invalid token for MFA verification."}), 401
+        user_id = decoded_token['sub']
+    except:
+        return jsonify({"error": "Invalid or expired MFA token."}), 401
+
+    # Fetch user's MFA secret from DB
+    secret = User.get_mfa_secret(user_id) # This should decrypt the secret
+    
+    # Verify the code
+    totp = pyotp.TOTP(secret)
+    if not totp.verify(totp_code):
+        return jsonify({"error": "Invalid MFA code."}), 401
+
+    # On success, issue a new, fully-scoped access token.
+    # Crucially, this new token contains a claim indicating MFA was completed.
+    additional_claims = {"mfa_verified": True}
+    access_token = create_access_token(
+        identity=user_id,
+        additional_claims=additional_claims
+    )
+    return jsonify(access_token=access_token), 200
+
 
 @auth_bp.route('/logout', methods=['POST'])
 @jwt_required()
