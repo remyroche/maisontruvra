@@ -1,3 +1,7 @@
+# FILE: routes/admin_products.py
+# New Flask Blueprint to manage the entire product hierarchy via the admin panel.
+# -----------------------------------------------------------------------------
+
 from flask import Blueprint, request, jsonify
 from backend.services.product_service import ProductService
 from backend.services.inventory_service import InventoryService
@@ -74,6 +78,11 @@ def update_inventory(product_id):
     quantity = data.get('quantity')
     if quantity is None:
         return jsonify({"error": "Quantity is required"}), 400
+    try:
+        inventory_item = InventoryService.update_stock(product_id, quantity)
+        return jsonify(inventory_item.to_dict()), 200
+    except NotFoundException as e:
+        return jsonify({"error": str(e)}), 404
     try:
         inventory_item = InventoryService.update_stock(product_id, quantity)
         return jsonify(inventory_item.to_dict()), 200
