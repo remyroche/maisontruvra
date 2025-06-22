@@ -1,60 +1,94 @@
-from flask import Blueprint, request, jsonify
-from backend.services.auth_service import AuthService
-from backend.services.user_service import UserService
-from backend.services.exceptions import ServiceException, NotFoundException
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask import Blueprint, request, jsonify, current_app
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+from backend.models.user_models import User
+from backend.extensions import db, bcrypt
+from backend.utils.auth_helpers import send_password_reset_email
+from backend.extensions import limiter
+from backend.utils.sanitization import sanitize_input
 
-auth_bp = Blueprint('public_auth_routes', __name__)
+auth_bp = Blueprint('auth_bp', __name__)
+
 
 @auth_bp.route('/register', methods=['POST'])
+@limiter.limit("10/hour")
 def register():
-    """
-    Register a new B2C user.
-    """
-    data = request.get_json()
-    try:
-        user = UserService.create_user(data)
-        access_token = create_access_token(identity=user.id)
-        return jsonify(access_token=access_token, user=user.to_dict()), 201
-    except ServiceException as e:
-        return jsonify({"msg": str(e)}), 400
-
-@auth_bp.route('/login', methods=['POST'])
-def login():
-    """
-    Handles the initial login with email and password.
-    If the user is a staff member with MFA enabled, it returns a temporary
-    token prompting for an MFA code instead of a full access token.
-    """
-    data = request.get_json()
+    """User registration route."""
+    data = sanitize_input(request.get_json())
     email = data.get('email')
     password = data.get('password')
 
-    # 1. Authenticate user by email and password.
-    user = User.authenticate(email, password)
+    if not email or not password:
+        return jsonify({"msg": "Email and password are required"}), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({"msg": "Email already exists"}), 409
+
+    hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+    new_user = User(email=email, password=hashed_password)
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({"msg": "User created successfully"}), 201
+
+@auth_bp.route('/login', methods=['POST'])
+@limiter.limit("10/hour")
+def login():
+    """User login route."""
+    data = sanitize_input(request.get_json())
+    email = data.get('email')
+    password = data.get('password')
+    user = User.query.filter_by(email=email).first()
+
+    if user and bcrypt.check_password_hash(user.password, password):
+        access_token = create_access_token(identity=user.id)
+        refresh_token = create_refresh_token(identity=user.id)
+        return jsonify(access_token=access_token, refresh_token=refresh_token), 200
+
+    return jsonify({"msg": "Bad email or password"}), 401
+
+@auth_bp.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh():
+    """Refresh token route."""
+    current_user_id = get_jwt_identity()
+    new_access_token = create_access_token(identity=current_user_id)
+    return jsonify(access_token=new_access_token), 200
+
+@auth_bp.route('/forgot-password', methods=['POST'])
+@limiter.limit("5/hour")
+def forgot_password():
+    """Forgot password route."""
+    data = sanitize_input(request.get_json())
+    email = data.get('email')
+    user = User.query.filter_by(email=email).first()
+
+    if user:
+        send_password_reset_email(user)
+
+    # Return a generic message to prevent user enumeration
+    return jsonify({"msg": "If your email is in our system, you will receive a password reset link."}), 200
+
+@auth_bp.route('/reset-password', methods=['POST'])
+@limiter.limit("5/hour")
+def reset_password():
+    """Reset password route."""
+    data = sanitize_input(request.get_json())
+    token = data.get('token')
+    new_password = data.get('password')
+
+    if not token or not new_password:
+        return jsonify({"msg": "Token and new password are required"}), 400
+
+    user = User.verify_reset_password_token(token)
+
     if not user:
-        return jsonify({"error": "Invalid credentials"}), 401
+        return jsonify({"msg": "Invalid or expired token"}), 400
+
+    user.password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+    db.session.commit()
+
+    return jsonify({"msg": "Password has been reset successfully"}), 200
     
-    # 2. Check if the user is staff AND has MFA enabled.
-    # The 'is_staff' check should be based on their role (e.g., from RBACService).
-    if user.is_staff and user.is_mfa_enabled:
-        # User needs to complete the second factor of authentication.
-        # Issue a short-lived temporary token that includes a claim indicating
-        # that the next step is MFA verification.
-        additional_claims = {"mfa_required": True}
-        temp_token = create_access_token(
-            identity=user.id,
-            expires_delta=datetime.timedelta(minutes=5),
-            additional_claims=additional_claims
-        )
-        return jsonify({
-            "message": "MFA code required.",
-            "mfa_token": temp_token
-        }), 202 # 202 Accepted indicates the process is not yet complete.
-    
-    # 3. For non-MFA users or non-staff, issue a standard access token.
-    access_token = create_access_token(identity=user.id)
-    return jsonify(access_token=access_token), 200
 @auth_bp.route('/login/verify-mfa', methods=['POST'])
 def verify_login_mfa():
     """
@@ -106,26 +140,4 @@ def logout():
     # For a more advanced setup, you could add the token's jti to a blocklist.
     return jsonify({"msg": "Successfully logged out"}), 200
 
-@auth_bp.route('/reset-password-request', methods=['POST'])
-def reset_password_request():
-    data = request.get_json()
-    email = data.get('email')
-    try:
-        AuthService.send_password_reset_email(email)
-        return jsonify({"msg": "If an account with that email exists, a password reset link has been sent."}), 200
-    except NotFoundException:
-         # Still return a success message to prevent user enumeration
-        return jsonify({"msg": "If an account with that email exists, a password reset link has been sent."}), 200
-    except ServiceException as e:
-        return jsonify({"msg": str(e)}), 500
 
-@auth_bp.route('/reset-password', methods=['POST'])
-def reset_password():
-    data = request.get_json()
-    token = data.get('token')
-    new_password = data.get('new_password')
-    try:
-        AuthService.reset_password_with_token(token, new_password)
-        return jsonify({"msg": "Password has been updated successfully."}), 200
-    except ServiceException as e:
-        return jsonify({"msg": str(e)}), 400
