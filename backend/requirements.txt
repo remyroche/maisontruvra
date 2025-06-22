@@ -1,0 +1,6 @@
+Flask
+Flask-JWT-Extended
+celery
+redis
+mysql-connector-python
+APScheduler
