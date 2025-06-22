@@ -1,5 +1,85 @@
 from backend import create_app, celery
 
+from flask import render_template
+import weasyprint
+import datetime
+
+# Assume 'queue' is a configured task queue instance (e.g., Celery app)
+# Assume 'db', 'logger', and 'storage_service' (for S3) are configured.
+
+@queue.task(name='generate_invoice')
+def generate_invoice(order_id):
+    """
+    Generates a PDF invoice for a given order, using different templates
+    for B2B and B2C users. The generated PDF is saved to secure storage.
+    """
+    logger.info(f"Starting invoice generation for order_id: {order_id}")
+    conn = db.get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 1. Fetch all necessary data for the invoice in one go.
+        cursor.execute(
+            """
+            SELECT
+                o.id as order_id, o.created_at, o.total,
+                u.id as user_id, u.name as user_name, u.email, u.role,
+                oi.quantity, oi.price_at_purchase,
+                pv.sku, p.name as product_name
+            FROM orders o
+            JOIN users u ON o.user_id = u.id
+            JOIN order_items oi ON o.id = oi.order_id
+            JOIN product_variants pv ON oi.product_variant_id = pv.id
+            JOIN products p ON pv.product_id = p.id
+            WHERE o.id = %s
+            """,
+            (order_id,)
+        )
+        results = cursor.fetchall()
+        if not results:
+            raise ValueError("Order not found or has no items.")
+
+        # 2. Process data and determine which template to use.
+        order_details = results[0]
+        user_role = order_details['role']
+        invoice_template_path = f"invoices/{user_role.lower()}_template.html"
+        
+        context = {
+            "order": order_details,
+            "items": results,
+            "today": datetime.date.today()
+        }
+
+        # 3. Render the HTML template with the order data.
+        html_string = render_template(invoice_template_path, **context)
+
+        # 4. Generate the PDF from the rendered HTML.
+        pdf_bytes = weasyprint.HTML(string=html_string).write_pdf()
+
+        # 5. Save the PDF to a secure storage (like a private S3 bucket).
+        invoice_number = f"INV-{order_details['created_at'].year}-{order_id}"
+        file_path = f"invoices/{user_id}/{invoice_number}.pdf"
+        storage_service.upload(file_path, pdf_bytes, content_type='application/pdf')
+
+        # 6. Save the reference to the invoice in our database.
+        cursor.execute(
+            """
+            INSERT INTO invoices (order_id, user_id, invoice_number, file_path)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (order_id, order_details['user_id'], invoice_number, file_path)
+        )
+        conn.commit()
+        logger.info(f"Successfully generated and saved invoice {invoice_number}")
+
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to generate invoice for order {order_id}: {e}")
+        # Re-raise the exception to allow the task queue to handle retries.
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
 app = create_app()
 app.app_context().push()
 
