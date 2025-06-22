@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Invoice {{ invoice.invoice_number }}</title>
+    <style>
+        body { font-family: sans-serif; }
+        .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, .15); }
+        /* Add more styles for a professional invoice */
+    </style>
+</head>
+<body>
+    <div class="invoice-box">
+        <h1>Invoice: {{ invoice.invoice_number }}</h1>
+        <p>Order ID: {{ invoice.order.id }}</p>
+        <p>Date: {{ invoice.created_at.strftime('%Y-%m-%d') }}</p>
+        <hr>
+        <h2>Bill To:</h2>
+        <p>{{ invoice.order.user.first_name }} {{ invoice.order.user.last_name }}</p>
+        <!-- Add more details -->
+        <hr>
+        <table>
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in invoice.order.items %}
+                <tr>
+                    <td>{{ item.product.name }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>€{{ "%.2f"|format(item.price) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <h3>Total: €{{ "%.2f"|format(invoice.order.total_amount) }}</h3>
+    </div>
+</body>
+</html>

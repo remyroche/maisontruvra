@@ -1,0 +1,21 @@
+# This file makes the 'models' directory a Python package.
+# It also helps in importing all models into the application's context for tools like Flask-Migrate.
+
+from .base import BaseModel
+from .user_models import User, Role, UserRole, Address
+from .product_models import Product, Category, Collection, Review, ProductImage
+from .order_models import Order, OrderItem, Invoice
+from .cart_models import Cart, CartItem
+from .b2b_models import B2BUser, B2BPartnershipRequest
+from .b2b_loyalty_models import B2BLoyaltyTier
+from .passport_models import ProductPassport, PassportEntry
+from .blog_models import BlogPost, BlogCategory
+from .newsletter_models import NewsletterSubscription
+from .inventory_models import Inventory
+from .auth_models import TokenBlocklist
+from .audit_models import AuditLog
+from .referral_models import B2BReferral
+from .request_models import GenericRequest
+from .utility_models import Setting
+from .analytics_models import PageView, SalesAnalytics
+from .enums import OrderStatus, UserStatus, RoleType

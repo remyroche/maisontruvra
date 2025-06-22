@@ -1,0 +1,107 @@
+<!-- File: website/source/product-passport.html (NEW FILE) -->
+<!-- Note: This is the elegant, customer-facing page to display the product's story. -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Votre Passeport Produit - Maison Trüvra</title>
+    <link rel="stylesheet" href="/css/public.css">
+    <script src="[https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js](https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js)"></script>
+</head>
+<body class="bg-cream text-dark-gray">
+
+    <div id="header-placeholder"></div>
+
+    <main class="container mx-auto mt-10 px-4 py-16" x-data="passportPage()" x-init="fetchPassportData()">
+
+        <!-- Loading State -->
+        <template x-if="isLoading">
+            <div class="text-center p-24 text-dark-gray">Vérification de votre passeport...</div>
+        </template>
+        
+        <!-- Error State -->
+        <template x-if="error">
+            <div class="text-center p-24">
+                <h1 class="text-3xl font-serif text-truffle-burgundy">Passeport non trouvé</h1>
+                <p class="mt-4" x-text="error"></p>
+                <a href="/index.html" class="btn btn-primary mt-8">Retour à l'accueil</a>
+            </div>
+        </template>
+
+        <!-- Passport Content -->
+        <div x-show="passport" x-cloak class="max-w-4xl mx-auto transition-opacity duration-1000"
+             x-transition:enter="ease-out" x-transition:enter-start="opacity-0">
+             
+            <div class="text-center mb-12">
+                <h1 class="text-4xl md:text-6xl font-serif font-light text-dark-brown" x-text="passport.story_title"></h1>
+                <p class="mt-2 text-lg text-gold" x-text="passport.product_name"></p>
+            </div>
+
+            <img :src="passport.product_image" :alt="passport.product_name" class="w-full h-96 object-cover rounded-lg shadow-xl mb-12">
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 text-center mb-16">
+                <div>
+                    <h3 class="text-sm uppercase tracking-widest text-dark-gray">Origine</h3>
+                    <p class="text-2xl font-serif text-truffle-burgundy mt-1" x-text="passport.origin_location"></p>
+                </div>
+                <div>
+                    <h3 class="text-sm uppercase tracking-widest text-dark-gray">Date de récolte</h3>
+                    <p class="text-2xl font-serif text-truffle-burgundy mt-1" x-text="passport.harvest_date"></p>
+                </div>
+                <div>
+                    <h3 class="text-sm uppercase tracking-widest text-dark-gray">Passeport N°</h3>
+                    <p class="text-2xl font-mono text-truffle-burgundy mt-1" x-text="passport.uid"></p>
+                </div>
+            </div>
+
+            <div class="prose max-w-none lg:prose-xl text-dark-gray mx-auto">
+                <div x-html="passport.story_content"></div>
+                <h3 class="text-dark-brown mt-12">Notes du Producteur</h3>
+                <blockquote class="border-l-4 border-gold pl-4 italic" x-text="passport.producer_notes"></blockquote>
+                <h3 class="text-dark-brown mt-12">Suggestions d'Accords</h3>
+                <p x-text="passport.pairing_suggestions"></p>
+            </div>
+        </div>
+    </main>
+
+    <div id="footer-placeholder"></div>
+
+    <script>
+        function passportPage() {
+            return {
+                isLoading: true,
+                error: null,
+                passport: null,
+                fetchPassportData() {
+                    const uid = new URLSearchParams(window.location.search).get('uid');
+                    if (!uid) {
+                        this.error = "Aucun identifiant de produit n'a été fourni.";
+                        this.isLoading = false;
+                        return;
+                    }
+
+                    fetch(`/api/passport/${uid}`)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Ce passeport est invalide ou n\'a pas pu être trouvé.');
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            this.passport = data;
+                        })
+                        .catch(err => {
+                            this.error = err.message;
+                        })
+                        .finally(() => {
+                            this.isLoading = false;
+                        });
+                }
+            }
+        }
+    </script>
+    <script type="module" src="/js/main.js"></script>
+</body>
+</html>

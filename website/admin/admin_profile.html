@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - My Profile</title>
+    <link rel="stylesheet" href="/css/public.css">
+</head>
+<body>
+    <div id="admin-header-placeholder"></div>
+    <main class="p-4 sm:p-6 lg:p-8">
+        <h1 class="text-3xl font-bold tracking-tight text-gray-900 mb-6">My Profile</h1>
+        <div class="max-w-4xl mx-auto space-y-8">
+            <!-- Profile Information -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-bold mb-4">Profile Information</h2>
+                <!-- Profile form fields here -->
+            </div>
+            <!-- Security & MFA Setup -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-bold mb-4">Security</h2>
+                <div id="mfa-status-container">
+                    <!-- Status (enabled/disabled) will be shown here -->
+                </div>
+                <!-- MFA Setup Flow Container -->
+                <div id="mfa-setup-container" class="hidden mt-4 p-4 border rounded-md">
+                    <p class="text-center">Scan this QR code with your authenticator app (e.g., Google Authenticator).</p>
+                    <img id="mfa-qr-code" src="" alt="MFA QR Code" class="mx-auto my-4 border">
+                    <form id="mfa-verify-form" class="flex items-center justify-center gap-4">
+                        <input type="text" id="mfa-verify-code" placeholder="Enter 6-digit code" class="rounded-md border-gray-300">
+                        <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md">Verify & Enable</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+    </div>
+
+    <script type="module" src="./js/admin_profile.js"></script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{
+  "name": "maison-truvra-website",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The official website for Maison Truvra.",
+  "scripts": {
+    "dev": "vite --config website/vite.config.js",
+    "build": "vite build --config website/vite.config.js",
+    "preview": "vite preview --config website/vite.config.js",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore",
+    "format": "prettier --write source/",
+    "cypress:open": "cypress open",
+    "security-audit": "node scripts/security_audit.js"
+  },
+  "devDependencies": {
+    "@tailwindcss/aspect-ratio": "^0.4.2",
+    "@tailwindcss/forms": "^0.5.7",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "autoprefixer": "^10.4.19",
+    "cypress": "^13.8.1",
+    "eslint": "^9.1.1",
+    "postcss": "^8.4.38",
+    "prettier": "^3.2.5",
+    "tailwindcss": "^3.4.3",
+    "vite": "^5.2.0",
+    "vite-plugin-static-copy": "^1.0.1"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "chart.js": "^4.4.2",
+    "dompurify": "^3.1.0",
+    "i18next": "^23.11.2",
+    "pinia": "^2.1.7",
+    "swiper": "^11.1.1",
+    "validator": "^13.11.0",
+    "vee-validate": "^4.12.6",
+    "vue": "^3.4.27",
+    "vue-chartjs": "^5.3.1",
+    "vue-router": "^4.3.2",
+    "@vee-validate/zod": "^4.12.6",
+    "zod": "^3.23.8"
+  }
+}

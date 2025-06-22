@@ -1,0 +1,119 @@
+<!-- website/source/admin/admin_manage_articles.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manage Journal Articles - Maison Trüvra Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/public.css">
+    <!-- EasyMDE Markdown Editor Stylesheet -->
+    <link rel="stylesheet" href="https://unpkg.com/easymde/dist/easymde.min.css">
+    <style>
+        /* Style adjustments for the editor to match the brand aesthetic */
+        .editor-toolbar, .EasyMDEContainer .cm-s-easymde {
+            border-color: #e5e7eb; /* tailwind gray-200 */
+        }
+        .editor-toolbar a.active, .editor-toolbar a:hover {
+            background: #F5F5F5; /* brand-light-gray */
+            border-color: #D4AF37; /* brand-gold */
+        }
+        .EasyMDEContainer {
+            border-radius: 0.375rem;
+        }
+    </style>
+</head>
+<body class="bg-brand-light-gray">
+    <div id="admin-header-placeholder"></div>
+
+    <div class="container mx-auto p-4 md:p-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-serif text-brand-dark-brown">Journal Articles</h1>
+            <button id="add-new-article-btn" class="bg-brand-burgundy text-white font-bold py-2 px-6 rounded-lg hover:bg-brand-dark-brown transition-colors">
+                + Add New Article
+            </button>
+        </div>
+
+        <!-- Articles List -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+             <h2 class="text-2xl font-serif text-brand-burgundy mb-4">Existing Articles</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="border-b-2 border-brand-light-gray">
+                            <th class="py-3 px-2">Title</th>
+                            <th class="py-3 px-2">Category</th>
+                            <th class="py-3 px-2">Status</th>
+                            <th class="py-3 px-2">Published Date</th>
+                            <th class="py-3 px-2 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="articles-table-body">
+                        <!-- Dynamic content will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Add/Edit Article Editor (Initially Hidden) -->
+        <div id="article-editor-container" class="bg-white p-6 rounded-lg shadow-md hidden">
+            <h2 class="text-2xl font-serif text-brand-burgundy mb-6" id="article-form-title">Create New Article</h2>
+            <form id="article-form" class="space-y-6">
+                <input type="hidden" id="article-id">
+                
+                <!-- Title -->
+                <div>
+                    <label for="article-title" class="block text-brand-dark-gray font-sans mb-2 font-semibold">Title</label>
+                    <input type="text" id="article-title" class="w-full p-3 border border-gray-300 rounded-md" required>
+                </div>
+
+                <!-- Metadata Row -->
+                <div class="grid md:grid-cols-3 gap-6">
+                    <div>
+                        <label for="article-category" class="block text-brand-dark-gray font-sans mb-2 font-semibold">Category</label>
+                        <select id="article-category" class="w-full p-3 border border-gray-300 rounded-md bg-white" required>
+                            <!-- Categories populated dynamically -->
+                        </select>
+                    </div>
+                    <div>
+                        <label for="article-status" class="block text-brand-dark-gray font-sans mb-2 font-semibold">Status</label>
+                        <select id="article-status" class="w-full p-3 border border-gray-300 rounded-md bg-white">
+                            <option value="draft">Draft</option>
+                            <option value="published">Published</option>
+                        </select>
+                    </div>
+                     <div>
+                        <label for="article-content-type" class="block text-brand-dark-gray font-sans mb-2 font-semibold">Content Type</label>
+                        <select id="article-content-type" class="w-full p-3 border border-gray-300 rounded-md bg-white">
+                            <option value="markdown">Markdown Editor</option>
+                            <option value="html">Custom HTML</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Content Editor -->
+                <div>
+                    <label for="article-content" class="block text-brand-dark-gray font-sans mb-2 font-semibold">Content</label>
+                    <textarea id="article-content" class="w-full p-3 border border-gray-300 rounded-md" rows="15"></textarea>
+                    <p id="html-warning" class="text-sm text-amber-700 mt-2 hidden">
+                        <strong>Warning:</strong> You are in Custom HTML mode. Only safe HTML tags are allowed. All other code will be removed for security.
+                    </p>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex items-center space-x-4 pt-4 border-t border-brand-light-gray">
+                    <button type="submit" class="bg-brand-burgundy text-white font-bold py-2 px-6 rounded-lg hover:bg-brand-dark-brown transition-colors">Save Article</button>
+                    <button type="button" id="cancel-article-edit-btn" class="bg-gray-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-gray-600">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- External Libraries -->
+    <script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
+    
+    <!-- Local Scripts -->
+    <script src="/js/config.js"></script>
+    <script src="/admin/js/admin_api.js"></script>
+    <script src="/admin/js/admin_manage_articles.js"></script>
+</body>
+</html>

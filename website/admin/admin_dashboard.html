@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link href="/css/public.css" rel="stylesheet">
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Litepicker for date range selection -->
+    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/bundle.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
+    <style>
+        .kpi-card {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+        .kpi-value {
+            font-size: 2.25rem;
+            font-weight: 700;
+        }
+        .kpi-label {
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="admin-header-placeholder"></div>
+
+    <main class="p-4 sm:p-6 lg:p-8">
+        <!-- Header Controls -->
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <h1 class="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+            <div class="flex items-center gap-4">
+                <input id="date-range-picker" type="text" class="border-gray-300 rounded-md shadow-sm" placeholder="Select date range"/>
+                <button id="export-csv-btn" class="bg-green-600 text-white py-2 px-4 rounded-md shadow-sm hover:bg-green-700">
+                    Export CSV
+                </button>
+            </div>
+        </div>
+
+        <div id="dashboard-loading" class="text-center p-12">
+            <p class="text-lg text-gray-600">Loading dashboard data...</p>
+        </div>
+        
+        <div id="dashboard-content" class="hidden">
+            <!-- Section 1: KPI Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="kpi-card">
+                    <p id="kpi-total-revenue" class="kpi-value text-green-600">€0.00</p>
+                    <p class="kpi-label">Total Revenue</p>
+                </div>
+                <div class="kpi-card">
+                    <p id="kpi-total-orders" class="kpi-value text-blue-600">0</p>
+                    <p class="kpi-label">Total Orders</p>
+                </div>
+                <div class="kpi-card">
+                    <p id="kpi-new-customers" class="kpi-value text-purple-600">0</p>
+                    <p class="kpi-label">New Customers (B2C + B2B)</p>
+                </div>
+                 <div class="kpi-card">
+                    <p id="kpi-new-subscribers" class="kpi-value text-pink-600">0</p>
+                    <p class="kpi-label">New Newsletter Subscribers</p>
+                </div>
+            </div>
+
+            <!-- Section 2: Graphs -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white p-4 rounded-lg shadow"><canvas id="orders-chart"></canvas></div>
+                <div class="bg-white p-4 rounded-lg shadow"><canvas id="customers-chart"></canvas></div>
+            </div>
+
+            <!-- Section 3: Action Items -->
+            <div class="mb-8">
+                <h2 class="text-2xl font-semibold mb-4">Action Items</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h3 class="font-bold mb-2">Pending B2B Applications</h3>
+                        <div id="pending-b2b-container" class="max-h-64 overflow-y-auto"></div>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h3 class="font-bold mb-2">Low Stock Products (<10)</h3>
+                        <div id="low-stock-container" class="max-h-64 overflow-y-auto"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Inventory Report -->
+            <div>
+                 <h2 class="text-2xl font-semibold mb-4">Inventory Report</h2>
+                 <div id="inventory-report-container" class="bg-white p-4 rounded-lg shadow"></div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="/admin/js/admin_dashboard.js"></script>
+</body>
+</html>

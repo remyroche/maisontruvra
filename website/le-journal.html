@@ -1,0 +1,45 @@
+<!-- website/source/le-journal.html -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Le Journal - Maison Trüvra</title>
+    <link rel="stylesheet" href="/css/public.css">
+</head>
+<body class="bg-white">
+
+    <div id="header-placeholder"></div>
+
+    <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <header class="text-center my-16">
+            <h1 class="font-serif text-5xl md:text-6xl text-brand-dark-brown">Le Journal</h1>
+            <p class="text-lg text-brand-dark-gray mt-4">Histoires et découvertes depuis notre Maison.</p>
+        </header>
+
+        <!-- Dynamic Category Filter Navigation -->
+        <nav id="journal-categories-nav" class="flex flex-wrap justify-center items-center space-x-4 md:space-x-6 border-b-2 border-brand-light-gray pb-4 mb-16">
+            <a href="#" class="font-sans text-md text-brand-burgundy font-semibold hover:text-brand-gold transition-colors pb-1 border-b-2 border-brand-burgundy" data-slug="all">Tous les articles</a>
+            <!-- Dynamic categories will be populated by JavaScript -->
+            <div id="categories-container" class="contents"></div>
+        </nav>
+
+        <!-- Article Grid Placeholder -->
+        <section id="article-grid" class="min-h-[50vh] flex items-center justify-center">
+            <div class="text-center">
+                <h2 class="text-2xl font-serif text-brand-dark-brown">Les Histoires Arrivent Bientôt.</h2>
+                <p class="mt-2 text-brand-dark-gray">Nos journaux de laboratoire et nos collaborations culinaires seront partagés ici.</p>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="footer-placeholder"></div>
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/i18n.js"></script>
+    <script src="/js/ui.js"></script>
+    <script src="/js/pages/le-journal.js"></script>
+</body>
+</html>

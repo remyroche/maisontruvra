@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Sessions - Maison Truvra</title>
+    <link rel="stylesheet" href="/css/public.css">
+</head>
+<body class="flex bg-mt-light-gray">
+    <div class="flex-1 flex flex-col">
+        <div id="admin-header-container">
+             <!-- Admin header will be loaded here -->
+        </div>
+        <main class="flex-1 p-6 md:p-10">
+            <div class="admin-header">
+                <h1 class="text-3xl font-bold">Manage Active Sessions</h1>
+            </div>
+            <div class="admin-card">
+                <p class="mb-4 text-gray-600">Here is a list of all your active login sessions. You can revoke any session you do not recognize.</p>
+                <div class="overflow-x-auto">
+                    <table class="admin-table w-full">
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Last Seen
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    IP Address
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Device / Browser
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Action
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="sessions-table-body" class="divide-y divide-gray-200">
+                            <!-- Session data will be injected here by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script type="module" src="/admin/js/admin_main.js"></script>
+    <script type="module" src="/admin/js/admin_manage_sessions.js"></script>
+</body>
+</html>

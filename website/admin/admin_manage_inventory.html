@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Inventory</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div id="admin-header-placeholder"></div>
+
+    <div class="container mx-auto p-8">
+        <h1 class="text-3xl font-bold mb-6">Manage Inventory</h1>
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <table class="min-w-full">
+                <thead>
+                    <tr>
+                        <th class="text-left p-2">Product Name</th>
+                        <th class="text-left p-2">SKU</th>
+                        <th class="text-left p-2">Current Stock</th>
+                        <th class="text-left p-2">Update Stock</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-table-body">
+                    <!-- Inventory rows will be dynamically inserted by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        // JS to fetch inventory and handle stock updates would go here or in a separate file.
+    </script>
+</body>
+</html>
+

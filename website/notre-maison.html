@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Notre Maison - Maison Trüvra</title>
+    <link rel="stylesheet" href="/css/public.css">
+</head>
+<body class="bg-white text-truffle-burgundy font-sans">
+
+    <div id="header-placeholder"></div>
+
+        <!-- Notre Maison Content -->
+        <div id="page-maison" class="hidden">
+             <header class="bg-white shadow-md sticky top-0 z-50">
+              <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+                <a href="#" class="text-2xl font-bold text-truffle-burgundy font-serif">Maison Trüvra</a>
+                <div class="hidden md:flex items-center space-x-8">
+                  <a href="#" class="text-truffle-burgundy uppercase text-sm font-sans tracking-wider hover:text-gold">Produits</a>
+                  <a href="#" class="text-truffle-burgundy uppercase text-sm font-sans tracking-wider hover:text-gold">Notre Maison</a>
+                  <a href="#" class="text-truffle-burgundy uppercase text-sm font-sans tracking-wider hover:text-gold">Journal</a>
+                  <a href="#" class="text-truffle-burgundy uppercase text-sm font-sans tracking-wider hover:text-gold">Professionnels</a>
+                  <a href="#" class="relative">
+                    <svg class="h-6 w-6 text-truffle-burgundy" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                  </a>
+                  <div x-data="{ open: false }" class="relative">
+                    <button @click="open = !open" class="flex items-center text-truffle-burgundy focus:outline-none">
+                      <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    </button>
+                    <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1">
+                      <a href="#" class="block px-4 py-2 text-sm text-truffle-burgundy hover:bg-brand-light-gray">Mon Compte</a>
+                      <a href="#" class="block px-4 py-2 text-sm text-truffle-burgundy hover:bg-brand-light-gray">Admin</a>
+                      <a href="#" class="block px-4 py-2 text-sm text-truffle-burgundy hover:bg-brand-light-gray">Déconnexion</a>
+                    </div>
+                  </div>
+                </div>
+              </nav>
+            </header>
+
+            <main class="container mx-auto px-4 py-20">
+                <article class="max-w-3xl mx-auto">
+                    <header class="text-center mb-16">
+                        <h1 class="text-5xl font-serif mb-4">A Manifesto on Purity</h1>
+                        <p class="text-lg text-brand-dark-gray">This is not a story of heritage found, but of perfection forged.</p>
+                    </header>
+                    
+                    <img src="https://placehold.co/900x600/3e1a1a/fdfbf6?text=The+Vision" alt="Founder of Maison Trüvra" class="rounded-lg shadow-xl mb-12">
+
+                    <section class="mb-12 border-t border-gray-200 pt-8">
+                        <h2 class="text-3xl font-serif mb-4">A Passion for Process</h2>
+                        <div class="text-lg text-brand-dark-gray space-y-6 leading-relaxed">
+                            <p>For over a decade, a world of cultures, yeasts, and the patient magic of fermentation taught me that the most complex flavors arise from the simplest elements, manipulated with scientific precision and profound respect. My love for cooking was never just about recipes; it was about understanding an ingredient at its most fundamental level.</p>
+                            <p>This obsession with process is the foundation of Maison Trüvra.</p>
+                        </div>
+                    </section>
+                    
+                    <img src="https://placehold.co/900x600/f5f5f5/3A2D2B?text=The+Enigma" alt="Close-up on a truffle" class="rounded-lg shadow-xl mb-12">
+
+                    <section class="mb-12 border-t border-gray-200 pt-8">
+                        <h2 class="text-3xl font-serif mb-4">The Truffle's Enigma</h2>
+                        <div class="text-lg text-brand-dark-gray space-y-6 leading-relaxed">
+                            <p>The truffle is an icon of luxury, yet it is an ingredient of frustrating inconsistency. Its flavor, a complex tapestry of earth, musk, and unmistakable umami, is a fleeting gift of nature. For every perfect specimen, countless others are underwhelming. As a chef and a scientist, I could not accept this lottery.</p>
+                            <p>I knew that to truly honor the truffle, I had to control its destiny.</p>
+                        </div>
+                    </section>
+                    
+                    <img src="https://placehold.co/900x600/e0dcd2/3E1A1A?text=The+Biosphere" alt="The clean environment of the biosphere" class="rounded-lg shadow-xl mb-12">
+
+                    <section class="mb-12 border-t border-gray-200 pt-8">
+                        <h2 class="text-3xl font-serif mb-4">The Biosphere Breakthrough</h2>
+                        <div class="text-lg text-brand-dark-gray space-y-6 leading-relaxed">
+                            <p>The solution was not to tame nature, but to create a world where it could achieve its ultimate potential. Our proprietary hydroponic biosphere is that world. It is a closed-loop ecosystem where we provide purest water, organic nutrients, and the precise conditions that our truffles crave.</p>
+                            <p>This method respects nature by eliminating its unpredictability. It uses less water than traditional agriculture, requires no soil disruption, and ensures that every single truffle is a perfect expression of its species. It is the fusion of ecological responsibility and uncompromising quality.</p>
+                        </div>
+                    </section>
+
+                    <footer class="text-center mt-16 border-t border-gray-200 pt-8">
+                         <a href="#" class="inline-block bg-gold text-white font-bold py-4 px-10 rounded-full shadow-lg hover:bg-truffle-burgundy transition-colors duration-300">
+                            Explore Our First Product
+                         </a>
+                    </footer>
+                </article>
+            </main>
+        </div>
+    </div>
+
+    <div id="footer-placeholder"></div>
+    <script type="module" src="/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,309 @@
+Guide to Role-Based Access Control (RBAC)
+
+You now have a flexible and secure system for managing staff access. Here's how it works and how to use it.
+How it Works
+
+    Permissions: We've defined a list of specific actions a user can take, like VIEW_USERS or MANAGE_PRODUCTS. These are the building blocks of your access control.
+
+    Roles: Roles (e.g., "Marketing Manager", "Content Editor") are simply collections of these permissions.
+
+    Users: You assign one or more roles to each staff member. A user's total access is the sum of all permissions from all their assigned roles.
+
+    The "Admin" Role: The role named "Admin" is special. It has unrestricted access to everything and bypasses all permission checks. This role cannot be edited from the UI.
+
+How to Manage Roles and Permissions
+
+    Log in to your admin panel.
+
+    Navigate to the new "Roles & Permissions" page using the link in the header.
+
+    You will see a table with permissions listed as rows and your staff roles as columns.
+
+    To grant a role a specific permission, simply check the corresponding box. To revoke it, uncheck the box.
+
+    You can use the "Select All in Group" checkbox at the top of each permission category to grant or revoke all permissions in that category for a role in one click.
+
+    Once you've made your changes, click the "Save Changes" button at the top right.
+
+Permissions Map
+
+Here is the complete list of all administrative routes and the permission required to access them.
+
+Route Endpoint (Path)
+	
+
+HTTP Method
+	
+
+Required Permission
+	
+
+Description
+
+/api/admin/dashboard/stats
+	
+
+GET
+	
+
+VIEW_DASHBOARD
+	
+
+Get statistics for the main dashboard.
+
+/api/admin/users/
+	
+
+GET
+	
+
+VIEW_USERS
+	
+
+View all users (B2C and B2B).
+
+/api/admin/users/{id}
+	
+
+PUT, DELETE
+	
+
+MANAGE_USERS
+	
+
+Update or delete a specific user.
+
+/api/admin/users/roles/all-with-permissions
+	
+
+GET
+	
+
+MANAGE_ROLES
+	
+
+Get all roles and their assigned permissions.
+
+/api/admin/users/roles/bulk-update-permissions
+	
+
+PUT
+	
+
+MANAGE_ROLES
+	
+
+Update permissions for multiple roles at once.
+
+/api/admin/products/
+	
+
+GET
+	
+
+VIEW_PRODUCTS
+	
+
+View all products.
+
+/api/admin/products/
+	
+
+POST
+	
+
+MANAGE_PRODUCTS
+	
+
+Create a new product.
+
+/api/admin/products/{id}
+	
+
+PUT, DELETE
+	
+
+MANAGE_PRODUCTS
+	
+
+Update or delete a product.
+
+/api/admin/categories/
+	
+
+GET, POST
+	
+
+MANAGE_PRODUCTS
+	
+
+Manage product categories.
+
+/api/admin/orders/
+	
+
+GET
+	
+
+VIEW_ORDERS
+	
+
+View all orders.
+
+/api/admin/orders/{id}/status
+	
+
+PUT
+	
+
+MANAGE_ORDERS
+	
+
+Change the status of an order.
+
+/api/admin/b2b/accounts
+	
+
+GET
+	
+
+VIEW_B2B_ACCOUNTS
+	
+
+View all B2B accounts.
+
+/api/admin/b2b/accounts/{id}/approve
+	
+
+POST
+	
+
+MANAGE_B2B_ACCOUNTS
+	
+
+Approve a B2B account.
+
+/api/admin/blog/posts
+	
+
+GET, POST
+	
+
+MANAGE_BLOG
+	
+
+Create or view blog posts.
+
+/api/admin/blog/posts/{id}
+	
+
+PUT, DELETE
+	
+
+MANAGE_BLOG
+	
+
+Update or delete a blog post.
+
+/api/admin/site/settings
+	
+
+GET, PUT
+	
+
+MANAGE_SITE_SETTINGS
+	
+
+Manage general site settings like FAQs.
+
+/api/admin/reviews/
+	
+
+GET
+	
+
+MANAGE_REVIEWS
+	
+
+View all product reviews.
+
+/api/admin/reviews/{id}/approve
+	
+
+POST
+	
+
+MANAGE_REVIEWS
+	
+
+Approve a product review.
+
+/api/admin/loyalty/tiers
+	
+
+GET, POST
+	
+
+MANAGE_LOYALTY_PROGRAM
+	
+
+Manage loyalty tiers.
+
+/api/admin/newsletter/recipients
+	
+
+GET
+	
+
+MANAGE_NEWSLETTER
+	
+
+Get recipient lists for sending a newsletter.
+
+/api/admin/newsletter/send
+	
+
+POST
+	
+
+MANAGE_NEWSLETTER
+	
+
+Send a newsletter.
+
+/api/admin/newsletter/subscribers
+	
+
+GET
+	
+
+VIEW_NEWSLETTER_SUBSCRIBERS
+	
+
+View lists of newsletter subscribers.
+
+/api/admin/passports
+	
+
+GET
+	
+
+VIEW_PASSPORTS
+	
+
+View product passports.
+
+/api/admin/audit-log
+	
+
+GET
+	
+
+VIEW_AUDIT_LOGS
+	
+
+View the system audit log.
+
+Note: Routes related to creating, updating, and deleting roles themselves (e.g., /api/admin/users/roles) remain restricted to users with the full "Admin" role to prevent accidental lockouts.
+
+This new system provides a powerful and secure foundation for managing your team.

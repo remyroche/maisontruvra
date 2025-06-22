@@ -1,0 +1,306 @@
+/* File: website/source/css/public.css */
+/* Note: This stylesheet has been updated for a more luxurious feel, with refined spacing, typography, and softer transitions. */
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;700&family=Teko:wght@400;700&display=swap');
+
+/* General Body Styles */
+body {
+    font-family: 'Inter', sans-serif;
+    color: #374151; /* gray-700 */
+}
+
+/* Header Styles */
+.header-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background-color: white;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Add a class on scroll with JS */
+.header-scrolled {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Navigation Link Transitions */
+nav a {
+    transition: color 0.3s ease-in-out;
+}
+
+/* General Body Styles */
+body {
+    font-family: 'Inter', sans-serif;
+    color: #374151; /* gray-700 */
+}
+
+/* --- Animations & Micro-interactions --- */
+.product-card {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fade-in-up 0.5s ease-out forwards;
+}
+
+@keyframes fade-in-up {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+}
+
+.accordion-content.open {
+    max-height: 500px; /* Adjust as needed */
+    padding-bottom: 1rem;
+}
+
+/* --- Quick View Modal --- */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+    pointer-events: none;
+}
+
+.modal-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.modal-container {
+    background: white;
+    padding: 2rem;
+    border-radius: 0.5rem;
+    max-width: 800px;
+    width: 90%;
+    transform: scale(0.95);
+    transition: transform 0.3s ease-in-out;
+    position: relative;
+}
+
+.modal-overlay.visible .modal-container {
+    transform: scale(1);
+}
+
+.modal-close-btn {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    cursor: pointer;
+}
+
+
+/* B2B Top Bar */
+.b2b-top-bar {
+    background-color: #000;
+    color: #fff;
+    padding: 0.5rem 0;
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+.b2b-top-bar a {
+    text-decoration: underline;
+}
+
+.b2b-top-bar a:hover {
+    opacity: 0.9;
+}
+
+
+/* Footer Styles */
+footer a {
+    transition: color 0.3s ease-in-out;
+}
+
+footer input[type="email"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #d1d5db; /* ring-gray-300 */
+}
+
+footer button {
+  transition: background-color 0.3s ease-in-out;
+}
+
+
+@layer base {
+  body {
+    @apply font-sans text-dark-gray bg-cream antialiased;
+    line-height: 1.7; /* Increased line-height for better readability */
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif font-light text-dark-brown;
+  }
+}
+
+@layer components {
+  /* --- General Site-wide Components --- */
+  .btn {
+    /* More classic, less aggressive rounding and transition */
+    @apply font-semibold py-3 px-8 rounded-lg transition-all duration-300 ease-in-out tracking-wider text-sm disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    /* Softer hover effect */
+    @apply bg-truffle-burgundy text-white shadow-md hover:shadow-lg hover:bg-opacity-90;
+  }
+  
+  .btn-secondary {
+    /* A more subtle hover interaction */
+    @apply bg-transparent text-truffle-burgundy border-2 border-truffle-burgundy hover:bg-truffle-burgundy hover:text-white;
+  }
+
+  .input-field {
+    /* Classic, clean input fields. Less rounding, subtle focus. */
+    @apply block w-full px-5 py-3 mt-2 text-dark-gray bg-white border border-gray-300 rounded-md focus:border-gold focus:ring-gold focus:outline-none focus:ring focus:ring-opacity-20 transition-all duration-300;
+  }
+  
+  .card {
+    /* Softer shadow and rounding for a more refined feel */
+    @apply bg-white rounded-lg shadow-md overflow-hidden border border-transparent hover:shadow-xl transition-all duration-500 group;
+  }
+
+  .fine-border {
+    @apply border border-black border-opacity-10;
+  }
+
+  .hover-effect {
+    /* A more gentle lift on hover */
+    @apply transition-transform duration-300 ease-in-out hover:-translate-y-1;
+  }
+
+  .whitespace-generous {
+    @apply p-12 md:p-16;
+  }
+
+  /* --- B2B Specific Components --- */
+  .pro-page {
+    @apply bg-cream text-dark-gray;
+  }
+
+  .pro-container {
+    @apply max-w-7xl mx-auto py-12 px-8;
+  }
+
+  .pro-page h1,
+  .pro-page h2,
+  .pro-page h3 {
+    @apply text-truffle-burgundy font-serif;
+  }
+
+  .pro-page h1 {
+    /* Thinner border, more classic heading */
+    @apply text-5xl font-thin border-b border-gold pb-4 mb-8;
+  }
+
+  .pro-header {
+    /* Very subtle shadow for depth */
+    @apply bg-white py-5 px-8 border-b border-gray-200 flex justify-between items-center shadow-sm;
+  }
+  
+  .pro-nav a {
+    @apply text-dark-gray no-underline ml-8 font-medium transition-colors duration-300 hover:text-gold;
+  }
+
+  .pro-nav a.active {
+    @apply text-truffle-burgundy;
+  }
+
+  .sidebar-nav {
+    @apply w-full md:w-72 bg-white border-r border-gray-200;
+  }
+
+  .sidebar-link {
+    @apply block px-6 py-4 text-base font-medium text-dark-gray rounded-md hover:bg-light-gray;
+  }
+
+  .sidebar-link-active {
+    /* A more subtle active state */
+    @apply bg-gold bg-opacity-10 text-dark-brown font-semibold;
+  }
+
+  /* --- B2B Marche des Pros Specifics --- */
+  #page-marche-des-pros .page-title {
+    @apply text-truffle-burgundy;
+  }
+
+  #b2b-user-welcome {
+    @apply italic text-base;
+  }
+
+  .b2b-product-card .card-title {
+    @apply text-xl font-normal;
+  }
+
+  .b2b-pricing-info {
+    @apply border-t border-b border-gray-200 py-3;
+  }
+
+  .b2b-pricing-info .text-truffle-burgundy {
+    @apply text-2xl font-medium;
+  }
+
+  #b2b-cart-actions-section {
+    @apply bg-white p-6 rounded-lg shadow-inner;
+  }
+
+  #b2b-cart-items-display .b2b-cart-item {
+    @apply flex justify-between items-center py-3 border-b border-solid border-gray-200;
+  }
+
+  #b2b-cart-items-display .b2b-cart-item:last-child {
+    @apply border-b-0;
+  }
+
+  #b2b-cart-items-display .item-name {
+    @apply flex-grow font-semibold;
+  }
+  
+  #b2b-cart-items-display .item-price,
+  #b2b-cart-items-display .item-quantity,
+  #b2b-cart-items-display .item-total {
+    @apply ml-6 whitespace-nowrap;
+  }
+  
+  #b2b-cart-items-display .item-quantity input {
+    @apply w-16 text-center border-gray-300 rounded-md p-2;
+  }
+
+  .b2b-checkout-options h4 {
+    @apply text-dark-brown font-semibold;
+  }
+
+  .b2b-checkout-options .btn {
+    @apply text-sm py-3;
+  }
+
+  #b2b-po-file {
+    @apply p-3 border border-gray-300 rounded-md bg-white text-dark-gray w-full transition-all duration-300 text-sm focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold focus:ring-opacity-50;
+  }
+
+  #quote-cart-summary-modal ul {
+    @apply list-disc pl-6;
+  }
+
+  #quote-cart-summary-modal li {
+    @apply mb-2;
+  }
+}

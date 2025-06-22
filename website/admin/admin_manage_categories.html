@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Manage Categories</title>
+    <link rel="stylesheet" href="./css/public.css">
+</head>
+<body>
+    <div class="admin-container">
+        <div id="admin-header-placeholder"></div>
+
+        <main class="admin-main-content">
+            <h1>Manage Categories</h1>
+            <div id="toast-container"></div>
+            
+            <div class="form-container">
+                <form id="category-form">
+                    <input type="hidden" id="category-id">
+                    <div class="form-group">
+                        <input type="text" id="category-name" placeholder="Category Name" required>
+                    </div>
+                    <button type="submit" class="btn">Save Category</button>
+                </form>
+            </div>
+
+            <div class="table-container">
+                <table id="categories-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Category data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="./js/admin_categories.js"></script>
+</body>
+</html>
