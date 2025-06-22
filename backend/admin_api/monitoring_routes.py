@@ -1,8 +1,20 @@
 from flask import Blueprint, jsonify
-from backend.services.monitoring_service import MonitoringService
-from backend.auth.permissions import admin_required
+from flask_jwt_extended import jwt_required
+from backend.auth.permissions import permission_required, Permission
+import datetime
 
-monitoring_routes = Blueprint('monitoring_routes', __name__)
+monitoring_bp = Blueprint('monitoring_bp', __name__, url_prefix='/monitoring')
+
+@monitoring_bp.route('/health', methods=['GET'])
+@jwt_required()
+@permission_required(Permission.VIEW_MONITORING)
+def health_check():
+    """A simple health check endpoint."""
+    return jsonify({
+        "status": "ok",
+        "timestamp": datetime.datetime.utcnow().isoformat()
+    })
+
 
 @monitoring_routes.route('/monitoring/system-health', methods=['GET'])
 @admin_required
