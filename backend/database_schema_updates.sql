@@ -51,3 +51,30 @@ CREATE TABLE `product_items` (
     PRIMARY KEY (`id`),
     FOREIGN KEY (`product_variant_id`) REFERENCES `product_variants`(`id`)
 );
+
+
+
+-- One-Time Password (TOTP) multi-factor authentication.
+
+-- 1. Add a boolean flag to track if MFA is enabled for a user.
+--    We default it to FALSE. It's only set to TRUE after successful setup and verification.
+ALTER TABLE `users`
+ADD COLUMN `is_mfa_enabled` BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- 2. Add a column to store the user's encrypted MFA secret.
+--    This should always be stored encrypted at rest. The application will decrypt it
+--    in memory only when needed for verification.
+ALTER TABLE `users`
+ADD COLUMN `mfa_secret` VARCHAR(255) NULL;
+
+-- 3. Add a table to store single-use recovery codes.
+--    This allows users who lose their MFA device to regain access.
+CREATE TABLE `mfa_recovery_codes` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `user_id` INT NOT NULL,
+    `code_hash` VARCHAR(255) NOT NULL, -- Store a hash of the code, not the code itself
+    `is_used` BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (`id`),
+    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+);
+
