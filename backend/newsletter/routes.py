@@ -29,3 +29,30 @@ def subscribe():
         return jsonify(subscription.to_dict()), 201
     except ServiceException as e:
         return jsonify({"error": str(e)}), 409 # 409 Conflict for existing email
+
+
+@admin_bp.route('/newsletters/send', methods=['POST'])
+@admin_auth
+def send_newsletter():
+    """Sends a newsletter to a targeted group of users."""
+    data = request.get_json()
+    html_content = data.get('htmlContent')
+    target_group = data.get('targetGroup')
+
+    # Fetch user emails based on the target group from the DB...
+    if target_group == 'b2b_tier_1':
+        # db query for tier 1 emails
+        pass
+    elif target_group == 'all_b2c':
+        # db query for B2C emails
+        pass
+    else:
+        return jsonify({'error': 'Invalid target group.'}), 400
+
+    user_emails = [] # From DB
+    # Add a job to the queue for each recipient.
+    for email in user_emails:
+        queue.enqueue('worker.send_email', {'recipient': email, 'body': html_content})
+
+    return jsonify({'message': f'Newsletter dispatch for {len(user_emails)} users has been queued.'}), 202
+
