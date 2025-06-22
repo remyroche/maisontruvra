@@ -10,132 +10,111 @@ from backend.models.enums import OrderStatus
 from backend.database import db
 from sqlalchemy import func, desc
 from decimal import Decimal
+from backend.auth.permissions import b2b_user_required
+import json
 
 dashboard_routes = Blueprint('b2b_dashboard_routes', __name__)
 
-@dashboard_routes.route('/dashboard', methods=['GET'])
+
+@b2b_dashboard_bp.route('/pro/dashboard', methods=['GET'])
 @b2b_user_required
 def get_b2b_dashboard_data():
     """
-    Get comprehensive dashboard data for the logged-in B2B user.
-    Aggregates orders, invoices, loyalty status, and KPIs.
+    Aggregates and returns key data points for the B2B user's dashboard.
+    Implements caching to reduce database load for frequently accessed data.
     """
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user or not user.b2b_account:
-        return jsonify({"error": "B2B account not found"}), 404
-    
-    b2b_user = user.b2b_account[0]
-    
-    # Get recent orders (last 5)
-    recent_orders = Order.query.filter_by(user_id=user_id)\
-        .order_by(desc(Order.created_at))\
-        .limit(5)\
-        .all()
-    
-    # Calculate KPIs
-    total_orders = Order.query.filter_by(user_id=user_id).count()
-    
-    completed_orders = Order.query.filter_by(
-        user_id=user_id, 
-        status=OrderStatus.COMPLETED
-    ).all()
-    
-    total_spent = sum(float(order.total_amount) for order in completed_orders)
-    average_order_value = total_spent / len(completed_orders) if completed_orders else 0
-    
-    # Get pending invoices
-    pending_invoices = db.session.query(Invoice, Order)\
-        .join(Order, Invoice.order_id == Order.id)\
-        .filter(Order.user_id == user_id)\
-        .filter(Order.status.in_([OrderStatus.COMPLETED, OrderStatus.SHIPPED]))\
-        .order_by(desc(Invoice.created_at))\
-        .limit(3)\
-        .all()
-    
-    # Get loyalty information
-    loyalty_data = {
-        "tier": b2b_user.tier.name if b2b_user.tier else "No Tier",
-        "tier_benefits": b2b_user.tier.benefits if b2b_user.tier else None,
-        "points_balance": 0,  # Implement points system if needed
-        "referral_code": getattr(user, 'referral_code', None)
-    }
-    
-    # Get most purchased products (top 3)
-    most_purchased_query = db.session.query(
-        func.sum(db.text('order_items.quantity')).label('total_quantity'),
-        db.text('products.name').label('product_name'),
-        db.text('products.id').label('product_id')
-    ).select_from(
-        db.text('order_items')
-    ).join(
-        db.text('orders'), db.text('order_items.order_id = orders.id')
-    ).join(
-        db.text('products'), db.text('order_items.product_id = products.id')
-    ).filter(
-        db.text('orders.user_id = :user_id')
-    ).filter(
-        db.text('orders.status = :status')
-    ).group_by(
-        db.text('products.id'), db.text('products.name')
-    ).order_by(
-        db.text('total_quantity DESC')
-    ).limit(3)
-    
-    most_purchased_products = db.session.execute(
-        most_purchased_query, 
-        {'user_id': user_id, 'status': OrderStatus.COMPLETED.value}
-    ).fetchall()
-    
-    dashboard_data = {
-        "company_name": b2b_user.company_name,
-        "vat_number": b2b_user.vat_number,
-        
-        # KPIs
-        "kpis": {
-            "total_spent": total_spent,
-            "total_orders": total_orders,
-            "average_order_value": round(average_order_value, 2)
-        },
-        
-        # Recent orders
-        "recent_orders": [order.to_dict() for order in recent_orders],
-        
-        # Pending invoices
-        "pending_invoices": [{
-            "id": invoice.id,
-            "invoice_number": invoice.invoice_number,
-            "order_id": invoice.order_id,
-            "total_amount": float(order.total_amount),
-            "created_at": invoice.created_at.isoformat(),
-            "status": order.status.value
-        } for invoice, order in pending_invoices],
-        
-        # Loyalty status
-        "loyalty_status": loyalty_data,
-        
-        # Most purchased products
-        "most_purchased_products": [{
-            "product_id": product.product_id,
-            "product_name": product.product_name,
-            "total_quantity": int(product.total_quantity)
-        } for product in most_purchased_products],
-        
-        # Quick stats for the frontend
-        "quick_stats": {
-            "orders_this_month": Order.query.filter(
-                Order.user_id == user_id,
-                func.extract('month', Order.created_at) == func.extract('month', func.now()),
-                func.extract('year', Order.created_at) == func.extract('year', func.now())
-            ).count(),
-            "pending_orders": Order.query.filter_by(
-                user_id=user_id, 
-                status=OrderStatus.PENDING
-            ).count()
+    cache_key = f"b2b_dashboard:{user_id}"
+
+    try:
+        # 1. Attempt to fetch data from the cache first.
+        cached_data = redis_client.get(cache_key)
+        if cached_data:
+            logger.info(f"Cache hit for B2B dashboard, user_id: {user_id}")
+            return jsonify(json.loads(cached_data)), 200
+    except Exception as e:
+        # If Redis is down, log the error but proceed to fetch from DB.
+        logger.error(f"Redis cache read error for user {user_id}: {e}")
+
+    logger.info(f"Cache miss for B2B dashboard, fetching from DB for user_id: {user_id}")
+
+    # 2. If cache miss, connect to the database with robust error handling.
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor(dictionary=True)
+    except Exception as e:
+        logger.critical(f"DATABASE CONNECTION FAILED for B2B dashboard: {e}")
+        return jsonify({"error": "Could not connect to the database."}), 503 # Service Unavailable
+
+    try:
+        # 3. Execute several optimized, smaller queries instead of one large one.
+
+        # Query for KPIs (Key Performance Indicators)
+        cursor.execute(
+            """
+            SELECT
+                COUNT(id) as total_orders,
+                SUM(total) as total_spending
+            FROM orders
+            WHERE user_id = %s AND status IN ('delivered', 'shipped', 'processing')
+            """,
+            (user_id,)
+        )
+        kpis = cursor.fetchone()
+
+        # Query for recent orders (e.g., last 5)
+        cursor.execute(
+            """
+            SELECT id, total, status, created_at
+            FROM orders
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 5
+            """,
+            (user_id,)
+        )
+        recent_orders = cursor.fetchall()
+
+        # Query for pending invoice count
+        cursor.execute(
+            """
+            SELECT COUNT(id) as pending_invoices
+            FROM invoices
+            WHERE user_id = %s AND deleted_at IS NULL
+            """, # In a real system, you might also check a 'paid' status.
+            (user_id,)
+        )
+        invoice_info = cursor.fetchone()
+
+        # 4. Assemble the final dashboard data object.
+        dashboard_data = {
+            "kpis": {
+                "total_orders": kpis.get('total_orders') or 0,
+                "total_spending": float(kpis.get('total_spending') or 0.0),
+                "pending_invoices": invoice_info.get('pending_invoices') or 0
+            },
+            "recent_orders": recent_orders
         }
-    }
-    
-    return jsonify(dashboard_data), 200
+
+        # 5. Store the result in the cache with an expiration time (e.g., 1 hour).
+        try:
+            redis_client.setex(cache_key, 3600, json.dumps(dashboard_data, default=str))
+        except Exception as e:
+            # Log cache write errors but don't fail the request.
+            logger.error(f"Redis cache write error for user {user_id}: {e}")
+
+        return jsonify(dashboard_data), 200
+
+    except Exception as e:
+        logger.error(f"Failed to fetch B2B dashboard data from DB for user {user_id}: {e}")
+        return jsonify({"error": "An error occurred while fetching dashboard data."}), 500
+    finally:
+        # Ensure the connection is always closed.
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
 
 @dashboard_routes.route('/dashboard-summary', methods=['GET'])
 @b2b_user_required
