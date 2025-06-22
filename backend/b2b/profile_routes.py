@@ -19,20 +19,29 @@ def get_b2b_profile():
     except NotFoundException as e:
         return jsonify({"error": str(e)}), 404
 
-@profile_routes.route('/profile', methods=['PUT'])
-@b2b_user_required
+@b2b_profile_bp.route('/profile', methods=['POST', 'PUT'])
+@jwt_required()
 def update_b2b_profile():
-    """
-    Update the B2B company profile.
-    """
-    user_id = get_jwt_identity()
+    b2b_user_id = get_jwt_identity()
+    profile = B2BUserProfile.query.filter_by(b2b_user_id=b2b_user_id).first()
+
     data = request.get_json()
+    sanitized_data = sanitize_input(data)
+
+    if not profile:
+        profile = B2BUserProfile(b2b_user_id=b2b_user_id)
+        db.session.add(profile)
+
+    # Update fields from sanitized data
+    profile.contact_person = sanitized_data.get('contact_person', profile.contact_person)
+    profile.phone_number = sanitized_data.get('phone_number', profile.phone_number)
+    profile.address_line1 = sanitized_data.get('address_line1', profile.address_line1)
+    profile.address_line2 = sanitized_data.get('address_line2', profile.address_line2)
+    profile.city = sanitized_data.get('city', profile.city)
+    profile.state = sanitized_data.get('state', profile.state)
+    profile.postal_code = sanitized_data.get('postal_code', profile.postal_code)
+    profile.country = sanitized_data.get('country', profile.country)
     
-    try:
-        b2b_profile = B2BPartnershipService.get_b2b_profile_by_user_id(user_id)
-        updated_profile = B2BPartnershipService.update_b2b_user(b2b_profile.id, data)
-        return jsonify(updated_profile.to_dict()), 200
-    except NotFoundException as e:
-        return jsonify({"error": str(e)}), 404
-    except ServiceException as e:
-        return jsonify({"error": str(e)}), 400
+    db.session.commit()
+
+    return jsonify({"msg": "B2B profile updated successfully"}), 200
