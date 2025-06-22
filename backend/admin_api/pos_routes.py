@@ -1,7 +1,11 @@
 from flask import Blueprint, request, jsonify
 from backend.services.order_service import OrderService
 from backend.services.exceptions import ServiceException
-from backend.auth.permissions import admin_required
+from backend.auth.permissions import admin_required, permission_required, Permissi
+from flask_jwt_extended import jwt_required
+from backend.models.product_models import Product, Category, Collection
+from backend.extensions import db
+
 
 pos_routes = Blueprint('admin_pos_routes', __name__)
 
