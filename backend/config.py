@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from cryptography.fernet import Fernet
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,6 +24,8 @@ class Config:
     # Base URL for generating links (like in product passports)
     BASE_URL = os.environ.get('BASE_URL', 'http://127.0.0.1:5000')
 
+    # Encryption Key
+    ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY') or Fernet.generate_key().decode()
 
 class DevelopmentConfig(Config):
     """Development configuration."""
