@@ -33,19 +33,56 @@ def create_app(config_class=Config):
     CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}})
     mail.init_app(app)
     celery.conf.update(app.config)
+    
+    # Logging Setup
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
 
-    # Logging
-    if not app.debug and not app.testing:
-        if not os.path.exists('logs'):
-            os.mkdir('logs')
-        file_handler = RotatingFileHandler('logs/backend.log', maxBytes=10240, backupCount=10)
-        file_handler.setFormatter(logging.Formatter(
-            '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'))
-        file_handler.setLevel(logging.INFO)
-        app.logger.addHandler(file_handler)
+    # General Application Logger
+    file_handler = RotatingFileHandler('logs/backend.log', maxBytes=10240, backupCount=10)
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(logging.INFO)
+    
+    # Security Events Logger
+    security_handler = RotatingFileHandler('logs/security.log', maxBytes=10240, backupCount=10)
+    security_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s: %(message)s'))
+    security_logger = logging.getLogger('security')
+    security_logger.addHandler(security_handler)
+    security_logger.setLevel(logging.INFO)
 
-        app.logger.setLevel(logging.INFO)
-        app.logger.info('Maison Truvra backend startup')
+    app.logger.info('Maison Truvra backend startup')
+
+    # --- Signal Handlers for Login Events ---
+    @user_logged_in.connect_via(app)
+    def _after_login(sender, user, **extra):
+        """Log successful logins."""
+        security_logger.info(f"Successful login for user: {user.email} (ID: {user.id}) from IP: {request.remote_addr}")
+
+    @user_unauthorized.connect_via(app)
+    def _login_failed():
+        """
+        This signal is sent when the LoginManager rejects access for a user.
+        It's a good place to catch unauthorized access attempts to @login_required routes.
+        """
+        security_logger.warning(f"Unauthorized access attempt to a protected endpoint from IP: {request.remote_addr}")
+
+    # --- Global Exception Handler ---
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        """Log unhandled exceptions."""
+        # Get the full traceback
+        tb_str = traceback.format_exc()
+        app.logger.error(f"Unhandled Exception: {e}\nTraceback:\n{tb_str}")
+        
+        # In a production environment, you might want a more generic error message
+        response = {
+            "error": "An internal server error occurred.",
+            "message": str(e) # Optional: include error message in dev but not prod
+        }
+        return jsonify(response), 500
 
     # Middleware
     app.wsgi_app = RequestLoggingMiddleware(app.wsgi_app)
