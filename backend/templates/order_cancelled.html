@@ -1,0 +1,10 @@
+<!-- File: backend/templates/emails/order_cancelled.html -->
+{% extends "emails/b2c_base_template.html" %}
+{% block content %}
+    <h2 style="font-size: 24px; color: #374151; font-family: 'Teko', serif;">Annulation de la commande n°{{ order.id }}</h2>
+    <p>Bonjour {{ user.first_name }},</p>
+    <p>Nous vous confirmons l'annulation de votre commande n°{{ order.id }}.</p>
+    <p>Un remboursement intégral d'un montant de <strong>{{ order.total }}€</strong> a été initié et devrait apparaître sur votre compte bancaire d'ici 5 à 7 jours ouvrés, en fonction des délais de traitement de votre banque.</p>
+    <p>N'hésitez pas à nous contacter si vous avez la moindre question.</p>
+    <p>Cordialement,<br>L'équipe Maison Trüvra</p>
+{% endblock %}
