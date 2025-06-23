@@ -1,0 +1,42 @@
+<!-- File: backend/templates/emails/general_base_template.html -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;700&family=Teko:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; background-color: #F3F4F6; }
+        .container { width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-spacing: 0; }
+        .header { background-color: #374151; padding: 20px; text-align: center; }
+        .header h1 { font-family: 'Teko', serif; color: #ffffff; font-size: 36px; margin: 0; font-weight: 600; }
+        .content { padding: 30px; line-height: 1.6; color: #374151; font-family: 'Raleway', sans-serif; }
+        .content h2 { font-family: 'Teko', serif; color: #374151; font-size: 28px; margin-top: 0; margin-bottom: 16px; font-weight: 600;}
+        .footer { background-color: #F3F4F6; padding: 20px; text-align: center; font-size: 12px; color: #6b7280; }
+        .button { display: inline-block; background-color: #374151; color: #ffffff !important; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; font-family: 'Raleway', sans-serif; }
+        a { color: #5C2C35; text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <table role="presentation" class="container" border="0" cellpadding="0" cellspacing="0">
+        <tr>
+            <td class="header">
+                <h1>Maison Trüvra</h1>
+            </td>
+        </tr>
+        <tr>
+            <td class="content">
+                {% block content %}{% endblock %}
+            </td>
+        </tr>
+        <tr>
+            <td class="footer">
+                <p>&copy; 2025 Maison Trüvra. Tous droits réservés.</p>
+                <p>14 rue de la Libération, 93330 Neuilly-sur-Marne</p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
