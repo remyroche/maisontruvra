@@ -170,6 +170,7 @@ def disable_2fa():
         user.is_mfa_enabled = False
         user.mfa_secret = None # Clear the secret
         db.session.commit()
+        EmailService.send_security_alert(user, "L'authentification à deux facteurs (2FA) a été désactivée")
         return jsonify(status="success", message="2FA disabled successfully."), 200
     else:
         return jsonify(status="error", message="Invalid 2FA token."), 400
