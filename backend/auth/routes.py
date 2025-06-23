@@ -47,13 +47,20 @@ def login():
     try:
         # AuthService returns a dictionary with tokens and MFA status
         result = AuthService.login_user(email, password)
-        return jsonify(status="success", **result), 200
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 401 # Unauthorized
+        access_token = create_access_token(identity=user.id)
+        response = jsonify(status="success", message="Login successful.", data=user.to_dict())
+        set_access_cookies(response, access_token)
+        return response, 200
     except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An internal server error occurred."), 500
+        return jsonify(status="error", message=str(e)), 401
 
+@auth_bp.route('/logout', methods=['POST'])
+def logout():
+    response = jsonify(status="success", message="Logout successful.")
+    # Clear the JWT cookie
+    unset_jwt_cookies(response)
+    return response, 200
+    
 # MFA Verification
 @auth_bp.route('/login/verify-mfa', methods=['POST'])
 def verify_mfa():
