@@ -2,6 +2,8 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.b2b_service import B2BService
 from backend.auth.permissions import b2b_user_required
+from io import BytesIO
+from utils.sanitization import sanitize_input
 
 b2b_invoice_bp = Blueprint('b2b_invoice_bp', __name__, url_prefix='/api/b2b/invoices')
 
@@ -16,6 +18,7 @@ def get_invoices():
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
+        status = sanitize_input(request.args.get('status'))
         
         invoices_pagination = B2BService.get_user_invoices_paginated(user_id, page=page, per_page=per_page)
         
