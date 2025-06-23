@@ -1,6 +1,9 @@
 from backend.models.order_models import Order
 from backend.database import db
 from sqlalchemy import desc
+from backend.services.loyalty_service import LoyaltyService
+from backend.models.order_models import Order
+from backend.models.cart_models import Cart # Assuming Cart model exists
 
 class OrderService:
     @staticmethod
@@ -18,7 +21,55 @@ class OrderService:
         if user_id:
             query = query.filter_by(user_id=user_id)
         return query.first()
-    
+
+
+    @staticmethod
+    def create_order_from_cart(cart: Cart, user_id: int, checkout_data: dict) -> Order:
+        """
+        Creates a final order from a user's cart, processes payment,
+        and hooks into the LoyaltyService to award points.
+        """
+        if not cart or not cart.items:
+            raise ValueError("Le panier est vide.")
+
+        # --- This should be a single database transaction ---
+        try:
+            # 1. Create the order and order items from the cart
+            # (Detailed implementation for creating order and order_items would be here)
+            new_order = Order(
+                user_id=user_id,
+                total=cart.calculate_total(), # Assumes cart has a total calculation method
+                shipping_address=checkout_data['shipping_address'],
+                # ... other order details
+            )
+            db.session.add(new_order)
+            
+            # (Loop through cart.items to create OrderItem records...)
+            
+            # 2. Process payment via a payment gateway
+            # payment_successful = PaymentGateway.charge(checkout_data['payment_token'], new_order.total)
+            # if not payment_successful:
+            #     raise ValueError("Le paiement a échoué.")
+
+            # Flush to get the new_order.id before committing
+            db.session.flush()
+
+            # --- 3. AWARD LOYALTY POINTS (NEWLY ADDED HOOK) ---
+            # If payment is successful, call the LoyaltyService to award points.
+            LoyaltyService.add_points_for_purchase(
+                user_id=user_id,
+                order_total=new_order.total,
+                order_id=new_order.id
+            )
+
+            # 4. Clear the user's cart
+            # CartService.clear_cart(user_id=user_id)
+
+            # 5. Commit the entire transaction
+            db.session.commit()
+            
+            return new_order
+
     @staticmethod
     def create_order(user_id, order_data):
         """Create a new order."""
