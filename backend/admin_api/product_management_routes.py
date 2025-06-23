@@ -1,104 +1,110 @@
-# FILE: routes/admin_products.py
-# New Flask Blueprint to manage the entire product hierarchy via the admin panel.
-# -----------------------------------------------------------------------------
-
 from flask import Blueprint, request, jsonify
 from backend.services.product_service import ProductService
-from backend.services.inventory_service import InventoryService
-from backend.services.exceptions import NotFoundException, ServiceException
-from backend.auth.permissions import admin_required, permission_required, Permission
-from flask_jwt_extended import jwt_required
-from backend.models.product_models import Product, Category, Collection
-from backend.extensions import db
+from backend.utils.sanitization import sanitize_input
+from backend.auth.permissions import permissions_required
 
+product_management_bp = Blueprint('product_management_bp', __name__, url_prefix='/admin/products')
 
-product_management_routes = Blueprint('product_management_routes', __name__)
-
-@product_management_bp.route('/products', methods=['POST'])
-@jwt_required()
-@permission_required(Permission.MANAGE_PRODUCTS)
-def create_product_route():
+# CREATE a new product
+@product_management_bp.route('/', methods=['POST'])
+@permissions_required('MANAGE_PRODUCTS')
+def create_product():
+    """
+    Create a new product.
+    """
     data = request.get_json()
-    # Basic validation
-    if not data or 'name' not in data or 'price' not in data:
-        return jsonify({'error': 'Missing name or price'}), 400
-    
-    new_product = Product(
-        name=data['name'],
-        description=data.get('description', ''),
-        price=data['price'],
-        sku=data.get('sku'),
-        # ... other fields
-    )
-    db.session.add(new_product)
-    db.session.commit()
-    return jsonify(new_product.to_dict()), 201
+    if not data:
+        return jsonify(status="error", message="Invalid or missing JSON body"), 400
 
-@product_management_bp.route('/products/<int:product_id>', methods=['PUT'])
-@jwt_required()
-@permission_required(Permission.MANAGE_PRODUCTS)
-def update_product_route(product_id):
-    product = Product.query.get_or_404(product_id)
-    data = request.get_json()
-    for key, value in data.items():
-        setattr(product, key, value)
-    db.session.commit()
-    return jsonify(product.to_dict())
+    sanitized_data = sanitize_input(data)
 
-@product_management_bp.route('/products/<int:product_id>', methods=['DELETE'])
-@jwt_required()
-@permission_required(Permission.MANAGE_PRODUCTS)
-def delete_product_route(product_id):
-    product = Product.query.get_or_404(product_id)
-    db.session.delete(product)
-    db.session.commit()
-    return jsonify({'message': 'Product deleted'})
+    required_fields = ['name', 'description', 'price', 'category_id']
+    if not all(field in sanitized_data for field in required_fields):
+        missing_fields = [field for field in required_fields if field not in sanitized_data]
+        return jsonify(status="error", message=f"Missing required fields: {', '.join(missing_fields)}"), 400
 
+    try:
+        new_product = ProductService.create_product(sanitized_data)
+        return jsonify(status="success", data=new_product.to_dict()), 201
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while creating the product."), 500
 
-# Category Routes
-@product_management_bp.route('/categories', methods=['POST'])
-@jwt_required()
-@permission_required(Permission.MANAGE_PRODUCTS)
-def create_category():
-    data = request.get_json()
-    new_category = Category(name=data['name'], parent_id=data.get('parent_id'))
-    db.session.add(new_category)
-    db.session.commit()
-    return jsonify(new_category.to_dict()), 201
-
-# Collection Routes
-@product_management_bp.route('/collections', methods=['POST'])
-@jwt_required()
-@permission_required(Permission.MANAGE_PRODUCTS)
-def create_collection():
-    data = request.get_json()
-    new_collection = Collection(name=data['name'], description=data.get('description'))
-    db.session.add(new_collection)
-    db.session.commit()
-    return jsonify(new_collection.to_dict()), 201
-
-@product_management_routes.route('/products', methods=['GET'])
-@admin_required
+# READ all products (with pagination)
+@product_management_bp.route('/', methods=['GET'])
+@permissions_required('MANAGE_PRODUCTS')
 def get_products():
-    products = ProductService.get_all_products_admin()
-    return jsonify([p.to_dict() for p in products]), 200
+    """
+    Get a paginated list of all products.
+    """
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        products_pagination = ProductService.get_all_products_paginated(page=page, per_page=per_page)
+        return jsonify({
+            "status": "success",
+            "data": [product.to_dict() for product in products_pagination.items],
+            "total": products_pagination.total,
+            "pages": products_pagination.pages,
+            "current_page": products_pagination.page
+        }), 200
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while fetching products."), 500
 
+# READ a single product by ID
+@product_management_bp.route('/<int:product_id>', methods=['GET'])
+@permissions_required('MANAGE_PRODUCTS')
+def get_product(product_id):
+    """
+    Get a single product by their ID.
+    """
+    product = ProductService.get_product_by_id(product_id)
+    if product:
+        return jsonify(status="success", data=product.to_dict()), 200
+    return jsonify(status="error", message="Product not found"), 404
 
-# Routes for Inventory
-@product_management_routes.route('/inventory/<int:product_id>', methods=['PUT'])
-@admin_required
-def update_inventory(product_id):
+# UPDATE an existing product
+@product_management_bp.route('/<int:product_id>', methods=['PUT'])
+@permissions_required('MANAGE_PRODUCTS')
+def update_product(product_id):
+    """
+    Update an existing product's information.
+    """
     data = request.get_json()
-    quantity = data.get('quantity')
-    if quantity is None:
-        return jsonify({"error": "Quantity is required"}), 400
+    if not data:
+        return jsonify(status="error", message="Invalid or missing JSON body"), 400
+    
+    if not ProductService.get_product_by_id(product_id):
+        return jsonify(status="error", message="Product not found"), 404
+
+    sanitized_data = sanitize_input(data)
+
     try:
-        inventory_item = InventoryService.update_stock(product_id, quantity)
-        return jsonify(inventory_item.to_dict()), 200
-    except NotFoundException as e:
-        return jsonify({"error": str(e)}), 404
+        updated_product = ProductService.update_product(product_id, sanitized_data)
+        return jsonify(status="success", data=updated_product.to_dict()), 200
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while updating the product."), 500
+
+# DELETE a product
+@product_management_bp.route('/<int:product_id>', methods=['DELETE'])
+@permissions_required('MANAGE_PRODUCTS')
+def delete_product(product_id):
+    """
+    Delete a product.
+    """
+    if not ProductService.get_product_by_id(product_id):
+        return jsonify(status="error", message="Product not found"), 404
+
     try:
-        inventory_item = InventoryService.update_stock(product_id, quantity)
-        return jsonify(inventory_item.to_dict()), 200
-    except NotFoundException as e:
-        return jsonify({"error": str(e)}), 404
+        ProductService.delete_product(product_id)
+        return jsonify(status="success", message="Product deleted successfully"), 200
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while deleting the product."), 500
+
