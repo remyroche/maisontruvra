@@ -1,0 +1,9 @@
+<!-- File: backend/templates/emails/b2b_account_pending.html -->
+{% extends "emails/b2b_base_template.html" %}
+{% block content %}
+    <h2 style="font-size: 24px; color: #5C2C35; font-family: 'Teko', serif;">Votre demande de compte professionnel a été reçue</h2>
+    <p>Bonjour {{ user.first_name }},</p>
+    <p>Nous avons bien reçu votre demande de création de compte professionnel. Votre e-mail a été vérifié avec succès.</p>
+    <p>Votre demande est actuellement en cours d'examen par notre équipe. Nous vous notifierons par e-mail dès que votre compte sera approuvé. Ce processus prend généralement moins de 24 heures ouvrées.</p>
+    <p>Merci pour votre intérêt pour Maison Trüvra.</p>
+{% endblock %}
