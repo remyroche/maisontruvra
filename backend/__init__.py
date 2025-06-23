@@ -3,6 +3,7 @@ from flask import Flask
 from flask_jwt_extended import JWTManager
 from backend.config import Config
 from backend.extensions import db, migrate, bcrypt, login_manager, mail, cors, limiter
+from flask_wtf.csrf import CSRFProtect
 
 # Import blueprints
 from backend.account.routes import account_bp
@@ -19,11 +20,14 @@ from backend.products.routes import products_bp
 from backend.routes.webhooks import webhooks_bp
 from backend.wishlist.routes import wishlist_bp
 
+csrf = CSRFProtect()
+
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
     # Initialize extensions
+    csrf.init_app(app) # Initialize CSRF protection
     db.init_app(app)
     migrate.init_app(app, db)
     bcrypt.init_app(app)
@@ -54,5 +58,11 @@ def create_app(config_class=Config):
     @app.route('/')
     def index():
         return "Welcome to the Maison Truvrain backend!"
+
+    @app.after_request
+    def set_csrf_cookie(response):
+        from flask_wtf.csrf import generate_csrf
+        response.set_cookie('XSRF-TOKEN', generate_csrf())
+        return response
 
     return app
