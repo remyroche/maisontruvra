@@ -1,4 +1,55 @@
-thentication token in the store.
+/**
+ * @file /stores/auth.js
+ * @description Pinia store for managing authentication state.
+ * This store is the single source of truth for the user's authentication token
+ * and profile. It replaces the insecure use of localStorage.
+ */
+import { defineStore } from 'pinia';
+import { apiClient } from '@/js/api-client.js';
+
+// Helper to get initial token from a secure cookie if it exists (ideal setup)
+// Or returns null if not present. For this example, we start fresh.
+const getInitialToken = () => {
+  // In a truly secure setup with HttpOnly cookies, you wouldn't need this.
+  // The token would be managed by the browser and backend.
+  // This store would primarily hold user info and login status.
+  return null;
+};
+
+export const useAuthStore = defineStore('auth', {
+  // STATE: The core data of the store.
+  state: () => ({
+    accessToken: getInitialToken(),
+    user: null,
+    isAuthenticated: !!getInitialToken(),
+    returnUrl: null, // To store the URL to redirect to after login
+  }),
+
+  // GETTERS: Computed properties derived from state.
+  getters: {
+    /**
+     * Provides the current access token.
+     * @returns {string | null}
+     */
+    getToken: (state) => state.accessToken,
+
+    /**
+     * Provides the current user's data.
+     * @returns {object | null}
+     */
+    getUser: (state) => state.user,
+
+    /**
+     * Checks if the user is authenticated.
+     * @returns {boolean}
+     */
+    isLoggedIn: (state) => !!state.accessToken,
+  },
+
+  // ACTIONS: Methods that can mutate the state.
+  actions: {
+    /**
+     * Sets the authentication token in the store.
      * @param {string} token The JWT access token.
      */
     setToken(token) {
@@ -87,4 +138,3 @@ thentication token in the store.
     },
   },
 });
-
