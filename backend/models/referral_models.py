@@ -1,27 +1,23 @@
 from backend.database import db
 from .base import BaseModel
 
-class B2BReferral(BaseModel):
-    __tablename__ = 'b2b_referrals'
+class Referral(BaseModel):
+    """
+    Tracks the relationship between a referrer and a referred user.
+    """
+    __tablename__ = 'referrals'
+    
     id = db.Column(db.Integer, primary_key=True)
     
-    # The B2B user who made the referral
-    referrer_id = db.Column(db.Integer, db.ForeignKey('b2b_users.id'), nullable=False)
+    # The user who was referred
+    referred_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
     
-    # Information about the referred company
-    referred_company_name = db.Column(db.String(120), nullable=False)
-    referred_contact_email = db.Column(db.String(120), nullable=False)
+    # The user who did the referring
+    referrer_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
-    status = db.Column(db.String(50), default='pending') # pending, contacted, converted
+    # The user who was referred
+    referred = db.relationship('User', foreign_keys=[referred_user_id], backref=db.backref('referral_entry', uselist=False))
     
-    referrer = db.relationship('B2BUser', backref='referrals')
+    # The user who did the referring
+    referrer = db.relationship('User', foreign_keys=[referrer_user_id], backref='referrals_made')
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'referrer_company': self.referrer.company_name,
-            'referred_company_name': self.referred_company_name,
-            'referred_contact_email': self.referred_contact_email,
-            'status': self.status,
-            'created_at': self.created_at.isoformat()
-        }
