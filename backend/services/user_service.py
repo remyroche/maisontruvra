@@ -95,9 +95,9 @@ class UserService:
             return user
         return None
     
-    def authenticate_admin(self, email, password):
+    def authenticate_staff_or_admin(self, email, password):
         user = self.get_user_by_email(email)
-        if user and user.check_password(password) and user.is_admin:
+        if user and user.check_password(password) and user.is_staff():
             return user
         return None
 
