@@ -1,5 +1,9 @@
 // website/source/admin/js/admin_dashboard.js
 import { apiClient } from './api-client.js';
+import { createApp } from 'vue';
+import ErrorLogViewer from '../../vue/components/ErrorLogViewer.vue';
+
+createApp(ErrorLogViewer).mount('#error-log-viewer');
 
 document.addEventListener('DOMContentLoaded', function() {
     const summaryContainer = document.getElementById('admin-summary-container');
