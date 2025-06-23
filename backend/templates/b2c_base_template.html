@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Raleway, sans-serif; margin: 0; padding: 0; background-color: #F9F9F9; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; }
+        .header { background-color: #374151; padding: 20px; text-align: center; }
+        .header h1 { font-family: Teko, serif; color: #ffffff; font-size: 36px; margin: 0; }
+        .content { padding: 30px; line-height: 1.6; color: #374151; }
+        .footer { background-color: #F3F4F6; padding: 20px; text-align: center; font-size: 12px; color: #6b7280; }
+        .button { display: inline-block; background-color: #374151; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Maison Trüvra</h1>
+        </div>
+        <div class="content">
+            {% block content %}{% endblock %}
+        </div>
+        <div class="footer">
+            <p>&copy; 2025 Maison Trüvra. Tous droits réservés.</p>
+            <p>14 rue de la Libération, 93330 Neuilly-sur-Marne</p>
+        </div>
+    </div>
+</body>
+</html>
