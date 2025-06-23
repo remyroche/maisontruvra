@@ -1,3 +1,72 @@
+
+from backend.database import db
+from backend.models.user_models import User
+from backend.models.b2b_loyalty_models import LoyaltyPointTransaction, LoyaltyTier
+from backend.services.exceptions import ValidationError, NotFoundError
+from sqlalchemy import func
+from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
+
+class LoyaltyService:
+    @staticmethod
+    def update_settings(settings_data: dict) -> dict:
+        """
+        Update loyalty program settings.
+        """
+        try:
+            # Validate settings data
+            required_fields = ['points_per_dollar', 'reward_threshold']
+            for field in required_fields:
+                if field not in settings_data:
+                    raise ValidationError(f"Missing required field: {field}")
+            
+            # Update settings in database (assuming a settings table exists)
+            # For now, return the validated data
+            return {
+                'points_per_dollar': float(settings_data['points_per_dollar']),
+                'reward_threshold': int(settings_data['reward_threshold']),
+                'updated_at': datetime.utcnow().isoformat()
+            }
+        except (ValueError, TypeError) as e:
+            raise ValidationError(f"Invalid settings data: {str(e)}")
+
+    @staticmethod
+    def adjust_points(user_id: int, points: int, reason: str) -> int:
+        """
+        Manually adjust points for a user with audit logging.
+        """
+        user = User.query.get(user_id)
+        if not user:
+            raise NotFoundError(f"User with ID {user_id} not found")
+        
+        # Create point transaction record
+        transaction = LoyaltyPointTransaction(
+            user_id=user_id,
+            points=points,
+            transaction_type='manual_adjustment',
+            description=f"Manual adjustment: {reason}",
+            expires_at=datetime.utcnow() + timedelta(days=365),
+            created_at=datetime.utcnow()
+        )
+        
+        db.session.add(transaction)
+        db.session.commit()
+        
+        # Log the manual adjustment
+        logger.info(f"Manual point adjustment: User {user_id}, Points {points}, Reason: {reason}")
+        
+        # Calculate new balance
+        total_points = db.session.query(func.sum(LoyaltyPointTransaction.points)).filter(
+            LoyaltyPointTransaction.user_id == user_id,
+            LoyaltyPointTransaction.is_expired == False,
+            LoyaltyPointTransaction.expires_at > datetime.utcnow()
+        ).scalar() or 0
+        
+        return int(total_points)
+
+
 from datetime import datetime, timedelta
 from sqlalchemy import func, case
 from backend.database import db
@@ -140,7 +209,7 @@ class LoyaltyService:
             trans.is_expired = True
         
         db.session.commit()
-        return len(expired_transactions)
+        return len(expired_transactions)s)
 
     @staticmethod
     def update_user_tiers_task():
@@ -169,6 +238,43 @@ class LoyaltyService:
             active_users_subquery.c.total_points,
             func.rank().over(order_by=active_users_subquery.c.total_points.desc()).label('rank')
         ).all()
+
+        # 3. Get total active users for tier calculation
+        total_active_users = len(ranked_users)
+        
+        # 4. Calculate tier thresholds (top 10% Gold, next 20% Silver, rest Bronze)
+        gold_threshold = max(1, int(total_active_users * 0.1))
+        silver_threshold = max(1, int(total_active_users * 0.3))
+        
+        # 5. Get tier objects
+        gold_tier = LoyaltyTier.query.filter_by(name='Gold').first()
+        silver_tier = LoyaltyTier.query.filter_by(name='Silver').first()
+        bronze_tier = LoyaltyTier.query.filter_by(name='Bronze').first()
+        
+        if not all([gold_tier, silver_tier, bronze_tier]):
+            raise ValueError("Loyalty tiers not properly configured")
+        
+        # 6. Update user tiers
+        updates_made = 0
+        for ranked_user in ranked_users:
+            user = User.query.get(ranked_user.user_id)
+            if not user:
+                continue
+                
+            new_tier = None
+            if ranked_user.rank <= gold_threshold:
+                new_tier = gold_tier
+            elif ranked_user.rank <= silver_threshold:
+                new_tier = silver_tier
+            else:
+                new_tier = bronze_tier
+            
+            if user.loyalty_tier_id != new_tier.id:
+                user.loyalty_tier_id = new_tier.id
+                updates_made += 1
+        
+        db.session.commit()
+        return updates_made()
 
         total_ranked_users = len(ranked_users)
         if total_ranked_users == 0:

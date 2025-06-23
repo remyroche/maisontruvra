@@ -20,6 +20,8 @@ class Config:
     SESSION_COOKIE_SECURE = False
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_SECURE = False
+    REMEMBER_COOKIE_HTTPONLY = True
     
     # CSRF Protection - Flask-WTF uses SECRET_KEY by default but can be set separately
     WTF_CSRF_SECRET_KEY = os.environ.get('WTF_CSRF_SECRET_KEY', 'a-different-secret-key')
@@ -55,6 +57,7 @@ class ProductionConfig(Config):
     # Enforce secure cookies in production
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_SAMESITE = 'Strict'
+    REMEMBER_COOKIE_SECURE = True
 
 # Dictionary to map environment names to config classes
 config_by_name = dict(

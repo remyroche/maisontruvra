@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
-from backend.services.loyalty_service import LoyaltyService # Assumed service
-from backend.auth.permissions import permissions_required
+from backend.services.loyalty_service import LoyaltyService
 from backend.utils.sanitization import sanitize_input
+from backend.auth.permissions import permissions_required
 
 loyalty_management_bp = Blueprint('loyalty_management_bp', __name__, url_prefix='/admin/loyalty')
 
@@ -57,7 +57,7 @@ def adjust_user_points(user_id):
     try:
         points = int(sanitize_input(data['points']))
         reason = sanitize_input(data['reason'])
-        
+
         # Service should log this manual adjustment for auditing purposes
         updated_balance = LoyaltyService.adjust_points(user_id, points, reason)
         return jsonify(status="success", data={'new_balance': updated_balance}), 200
@@ -66,4 +66,3 @@ def adjust_user_points(user_id):
     except Exception as e:
         # Log error e
         return jsonify(status="error", message="Failed to adjust user points."), 500
-
