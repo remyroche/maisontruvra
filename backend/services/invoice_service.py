@@ -11,7 +11,7 @@ from backend.database import db
 from backend.models.invoice_models import Invoice  # A new model you'll need to create
 from backend.services.email_service import EmailService # Assumed email service
 
-class B2BnvoiceService:
+class B2BInvoiceService:
     @staticmethod
     def _generate_b2b_invoice_number() -> str:
         """Generates a unique invoice number, e.g., INV-YYYYMM-XXXX."""
