@@ -45,24 +45,43 @@ def delete_subscriber(subscriber_id):
         # Log the error e
         return jsonify(status="error", message="An internal error occurred while deleting the subscriber."), 500
 
-# CREATE (send) a new newsletter
+
 @newsletter_management_bp.route('/send', methods=['POST'])
 @permissions_required('MANAGE_NEWSLETTER')
 def send_newsletter():
     """
-    Send a new newsletter. This would likely trigger a background task.
+    Send a new newsletter to a targeted audience.
+    This triggers a background task.
+    
+    Payload Example:
+    {
+      "subject": "Our New Summer Collection!",
+      "content": "<h1>Check it out!</h1>...",
+      "target": {
+        "list_type": "b2c", // "b2c", "b2b", or "all"
+        "tier": ["gold", "silver"] // Optional: list of user tiers
+      }
+    }
     """
     data = request.get_json()
     if not data or 'subject' not in data or 'content' not in data:
         return jsonify(status="error", message="Subject and content are required."), 400
 
     sanitized_data = sanitize_input(data)
+    # Targeting filters are not sanitized here as they are checked against specific values
+    target_filters = data.get('target', {})
 
     try:
-        # This service method would queue the newsletter for sending.
-        # It's an async operation.
-        task = NewsletterService.send_newsletter_async(sanitized_data['subject'], sanitized_data['content'])
+        # This service method would queue the newsletter for sending to the correct segment
+        task = NewsletterService.send_newsletter_async(
+            sanitized_data['subject'], 
+            sanitized_data['content'],
+            target_filters
+        )
         return jsonify(status="success", message="Newsletter sending has been queued.", data={"task_id": task.id}), 202
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
     except Exception as e:
         # Log the error e
         return jsonify(status="error", message="Failed to queue newsletter for sending."), 500
+
