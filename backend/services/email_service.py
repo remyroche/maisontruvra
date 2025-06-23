@@ -82,26 +82,29 @@ class EmailService:
             context={"user": user, "login_url": login_url}
         )
 
+
     @staticmethod
     def send_password_reset(user: User, reset_token: str):
-        reset_url = f"{current_app.config['BASE_URL']}/reset-password?token={reset_token}"
+        """Sends a password reset email."""
+        frontend_url = current_app.config.get('FRONTEND_URL', 'http://127.0.0.1:5173')
+        reset_url = f"{frontend_url}/reset-password?token={reset_token}"
         EmailService._send_email(
             subject="Réinitialisation de votre mot de passe - Maison Trüvra",
             recipients=[user.email],
-            template="emails/password_reset.html",
-            context={"reset_url": reset_url}
+            template="password_reset.html",
+            context={"reset_url": reset_url, "user_name": user.first_name}
         )
 
-
     @staticmethod
-    def send_password_change(user: User, reset_token: str):
-        reset_url = f"{current_app.config['BASE_URL']}/reset-password?token={reset_token}"
+    def send_password_change_confirmation(user: User):
+        """Sends a password change confirmation email."""
         EmailService._send_email(
             subject="Votre mot de passe a bien été changé - Maison Trüvra",
             recipients=[user.email],
-            template="emails/password_change.html",
-            context={"reset_url": reset_url}
+            template="password_change_confirmation.html",
+            context={"user_name": user.first_name}
         )
+        
         
     @staticmethod
     def send_security_alert(user: User, action_description: str):
