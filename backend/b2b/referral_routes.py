@@ -25,4 +25,19 @@ def get_referral_info():
         return jsonify(status="error", message="An internal error occurred while fetching referral information."), 500
 
 
-        return jsonify({"error": str(e)}), 500
+@b2b_referral_bp.route('/refer', methods=['POST'])
+@b2b_required
+def send_referral():
+    data = sanitize_input(request.get_json())
+    email = data.get('email')
+    name = data.get('name')
+    
+    if not email or not name:
+        return jsonify({'error': 'Email and name are required'}), 400
+        
+    success, message = referral_service.send_referral_invite(current_user, email, name)
+    
+    if success:
+        return jsonify({'message': message})
+    else:
+        return jsonify({'error': message}), 400
