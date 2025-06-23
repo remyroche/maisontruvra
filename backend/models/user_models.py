@@ -1,10 +1,12 @@
-from backend.database import db
 from .base import BaseModel
 from .enums import UserStatus, RoleType
+from .. import db
 from flask_login import UserMixin
 from sqlalchemy.ext.hybrid import hybrid_property
 from utils.encryption import encrypt_data, decrypt_data
 from argon2 import PasswordHasher
+
+ph = PasswordHasher()
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -69,46 +71,48 @@ class User(db.Model, UserMixin):
     def phone_number(self, value):
         self._phone_number = encrypt_data(value)
 
-    @validates('addresses')
-    def validate_addresses(self, key, address):
-        """
-        Enforces the business rule that a user cannot have more than 4 addresses.
-        """
-        if len(self.addresses.all()) >= 4:
-            raise ValueError("Un utilisateur ne peut pas avoir plus de 4 adresses.")
-        return address
+    def to_public_dict(self):
+        """Serialization for public-facing contexts (e.g., product reviews)."""
+        return {
+            'id': self.id,
+            'first_name': self.first_name,
+        }
 
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-    
-    def to_dict_admin(self):
-        data = self.to_dict()
-        data['status'] = self.status.value
-        data['mfa_enabled'] = self.mfa_enabled
-        data['created_at'] = self.created_at.isoformat()
-        return data
-
-    def to_dict(self, include_orders=False, include_addresses=False, include_b2b=False):
-        user_dict = {
+    def to_user_dict(self):
+        """Serialization for the user viewing their own profile."""
+        data = {
             'id': self.id,
             'email': self.email,
             'first_name': self.first_name,
             'last_name': self.last_name,
             'phone_number': self.phone_number,
-            'is_admin': self.is_admin,
             'is_b2b': self.is_b2b,
             'two_factor_enabled': self.two_factor_enabled
         }
-        if include_orders:
-            user_dict['orders'] = [order.to_dict() for order in self.orders]
-        if include_addresses:
-            user_dict['addresses'] = [address.to_dict() for address in self.addresses]
-        if include_b2b and self.b2b_profile:
-            user_dict['b2b_profile'] = self.b2b_profile.to_dict()
-        return user_dict
+        if self.is_b2b and self.b2b_profile:
+            data['b2b_profile'] = self.b2b_profile.to_dict()
+        return data
+
+    def to_admin_dict(self):
+        """Serialization for admins viewing user profiles."""
+        data = self.to_user_dict()
+        data.update({
+            'is_admin': self.is_admin,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'orders': [order.to_admin_dict() for order in self.orders],
+            'addresses': [address.to_dict() for address in self.addresses]
+        })
+        return data
+
+    def to_dict(self, view='user'):
+        """Default to_dict that routes to the appropriate view."""
+        if view == 'admin':
+            return self.to_admin_dict()
+        elif view == 'public':
+            return self.to_public_dict()
+        return self.to_user_dict()
+
 
 class Role(BaseModel):
     __tablename__ = 'roles'
