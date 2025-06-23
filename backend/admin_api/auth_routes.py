@@ -10,6 +10,7 @@ from utils.sanitization import sanitize_input
 import logging
 
 admin_auth_bp = Blueprint('admin_auth_bp', __name__)
+staff_auth_bp = Blueprint('staff_auth_bp', __name__)
 user_service = UserService()
 mfa_service = MFAService()
 security_logger = logging.getLogger('security')
