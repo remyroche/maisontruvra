@@ -1,20 +1,48 @@
-from flask import Blueprint, jsonify
-from backend.services.auth_service import AuthService
+from flask import Blueprint, request, jsonify
+from backend.services.session_service import SessionService
 from backend.auth.permissions import admin_required
 
-session_routes = Blueprint('admin_session_routes', __name__)
+session_management_bp = Blueprint('session_management_bp', __name__, url_prefix='/admin/sessions')
 
-@session_routes.route('/sessions/active', methods=['GET'])
+# READ all active sessions
+@session_management_bp.route('/', methods=['GET'])
 @admin_required
-def get_active_sessions():
+def get_sessions():
     """
-    Retrieves a list of all active user sessions.
-    NOTE: This is a simplified example. A robust implementation would use a
-    centralized session store (like Redis) that can be queried.
+    Get a paginated list of all active user sessions.
+    This is a high-privilege action and should be audited.
     """
     try:
-        # This service method would need to be implemented with a proper session store.
-        active_sessions = AuthService.get_all_active_sessions()
-        return jsonify(active_sessions), 200
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        
+        sessions_pagination = SessionService.get_all_sessions_paginated(page=page, per_page=per_page)
+        
+        return jsonify({
+            "status": "success",
+            "data": [s.to_dict() for s in sessions_pagination.items],
+            "total": sessions_pagination.total,
+            "pages": sessions_pagination.pages,
+            "current_page": sessions_pagination.page
+        }), 200
     except Exception as e:
-        return jsonify({"error": f"Could not retrieve sessions: {str(e)}"}), 501 # Not Implemented
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while fetching sessions."), 500
+
+# DELETE a specific session (force logout)
+@session_management_bp.route('/<session_id>', methods=['DELETE'])
+@admin_required
+def terminate_session(session_id):
+    """
+    Terminate a specific user session by its ID.
+    This forces a user to log out.
+    """
+    try:
+        if SessionService.terminate_session(session_id):
+            return jsonify(status="success", message="Session terminated successfully."), 200
+        else:
+            return jsonify(status="error", message="Session not found or already inactive."), 404
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while terminating the session."), 500
+
