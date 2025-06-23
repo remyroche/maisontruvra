@@ -1,0 +1,123 @@
+HEADER
+
+
+<header id="header" class="bg-white sticky top-0 z-50 shadow-md">
+  <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+    <div class="flex items-center">
+      <a href="/">
+        <img src="/img/logo.svg" alt="Maison Trüvra Logo" class="h-8">
+      </a>
+    </div>
+    <div class="hidden lg:flex items-center space-x-6">
+      <a href="/notre-maison.html" class="text-gray-700 hover:text-black transition-colors duration-300">Notre Maison</a>
+      <a href="/nos-produits.html" class="text-gray-700 hover:text-black transition-colors duration-300">Nos Produits</a>
+      <a href="/le-journal.html" class="text-gray-700 hover:text-black transition-colors duration-300">Le Journal</a>
+      <span class="text-gray-300">|</span>
+      <a href="/professionnels.html" class="text-sm text-gray-600 hover:text-black transition-colors duration-300">Espace Professionnels</a>
+    </div>
+    <div class="flex items-center space-x-4">
+      <button id="search-button" aria-label="Search">
+        <svg class="h-6 w-6 text-gray-700 hover:text-black transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+      </button>
+      <a href="/compte.html" aria-label="My Account">
+        <svg class="h-6 w-6 text-gray-700 hover:text-black transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+      </a>
+      <a href="/panier.html" class="relative" aria-label="Shopping Cart">
+        <svg class="h-6 w-6 text-gray-700 hover:text-black transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+        <span id="cart-item-count" class="absolute -top-2 -right-2 bg-red-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">0</span>
+      </a>
+      <button id="mobile-menu-button" class="lg:hidden" aria-label="Open navigation menu">
+        <svg class="h-6 w-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+      </button>
+    </div>
+  </nav>
+  <!-- Mobile Menu -->
+  <div id="mobile-menu" class="hidden lg:hidden">
+    <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+        <a href="/notre-maison.html" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-black hover:bg-gray-50 transition-colors duration-300">Notre Maison</a>
+        <a href="/nos-produits.html" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-black hover:bg-gray-50 transition-colors duration-300">Nos Produits</a>
+        <a href="/le-journal.html" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-black hover:bg-gray-50 transition-colors duration-300">Le Journal</a>
+        <a href="/professionnels.html" class="block px-3 py-2 rounded-md text-base font-medium text-gray-600 hover:text-black hover:bg-gray-50 transition-colors duration-300">Espace Professionnels</a>
+    </div>
+    <button id="mobile-menu-close-button" class="absolute top-4 right-4" aria-label="Close navigation menu">
+         <svg class="h-6 w-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+    </button>
+            <!-- Cart -->
+            <div class="ml-4 flow-root lg:ml-6">
+              <!-- This div is the mounting point for our Vue component -->
+              <div id="mini-cart">
+                  <!-- Fallback content for when JavaScript is disabled -->
+                  <a href="/panier.html" class="group -m-2 flex items-center p-2">
+                    <svg class="h-6 w-6 flex-shrink-0 text-gray-400 group-hover:text-gray-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.658-.463 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                    </svg>
+                    <span class="ml-2 text-sm font-medium text-gray-700 group-hover:text-gray-800">0</span>
+                    <span class="sr-only">items in cart, view bag</span>
+                  </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <script type="module" src="/js/vue/mini-cart-loader.js"></script>
+
+
+
+
+FOOTER
+
+<footer class="bg-gray-100 text-gray-700">
+  <div class="container mx-auto px-6 py-12">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <div>
+        <h3 class="font-bold uppercase">Maison Trüvra</h3>
+        <p class="mt-4 text-sm">L'art de la truffe, une tradition familiale.</p>
+      </div>
+      <div>
+        <h3 class="font-bold uppercase">Service Client</h3>
+        <nav class="mt-4 space-y-2 text-sm">
+          <a href="/contact.html" class="hover:text-black transition-colors duration-300">Nous Contacter</a><br>
+          <a href="/faq.html" class="hover:text-black transition-colors duration-300">FAQ</a><br>
+          <a href="/livraison.html" class="hover:text-black transition-colors duration-300">Livraison & Retours</a>
+        </nav>
+      </div>
+      <div>
+        <h3 class="font-bold uppercase">Informations</h3>
+        <nav class="mt-4 space-y-2 text-sm">
+          <a href="/mentions-legales.html" class="hover:text-black transition-colors duration-300">Mentions Légales</a><br>
+          <a href="/cgv.html" class="hover:text-black transition-colors duration-300">Conditions Générales de Vente</a><br>
+          <a href="/politique-confidentialite.html" class="hover:text-black transition-colors duration-300">Politique de Confidentialité</a>
+        </nav>
+      </div>
+      <div>
+        <h3 class="font-bold uppercase">Devenez un initié de la truffe</h3>
+        <p class="mt-4 text-sm">Recevez nos secrets et offres exclusives.</p>
+        <form class="mt-4 flex">
+          <input type="email" placeholder="Votre email" class="w-full px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-gray-500">
+          <button type="submit" class="bg-black text-white px-4 py-2 rounded-r-md hover:bg-gray-800 transition-colors duration-300">S'inscrire</button>
+        </form>
+      </div>
+    </div>
+    <div class="mt-12 pt-8 border-t border-gray-300 flex flex-col md:flex-row justify-between items-center">
+        <div class="flex space-x-4 mb-4 md:mb-0">
+          <a href="#" aria-label="Facebook"><img src="https://placehold.co/24x24/000000/FFFFFF?text=F" alt="Facebook"></a>
+          <a href="#" aria-label="Instagram"><img src="https://placehold.co/24x24/000000/FFFFFF?text=I" alt="Instagram"></a>
+          <a href="#" aria-label="Twitter"><img src="https://placehold.co/24x24/000000/FFFFFF?text=T" alt="Twitter"></a>
+        </div>
+        <div class="flex items-center space-x-2 mb-4 md:mb-0">
+            <img src="https://placehold.co/40x25/e0e0e0/000000?text=VISA" alt="Visa">
+            <img src="https://placehold.co/40x25/e0e0e0/000000?text=MC" alt="Mastercard">
+            <img src="https://placehold.co/40x25/e0e0e0/000000?text=PP" alt="PayPal">
+            <img src="https://placehold.co/40x25/e0e0e0/000000?text=AP" alt="Apple Pay">
+        </div>
+        <p class="text-sm">&copy; 2025 Maison Trüvra. Tous droits réservés.</p>
+    </div>
+  </div>
+</footer>
+
+
+
+
+
