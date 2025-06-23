@@ -10,7 +10,6 @@ from utils.sanitization import sanitize_input
 import logging
 
 admin_auth_bp = Blueprint('admin_auth_bp', __name__)
-staff_auth_bp = Blueprint('staff_auth_bp', __name__)
 user_service = UserService()
 mfa_service = MFAService()
 security_logger = logging.getLogger('security')
@@ -33,23 +32,6 @@ def admin_login():
     security_logger.warning(f"Failed ADMIN login attempt for email: {email} from IP: {request.remote_addr}")
     return jsonify({'error': 'Invalid credentials or not an admin'}), 401
 
-@staff_auth_bp.route('/login', methods=['POST'])
-def staff_login():
-    data = sanitize_input(request.get_json())
-    email = data.get('email')
-    password = data.get('password')
-    
-    user = user_service.authenticate_staff(email, password)
-    if user:
-        if user.two_factor_enabled:
-            session['2fa_user_id'] = user.id
-            return jsonify({'2fa_required': True}), 200
-        else:
-            login_user(user)
-            return jsonify({'message': 'Admin login successful'}), 200
-    
-    security_logger.warning(f"Failed STAFF login attempt for email: {email} from IP: {request.remote_addr}")
-    return jsonify({'error': 'Invalid credentials or not an admin'}), 401
 
 @admin_auth_bp.route('/2fa/verify', methods=['POST'])
 def verify_2fa_login():
