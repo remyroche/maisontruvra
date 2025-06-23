@@ -4,6 +4,8 @@ from sqlalchemy import desc
 from backend.services.loyalty_service import LoyaltyService
 from backend.models.order_models import Order
 from backend.models.cart_models import Cart # Assuming Cart model exists
+from backend.services.invoice_service import B2BInvoiceService
+
 
 class OrderService:
     @staticmethod
@@ -61,6 +63,12 @@ class OrderService:
                 order_total=new_order.total,
                 order_id=new_order.id
             )
+
+            # Send invoice & email based on user type
+            if order.user and order.user.user_type == 'B2B':
+                B2BInvoiceService.create_and_send_b2b_invoice(order)
+            if order.user and order.user.user_type == 'B2C':
+                B2CInvoiceService.create_and_send_b2c_invoice(order)
 
             # 4. Clear the user's cart
             # CartService.clear_cart(user_id=user_id)
