@@ -1,0 +1,9 @@
+<!-- File: backend/templates/emails/2fa_enabled_confirmation.html -->
+{% extends "emails/b2c_base_template.html" %}
+{% block content %}
+    <h2 style="font-size: 24px; color: #374151; font-family: 'Teko', serif;">Alerte de Sécurité : 2FA Activée</h2>
+    <p>Bonjour {{ user.first_name }},</p>
+    <p>L'authentification à deux facteurs (2FA) a été activée avec succès sur votre compte le {{ timestamp }}.</p>
+    <p>Pour vos prochaines connexions, vous devrez fournir un code depuis votre application d'authentification.</p>
+    <p>Si vous n'êtes pas à l'origine de cette action, veuillez contacter notre support immédiatement.</p>
+{% endblock %}
