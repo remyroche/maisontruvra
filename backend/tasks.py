@@ -3,6 +3,28 @@ from backend.services.email_service import EmailService
 from backend.services.b2b_loyalty_service import B2BLoyaltyService
 from flask import current_app
 
+
+@celery.task(name='tasks.expire_points')
+def expire_points():
+    """
+    Celery task to expire loyalty points older than one year.
+    """
+    with current_app.app_context():
+        count = LoyaltyService.expire_points_task()
+        current_app.logger.info(f"Expired {count} loyalty point transactions.")
+        return count
+
+@celery.task(name='tasks.update_tiers')
+def update_tiers():
+    """
+    Celery task to recalculate and update B2B user loyalty tiers.
+    """
+    with current_app.app_context():
+        count = LoyaltyService.update_user_tiers_task()
+        current_app.logger.info(f"Updated loyalty tiers for {count} active B2B users.")
+        return count
+
+
 @celery.task(name='app.send_email')
 def send_email_task(to, subject, template, **kwargs):
     """
