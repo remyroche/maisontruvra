@@ -5,7 +5,7 @@ from backend.utils.sanitization import sanitize_inputfrom flask import Blueprint
 from services.user_service import UserService
 from services.mfa_service import MFAService
 from flask_login import login_user, logout_user, current_user
-from utils.auth_helpers import admin_required
+from utils.auth_helpers import staff_or_admin_required
 from utils.sanitization import sanitize_input
 import logging
 
@@ -15,22 +15,23 @@ mfa_service = MFAService()
 security_logger = logging.getLogger('security')
 
 @admin_auth_bp.route('/login', methods=['POST'])
-def admin_login():
+def login():
     data = sanitize_input(request.get_json())
     email = data.get('email')
     password = data.get('password')
     
-    user = user_service.authenticate_admin(email, password)
+    user = user_service.authenticate_staff_or_admin(email, password)
     if user:
         if user.two_factor_enabled:
             session['2fa_user_id'] = user.id
             return jsonify({'2fa_required': True}), 200
         else:
             login_user(user)
-            return jsonify({'message': 'Admin login successful'}), 200
+            return jsonify({'message': 'Login successful'}), 200
     
-    security_logger.warning(f"Failed ADMIN login attempt for email: {email} from IP: {request.remote_addr}")
-    return jsonify({'error': 'Invalid credentials or not an admin'}), 401
+    security_logger.warning(f"Failed privileged login attempt for email: {email} from IP: {request.remote_addr}")
+    return jsonify({'error': 'Invalid credentials or insufficient privileges'}), 401
+
 
 
 @admin_auth_bp.route('/2fa/verify', methods=['POST'])
@@ -52,14 +53,14 @@ def verify_2fa_login():
 
 
 @admin_auth_bp.route('/logout', methods=['POST'])
-@admin_required
-def admin_logout():
+@staff_or_admin_required
+def alogout():
     logout_user()
-    return jsonify({'message': 'Admin logout successful'})
+    return jsonify({'message': 'Admin or Staff logout successful'})
 
 @admin_auth_bp.route('/check-auth', methods=['GET'])
 def check_auth_status():
-    if current_user.is_authenticated and current_user.is_admin():
+    if current_user.is_authenticated and current_user.is_staff():
         return jsonify({'is_authenticated': True, 'user': current_user.to_dict()})
     return jsonify({'is_authenticated': False})
 
