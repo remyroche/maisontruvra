@@ -1,51 +1,89 @@
-import { AdminAPI } from './admin_api.js';
-import { showToast } from './admin_ui.js';
+from backend.database import db
+from backend.models.delivery_models import DeliveryMethod
+from backend.models.b2b_loyalty_models import LoyaltyTier
+from backend.models.user_models import User
+from backend.utils.sanitization import sanitize_input
+# Import the new AuditLogService
+from backend.services.audit_log_service import AuditLogService
 
-document.addEventListener('DOMContentLoaded', () => {
-    const logColumns = [
-        { header: 'Timestamp', key: 'timestamp', cell: l => new Date(l.timestamp).toLocaleString() },
-        { header: 'Event Type', key: 'event_type', cell: l => `<span class="font-mono text-xs">${l.event_type}</span>` },
-        { header: 'User ID', key: 'user_id' },
-        { header: 'Details', key: 'details', cell: l => `<pre class="text-xs">${JSON.stringify(l.details, null, 2)}</pre>`},
-    ];
-    
-    const fetchLogs = async (page = 1) => {
-        const response = await apiClient.get(`/admin/audit-log?page=${page}&per_page=25`);
-        if (!response.ok) throw new Error('Failed to fetch logs');
-        return response.data;
-    };
+class DeliveryService:
+    # ... (get_all_methods_for_admin and get_available_methods_for_user remain the same) ...
 
-    new DataTableFactory('logs-table-container', {
-        columns: logColumns,
-        fetchData: fetchLogs,
-        dataKey: 'logs',
-        totalKey: 'total_logs'
-    });
-});
+    @staticmethod
+    def create_method(data: dict):
+        """
+        Creates a new delivery method and logs the action.
+        """
+        sanitized_data = sanitize_input(data)
+        new_method = DeliveryMethod(
+            name=sanitized_data['name'],
+            description=sanitized_data.get('description', ''),
+            price=float(sanitized_data['price'])
+        )
+        tier_ids = data.get('tier_ids', [])
+        if tier_ids:
+            accessible_tiers = LoyaltyTier.query.filter(LoyaltyTier.id.in_(tier_ids)).all()
+            new_method.accessible_to_tiers.extend(accessible_tiers)
+            
+        db.session.add(new_method)
+        db.session.flush() # Flush to get the ID for logging
 
-document.addEventListener('DOMContentLoaded', () => {
-    const logBody = document.getElementById('audit-log-body');
-    if(!logBody) return;
+        # --- AUDIT LOGGING ---
+        AuditLogService.log_action(
+            action='DELIVERY_METHOD_CREATE',
+            target_id=new_method.id,
+            details=new_method.to_dict()
+        )
+        
+        db.session.commit()
+        return new_method
 
-    const loadAuditLog = async () => {
-        try {
-            const logs = await AdminAPI.getAuditLogs();
-            logBody.innerHTML = '';
-            logs.forEach(log => {
-                const row = document.createElement('tr');
-                row.className = 'border-b';
-                row.innerHTML = `
-                    <td class="p-2">${new Date(log.timestamp).toLocaleString()}</td>
-                    <td class="p-2">${log.user_email}</td>
-                    <td class="p-2">${log.action}</td>
-                    <td class="p-2">${log.details}</td>
-                `;
-                logBody.appendChild(row);
-            });
-        } catch (error) {
-            showToast('Failed to load audit logs', 'error');
-        }
-    };
+    @staticmethod
+    def update_method(method_id: int, data: dict):
+        """
+        Updates an existing delivery method and logs the changes.
+        """
+        method = DeliveryMethod.query.get_or_404(method_id)
+        old_details = method.to_dict() # Capture state before changes
+        
+        sanitized_data = sanitize_input(data)
+        method.name = sanitized_data.get('name', method.name)
+        method.description = sanitized_data.get('description', method.description)
+        method.price = float(sanitized_data.get('price', method.price))
+        
+        if 'tier_ids' in data:
+            method.accessible_to_tiers.clear()
+            tier_ids = data.get('tier_ids', [])
+            if tier_ids:
+                accessible_tiers = LoyaltyTier.query.filter(LoyaltyTier.id.in_(tier_ids)).all()
+                method.accessible_to_tiers.extend(accessible_tiers)
 
-    loadAuditLog();
-});
+        new_details = method.to_dict() # Capture state after changes
+
+        # --- AUDIT LOGGING ---
+        AuditLogService.log_action(
+            action='DELIVERY_METHOD_UPDATE',
+            target_id=method.id,
+            details={'before': old_details, 'after': new_details}
+        )
+        
+        db.session.commit()
+        return method
+        
+    @staticmethod
+    def delete_method(method_id: int):
+        """Deletes a delivery method and logs the action."""
+        method = DeliveryMethod.query.get_or_404(method_id)
+        method_details = method.to_dict() # Get details before deleting
+        
+        db.session.delete(method)
+        
+        # --- AUDIT LOGGING ---
+        AuditLogService.log_action(
+            action='DELIVERY_METHOD_DELETE',
+            target_id=method_id,
+            details=method_details
+        )
+        
+        db.session.commit()
+        return True
