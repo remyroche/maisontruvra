@@ -1,49 +1,26 @@
 from flask import Blueprint, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.services.loyalty_service import LoyaltyService
 from backend.auth.permissions import b2b_user_required
-from flask_jwt_extended import get_jwt_identity
-from backend.services.user_service import UserService
-from backend.services.b2b_loyalty_service import B2BLoyaltyService
-from backend.services.exceptions import ServiceException
 
-loyalty_routes = Blueprint('b2b_loyalty_routes', __name__)
+b2b_loyalty_bp = Blueprint('b2b_loyalty_bp', __name__, url_prefix='/api/b2b/loyalty')
 
-@loyalty_routes.route('/loyalty/status', @b2b_bp.route('/loyalty', methods=['GET'])
+# GET the B2B user's loyalty points and tier information
+@b2b_loyalty_bp.route('/status', methods=['GET'])
 @b2b_user_required
 def get_loyalty_status():
     """
-    Returns the current B2B user's loyalty status, including their
-    points, tier, and personal referral code.
+    Get the loyalty status, including points balance and current tier,
+    for the authenticated B2B user.
     """
     user_id = get_jwt_identity()
-
-    conn = db.get_connection()
-    cursor = conn.cursor(dictionary=True)
     try:
-        # Fetch user's points, referral code, and tier information in a single query.
-        cursor.execute(
-            """
-            SELECT
-                u.points,
-                u.referral_code,
-                t.name as tier_name,
-                t.discount_percentage
-            FROM users u
-            JOIN b2b_profiles bp ON u.id = bp.user_id
-            JOIN b2b_tiers t ON bp.tier_id = t.id
-            WHERE u.id = %s
-            """,
-            (user_id,)
-        )
-        loyalty_data = cursor.fetchone()
-
-        if not loyalty_data:
-            return jsonify({"error": "Could not retrieve loyalty information for this user."}), 404
-
-        return jsonify(loyalty_data), 200
-
+        loyalty_info = LoyaltyService.get_user_loyalty_status(user_id)
+        if loyalty_info is None:
+            return jsonify(status="error", message="Could not retrieve loyalty information for this user."), 404
+        
+        return jsonify(status="success", data=loyalty_info), 200
     except Exception as e:
-        logger.error(f"Error fetching loyalty status for B2B user {user_id}: {e}")
-        return jsonify({"error": "An internal server error occurred."}), 500
-    finally:
-        cursor.close()
-        conn.close()
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while fetching loyalty status."), 500
+
