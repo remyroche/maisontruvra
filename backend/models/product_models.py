@@ -11,29 +11,53 @@ class Product(BaseModel):
     sku = db.Column(db.String(50), unique=True, nullable=False)
     is_published = db.Column(db.Boolean, default=True)
     product_type = db.Column(db.String(50), default='standard') # e.g., standard, b2b_exclusive, blog
-    
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     collection_id = db.Column(db.Integer, db.ForeignKey('collections.id'), nullable=True)
-    
-    category = db.relationship('Category', back_populates='products')
-    collection = db.relationship('Collection', back_populates='products')
     images = db.relationship('ProductImage', back_populates='product', cascade="all, delete-orphan")
     reviews = db.relationship('Review', back_populates='product', cascade="all, delete-orphan")
     inventory = db.relationship('Inventory', back_populates='product', uselist=False, cascade="all, delete-orphan")
     passport = db.relationship('ProductPassport', back_populates='product', uselist=False, cascade="all, delete-orphan")
 
-    def to_dict(self):
-        return {
+    def to_public_dict(self, include_variants=False, include_reviews=False):
+        """Public view of a product."""
+        data = {
             'id': self.id,
             'name': self.name,
             'slug': self.slug,
             'description': self.description,
-            'price': str(self.price),
-            'sku': self.sku,
+            'price': self.price,
+            'images': [image.url for image in self.images],
             'category': self.category.name if self.category else None,
             'collection': self.collection.name if self.collection else None,
-            'images': [img.url for img in self.images]
         }
+        if include_variants:
+            data['variants'] = [v.to_dict() for v in self.variants]
+        if include_reviews:
+            data['reviews'] = [r.to_public_dict() for r in self.reviews]
+        return data
+    
+    def to_admin_dict(self):
+        """Admin view of a product."""
+        data = self.to_public_dict(include_variants=True, include_reviews=True)
+        data.update({
+            'is_active': self.is_active,
+            'sku': self.sku,
+            'inventory': self.inventory.quantity if self.inventory else 0,
+        })
+        return data
+
+    def to_b2b_dict(self):
+        """B2B customer view of a product."""
+        data = self.to_public_dict(include_variants=True)
+        return data
+
+    def to_dict(self, view='public', **kwargs):
+        """Routes to the correct serialization based on view."""
+        if view == 'admin':
+            return self.to_admin_dict()
+        if view == 'b2b':
+            return self.to_b2b_dict()
+        return self.to_public_dict(**kwargs)
 
 class Category(BaseModel):
     __tablename__ = 'categories'
