@@ -1,0 +1,10 @@
+<!-- File: backend/templates/emails/security_alert.html -->
+{% extends "emails/b2c_base_template.html" %}
+{% block content %}
+    <h2 style="font-size: 24px; color: #374151; font-family: 'Teko', serif;">Alerte de Sécurité</h2>
+    <p>Bonjour {{ user.first_name }},</p>
+    <p>Ceci est une notification pour confirmer qu'une action de sécurité a été effectuée sur votre compte :</p>
+    <p><strong>Action :</strong> {{ action_description }}</p>
+    <p><strong>Date et Heure :</strong> {{ timestamp }}</p>
+    <p>Si vous êtes à l'origine de cette action, vous pouvez ignorer cet e-mail. Sinon, veuillez contacter immédiatement notre support ou réinitialiser votre mot de passe.</p>
+{% endblock %}
