@@ -1,83 +1,90 @@
-// website/source/js/stores/auth.js
-import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import { apiClient } from '../api-client.js';
-import { useNotificationStore } from './notification.js';
+thentication token in the store.
+     * @param {string} token The JWT access token.
+     */
+    setToken(token) {
+      this.accessToken = token;
+      this.isAuthenticated = true;
+    },
 
-export const useAuthStore = defineStore('auth', () => {
-    // STATE
-    const user = ref(null);
-    const isLoading = ref(false);
-    const isAuthenticated = ref(false); // Sera déterminé par la présence d'un cookie HttpOnly
+    /**
+     * Clears the authentication token and user data from the store.
+     */
+    clearToken() {
+      this.accessToken = null;
+      this.user = null;
+      this.isAuthenticated = false;
+    },
 
-    // ACTIONS
-    async function login(credentials) {
-        const notificationStore = useNotificationStore();
-        isLoading.value = true;
-        try {
-            await apiClient.post('/b2b/auth/login', credentials);
-            // Le cookie HttpOnly est maintenant défini par le serveur.
-            // La redirection est gérée par la page après un appel réussi.
-            notificationStore.showNotification('Connexion réussie ! Redirection...', 'success');
-            return true;
-        } catch (error) {
-            notificationStore.showNotification(error.message || 'Échec de la connexion', 'error');
-            return false;
-        } finally {
-            isLoading.value = false;
+    /**
+     * Sets the user profile data.
+     * @param {object} userData The user's profile information.
+     */
+    setUser(userData) {
+      this.user = userData;
+    },
+    
+    /**
+     * Handles the complete login flow.
+     * @param {string} email
+     * @param {string} password
+     * @returns {Promise<boolean>} True if login is successful.
+     */
+    async login(email, password) {
+      try {
+        const response = await apiClient.post('/auth/login', { email, password });
+        if (response && response.access_token) {
+          this.setToken(response.access_token);
+          // Optionally fetch user profile after login
+          await this.fetchProfile();
+          // Redirect to the stored return URL or a default page
+          window.location.href = this.returnUrl || '/compte.html';
+          return true;
         }
-    }
+        // If login is unsuccessful, clear any previous state
+        this.logout();
+        return false;
+      } catch (error) {
+        console.error("Login failed:", error);
+        this.logout();
+        return false;
+      }
+    },
 
-    async function register(prospect) {
-        const notificationStore = useNotificationStore();
-        isLoading.value = true;
+    /**
+     * Handles the complete logout flow.
+     */
+    async logout() {
+      // It's good practice to notify the backend of logout,
+      // which allows for server-side token invalidation.
+      try {
+        await apiClient.post('/auth/logout', {});
+      } catch (error) {
+        console.error("Logout notification to server failed, but logging out client-side anyway.", error);
+      } finally {
+        this.clearToken();
+        // Redirect to homepage after logout
+        window.location.href = '/';
+      }
+    },
+    
+    /**
+     * Fetches the user's profile from the API and stores it.
+     */
+    async fetchProfile() {
+        if (!this.isLoggedIn) return;
         try {
-            const payload = {
-                company_name: prospect.companyName,
-                siret: prospect.siret,
-                contact_name: prospect.contactName,
-                email: prospect.email,
-                password: prospect.password,
-            };
-            const response = await apiClient.post('/b2b/auth/register', payload);
-            notificationStore.showNotification(response.message, 'success');
-            return true;
+            const profileData = await apiClient.get('/account/profile');
+            if (profileData) {
+                this.setUser(profileData.data);
+            }
         } catch (error) {
-            notificationStore.showNotification(error.message || "Erreur lors de l'inscription", 'error');
-            return false;
-        } finally {
-            isLoading.value = false;
+            console.error("Failed to fetch user profile:", error);
+            // If the token is invalid (e.g., expired), log the user out
+            if (error.response && error.response.status === 401) {
+              this.logout();
+            }
         }
-    }
-
-    async function requestPasswordReset(email) {
-        const notificationStore = useNotificationStore();
-        isLoading.value = true;
-        try {
-            const response = await apiClient.post('/b2b/auth/request-password-reset', { email });
-            notificationStore.showNotification(response.message, 'success');
-            return true;
-        } catch (error) {
-            notificationStore.showNotification(error.message || "Erreur lors de la demande", 'error');
-            return false;
-        } finally {
-            isLoading.value = false;
-        }
-    }
-
-    // On suppose que le backend gère la session.
-    // Une fonction `checkAuthStatus` pourrait appeler un endpoint `/me` pour populer `user`.
-    async function checkAuthStatus() {
-        try {
-            const data = await apiClient.get('/b2b/auth/me'); // Endpoint à créer
-            user.value = data;
-            isAuthenticated.value = true;
-        } catch (error) {
-            user.value = null;
-            isAuthenticated.value = false;
-        }
-    }
-
-
-    return { user, isLoading, isAuthenticated, login, register, requestPasswordReset, checkAuthStatus };
+    },
+  },
 });
+
