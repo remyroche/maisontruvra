@@ -59,6 +59,10 @@ def create_app(config_class=Config):
     def index():
         return "Welcome to the Maison Truvrain backend!"
 
+    if app.config['ENV'] == 'production':
+        # Enforce HTTPS and set other security headers
+        Talisman(app, content_security_policy=None) # Disable default CSP to use your own
+
     @app.after_request
     def set_csrf_cookie(response):
         from flask_wtf.csrf import generate_csrf
