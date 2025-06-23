@@ -22,6 +22,7 @@ from backend.wishlist.routes import wishlist_bp
 from .config import config_by_name
 from .database import db
 from .extensions import mail, migrate, cors
+from backend.admin_api.monitoring_routes import monitoring_bp
 
 csrf = CSRFProtect()
 
@@ -76,6 +77,7 @@ def create_app(config_class=Config):
     app.register_blueprint(products_bp, url_prefix='/api/products')
     app.register_blueprint(webhooks_bp, url_prefix='/api/webhooks')
     app.register_blueprint(wishlist_bp, url_prefix='/api/wishlist')
+    app.register_blueprint(monitoring_bp)
 
     with app.app_context():
         from backend.models import user_models, product_models, order_models, blog_models, auth_models, b2b_models, b2b_loyalty_models, inventory_models, newsletter_models, passport_models, referral_models, utility_models
