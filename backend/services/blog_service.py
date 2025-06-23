@@ -3,8 +3,10 @@
 from sqlalchemy.orm import Session
 from ..models import db
 from ..models.blog_models import BlogPost, BlogCategory
-from ..schemas import BlogPostSchema, BlogCategorySchema
-from .exceptions import NotFoundException, ValidationException
+from ..services.exceptions import NotFoundException, ValidationException
+from ..utils.sanitization import sanitize_input
+import bleach
+import re
 
 class BlogService:
     """
@@ -22,119 +24,120 @@ class BlogService:
         """
         self.session = session
 
+    def _sanitize_article_data(self, article_data: dict) -> dict:
+        """
+        Sanitizes and validates article data.
+        - Uses a basic sanitizer for most text fields.
+        - Uses bleach for HTML content to prevent XSS attacks.
+        """
+        sanitized_data = {}
+        # Fields to sanitize with a basic text sanitizer
+        for field in ['title', 'slug', 'meta_description', 'author', 'featured_image_url']:
+            if field in article_data and article_data[field]:
+                sanitized_data[field] = sanitize_input(article_data[field])
+
+        # Sanitize HTML content with bleach, allowing a safe subset of HTML
+        if 'content' in article_data and article_data['content']:
+            sanitized_data['content'] = bleach.clean(
+                article_data['content'],
+                tags=['p', 'b', 'i', 'u', 'a', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em'],
+                attributes={'a': ['href', 'title']},
+                strip=True
+            )
+
+        # Pass through other fields without sanitization, but ensure they exist
+        for field in ['category_id', 'is_published']:
+            if field in article_data:
+                sanitized_data[field] = article_data[field]
+
+        return sanitized_data
+
+    def _generate_slug(self, title: str) -> str:
+        """Generates a URL-friendly slug from a title."""
+        s = title.lower().strip()
+        s = re.sub(r'[\s]+', '-', s)  # Replace spaces with -
+        s = re.sub(r'[^\w\-]+', '', s) # Remove all non-word chars
+        return s
+
     def create_article(self, article_data: dict) -> BlogPost:
         """
-        Creates a new blog post.
-
-        Args:
-            article_data: A dictionary containing the data for the new article.
-
-        Returns:
-            The newly created BlogPost object.
+        Creates a new blog post with sanitized data.
         """
-        # Add validation logic here if needed
-        new_article = BlogPost(**article_data)
+        sanitized_data = self._sanitize_article_data(article_data)
+        
+        if 'title' not in sanitized_data:
+            raise ValidationException("Title is a required field.")
+
+        # Generate slug from title if not provided
+        if not sanitized_data.get('slug'):
+            sanitized_data['slug'] = self._generate_slug(sanitized_data['title'])
+
+        new_article = BlogPost(**sanitized_data)
         self.session.add(new_article)
         self.session.commit()
         return new_article
 
     def get_all_articles(self):
-        """
-        Retrieves all blog posts.
-
-        Returns:
-            A list of all BlogPost objects.
-        """
-        return self.session.query(BlogPost).all()
+        """Retrieves all blog posts."""
+        return self.session.query(BlogPost).order_by(BlogPost.created_at.desc()).all()
 
     def get_article_by_id(self, article_id: int) -> BlogPost:
         """
         Retrieves a single blog post by its ID.
-
-        Args:
-            article_id: The ID of the blog post to retrieve.
-
-        Returns:
-            The BlogPost object if found.
-
-        Raises:
-            NotFoundException: If no blog post with the given ID is found.
+        Raises NotFoundException if not found.
         """
         article = self.session.query(BlogPost).filter_by(id=article_id).first()
         if not article:
             raise NotFoundException(f"Article with id {article_id} not found.")
         return article
 
+    def get_article_by_slug(self, slug: str) -> BlogPost:
+        """
+        Retrieves a single blog post by its slug.
+        Raises NotFoundException if not found.
+        """
+        article = self.session.query(BlogPost).filter_by(slug=slug).first()
+        if not article:
+            raise NotFoundException(f"Article with slug '{slug}' not found.")
+        return article
+
     def update_article(self, article_id: int, article_data: dict) -> BlogPost:
         """
-        Updates an existing blog post.
-
-        Args:
-            article_id: The ID of the blog post to update.
-            article_data: A dictionary containing the updated data.
-
-        Returns:
-            The updated BlogPost object.
-
-        Raises:
-            NotFoundException: If the blog post is not found.
+        Updates an existing blog post with sanitized data.
         """
         article = self.get_article_by_id(article_id)
-        for key, value in article_data.items():
+        sanitized_data = self._sanitize_article_data(article_data)
+        
+        for key, value in sanitized_data.items():
             setattr(article, key, value)
+        
         self.session.commit()
         return article
 
     def delete_article(self, article_id: int):
-        """
-        Deletes a blog post.
-
-        Args:
-            article_id: The ID of the blog post to delete.
-
-        Raises:
-            NotFoundException: If the blog post is not found.
-        """
+        """Deletes a blog post."""
         article = self.get_article_by_id(article_id)
         self.session.delete(article)
         self.session.commit()
 
     def create_category(self, category_data: dict) -> BlogCategory:
-        """
-        Creates a new blog category.
-
-        Args:
-            category_data: A dictionary containing the data for the new category.
-
-        Returns:
-            The newly created BlogCategory object.
-        """
-        new_category = BlogCategory(**category_data)
+        """Creates a new blog category."""
+        if 'name' not in category_data:
+            raise ValidationException("Category name is required.")
+        sanitized_name = sanitize_input(category_data['name'])
+        new_category = BlogCategory(name=sanitized_name)
         self.session.add(new_category)
         self.session.commit()
         return new_category
 
     def get_all_categories(self):
-        """
-        Retrieves all blog categories.
-
-        Returns:
-            A list of all BlogCategory objects.
-        """
-        return self.session.query(BlogCategory).all()
+        """Retrieves all blog categories."""
+        return self.session.query(BlogCategory).order_by(BlogCategory.name).all()
 
     def get_category_by_id(self, category_id: int) -> BlogCategory:
         """
         Retrieves a single blog category by its ID.
-
-        Args:
-            category_id: The ID of the category to retrieve.
-
-        Returns:
-            The BlogCategory object if found.
-
-        Raises:
-            NotFoundException: If the category is not found.
+        Raises NotFoundException if not found.
         """
         category = self.session.query(BlogCategory).filter_by(id=category_id).first()
         if not category:
@@ -142,28 +145,20 @@ class BlogService:
         return category
 
     def update_category(self, category_id: int, category_data: dict) -> BlogCategory:
-        """
-        Updates an existing blog category.
-
-        Args:
-            category_id: The ID of the category to update.
-            category_data: A dictionary containing the updated data.
-
-        Returns:
-            The updated BlogCategory object.
-
-        Raises:
-            NotFoundException: If the category is not found.
-        """
+        """Updates an existing blog category."""
         category = self.get_category_by_id(category_id)
-        for key, value in category_data.items():
-            setattr(category, key, value)
+        if 'name' not in category_data:
+            raise ValidationException("Category name is required.")
+        category.name = sanitize_input(category_data['name'])
         self.session.commit()
         return category
 
     def delete_category(self, category_id: int):
-        """
-        Deletes a blog category.
+        """Deletes a blog category."""
+        category = self.get_category_by_id(category_id)
+        self.session.delete(category)
+        self.session.commit()
+
 
         Args:
             category_id: The ID of the category to delete.
