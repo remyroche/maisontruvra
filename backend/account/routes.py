@@ -19,6 +19,49 @@ account_bp = Blueprint('account', __name__)
 user_service = UserService()
 mfa_service = MFAService()
 
+
+
+@account_bp.route('/', methods=['GET'])
+@login_required
+def get_account_details():
+    return jsonify(current_user.to_user_dict())
+
+@account_bp.route('/update', methods=['POST'])
+@login_required
+def update_account():
+    data = sanitize_input(request.get_json())
+    updated_user = user_service.update_user(current_user.id, data)
+    return jsonify(updated_user.to_user_dict())
+
+    
+@admin_user_management_bp.route('/<int:user_id>', methods=['GET'])
+@admin_required
+def get_user(user_id):
+    user = user_service.get_user_by_id(user_id)
+    if user:
+        return jsonify(user.to_admin_dict())
+    return jsonify({'error': 'User not found'}), 404
+
+@products_bp.route('/<string:slug>', methods=['GET'])
+def get_product(slug):
+    sanitized_slug = sanitize_input(slug)
+    product = product_service.get_product_by_slug(sanitized_slug)
+    if product and product.is_active:
+        return jsonify(product.to_public_dict(include_variants=True, include_reviews=True))
+    return jsonify({'error': 'Product not found'}), 404
+
+# backend/orders/routes.py
+@orders_bp.route('/<int:order_id>', methods=['GET'])
+@login_required
+def get_order_details(order_id):
+    order = order_service.get_order_by_id_for_user(order_id, current_user.id)
+    if order:
+        return jsonify(order.to_user_dict())
+    return jsonify({'error': 'Order not found'}), 404
+
+
+
+
 # GET current user's profile
 @account_bp.route('/profile', methods=['GET'])
 @jwt_required()
