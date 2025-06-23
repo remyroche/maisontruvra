@@ -10,6 +10,10 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'a-default-secret-key-that-is-not-so-secret')
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'a-default-jwt-secret-key')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
+        'sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'app.db')
+    FRONTEND_URL = os.environ.get('FRONTEND_URL') or 'http://localhost:5173'
+
     
     # --- Security Settings ---
     # In production, these should be True to ensure secure transmission of cookies.
