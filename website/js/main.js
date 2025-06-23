@@ -42,5 +42,21 @@ const app = createApp(App);
 app.use(createPinia());
 app.use(router);
 
-// 4. Mount the application to the DOM
+// 4. Configure VeeValidate
+import { configure } from 'vee-validate';
+import { localize } from '@vee-validate/i18n';
+
+configure({
+  generateMessage: localize('fr', {
+    messages: {
+      required: 'Ce champ est requis',
+      email: 'Veuillez saisir une adresse email valide',
+      min: 'Ce champ doit contenir au moins {length} caractères',
+      max: 'Ce champ ne peut pas dépasser {length} caractères',
+      confirmed: 'Les mots de passe ne correspondent pas'
+    }
+  })
+});
+
+// 5. Mount the application to the DOM
 app.mount('#app');

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import apiClient from '../api-client';
+import { apiClient } from '../api-client.js';
 
 // This is a global cart store that can be used by both B2C and B2B shops
 export const useCartStore = defineStore('cart', {

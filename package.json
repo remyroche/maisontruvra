@@ -27,6 +27,9 @@
     "vite-plugin-static-copy": "^1.0.1"
   },
   "dependencies": {
+    "@vee-validate/i18n": "^4.15.1",
+    "@vee-validate/yup": "^4.15.1",
+    "@vee-validate/zod": "^4.12.6",
     "axios": "^1.6.8",
     "chart.js": "^4.4.2",
     "dompurify": "^3.1.0",
@@ -34,11 +37,11 @@
     "pinia": "^2.1.7",
     "swiper": "^11.1.1",
     "validator": "^13.11.0",
-    "vee-validate": "^4.12.6",
+    "vee-validate": "^4.15.1",
     "vue": "^3.4.27",
     "vue-chartjs": "^5.3.1",
     "vue-router": "^4.3.2",
-    "@vee-validate/zod": "^4.12.6",
+    "yup": "^1.6.1",
     "zod": "^3.23.8"
   }
 }

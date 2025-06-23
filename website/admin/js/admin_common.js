@@ -1,61 +1,68 @@
-// File: website/source/admin/js/admin_common.js
-
-import { checkAdminLogin, logout } from './admin_auth.js';
 
 /**
- * Fetches the admin header, injects it into the placeholder,
- * and then attaches necessary event listeners.
+ * Common utilities for admin pages
  */
-async function loadAndSetupHeader() {
-    try {
-        const response = await fetch('/admin/admin_header.html'); // Path is relative to the 'source' root
-        if (!response.ok) {
-            throw new Error(`Failed to load header: ${response.statusText}`);
-        }
-        
-        const headerHtml = await response.text();
-        const placeholder = document.getElementById('admin-header-placeholder');
-        
-        if (placeholder) {
-            placeholder.innerHTML = headerHtml;
 
-            // The header is now in the DOM, so we can safely find and attach events
-            const logoutButton = document.getElementById('admin-logout-btn');
-            if (logoutButton) {
-                logoutButton.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    logout();
-                });
-            }
-
-            // Highlight the active navigation link
-            const currentPage = window.location.pathname.split('/').pop();
-            const navLinks = placeholder.querySelectorAll('.nav-link');
-            navLinks.forEach(link => {
-                if (link.getAttribute('href').endsWith(currentPage)) {
-                    link.classList.add('active');
-                }
-            });
-        }
-    } catch (error) {
-        console.error('Error loading admin header:', error);
+// Check if admin is authenticated
+export function checkAdminAuth() {
+    const token = localStorage.getItem('admin_token');
+    if (!token) {
+        window.location.href = '/admin/admin_login.html';
+        return false;
     }
+    return true;
 }
 
-/**
- * A generic initializer for all admin pages. It ensures the user is logged in,
- * loads the header, and then runs any page-specific logic.
- * @param {Function} [pageSpecificInit] - An optional function to run for page-specific setup.
- */
-export function initializeAdminPage(pageSpecificInit) {
-    document.addEventListener('DOMContentLoaded', async () => {
-        const isLoggedIn = await checkAdminLogin();
-        if (isLoggedIn) {
-            await loadAndSetupHeader();
-            if (pageSpecificInit && typeof pageSpecificInit === 'function') {
-                pageSpecificInit();
+// Load admin header
+export function loadAdminHeader() {
+    fetch('/admin/admin_header.html')
+        .then(response => response.text())
+        .then(html => {
+            const headerContainer = document.getElementById('admin-header');
+            if (headerContainer) {
+                headerContainer.innerHTML = html;
             }
+        })
+        .catch(error => {
+            console.error('Error loading admin header:', error);
+        });
+}
+
+// Common API helper for admin calls
+export async function adminApiCall(endpoint, options = {}) {
+    const token = localStorage.getItem('admin_token');
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...options.headers
+    };
+
+    // Add CSRF token for non-GET requests
+    if (options.method && options.method !== 'GET') {
+        const csrfToken = getCookie('csrf_token');
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
         }
-        // If not logged in, checkAdminLogin() will handle the redirect.
+    }
+
+    const response = await fetch(`/api/admin${endpoint}`, {
+        ...options,
+        headers
     });
+
+    if (response.status === 401) {
+        localStorage.removeItem('admin_token');
+        window.location.href = '/admin/admin_login.html';
+        return null;
+    }
+
+    return response;
+}
+
+// Helper to get cookie value
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
 }

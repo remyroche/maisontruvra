@@ -17,7 +17,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
  * @param {object} [body=null] - The request body for POST/PUT requests.
  * @returns {Promise<object>} - The JSON response from the API.
  */
-async functon reqiuest(endpoint, method, body = null) {
+async function request(endpoint, method, body = null) {
     const session = getSession();
     const headers = {
         'Content-Type': 'application/json',
