@@ -1,0 +1,11 @@
+<!-- File: backend/templates/emails/b2b_account_approved.html -->
+{% extends "emails/b2b_base_template.html" %}
+{% block content %}
+    <h2 style="font-size: 24px; color: #5C2C35; font-family: 'Teko', serif;">Votre compte professionnel est approuvé !</h2>
+    <p>Bonjour {{ user.first_name }},</p>
+    <p>Excellente nouvelle ! Votre compte professionnel chez Maison Trüvra a été approuvé. Vous pouvez désormais accéder à notre portail exclusif, bénéficier de tarifs préférentiels et découvrir nos collections.</p>
+    <p style="text-align: center; margin: 30px 0;">
+        <a href="{{ login_url }}" class="button">Accéder au portail B2B</a>
+    </p>
+    <p>Nous sommes ravis de vous compter parmi nos partenaires.</p>
+{% endblock %}
