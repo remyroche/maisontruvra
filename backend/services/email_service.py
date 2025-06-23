@@ -91,7 +91,18 @@ class EmailService:
             template="emails/password_reset.html",
             context={"reset_url": reset_url}
         )
-    
+
+
+    @staticmethod
+    def send_password_change(user: User, reset_token: str):
+        reset_url = f"{current_app.config['BASE_URL']}/reset-password?token={reset_token}"
+        EmailService._send_email(
+            subject="Votre mot de passe a bien été changé - Maison Trüvra",
+            recipients=[user.email],
+            template="emails/password_change.html",
+            context={"reset_url": reset_url}
+        )
+        
     @staticmethod
     def send_security_alert(user: User, action_description: str):
         """A generic function for sending security-related notifications."""
