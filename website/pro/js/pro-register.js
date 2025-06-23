@@ -1,4 +1,4 @@
-// website/source/pro/js/pages/pro-register.js
+// website/source/pro/js/pro-register.js
 import '../../js/i18n.js';
 import { attachPasswordValidator } from '../../js/password-validator.js'; // Adjust path
 import { proApi } from '../pro_api.js';
