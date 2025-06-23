@@ -84,15 +84,16 @@ class EmailService:
 
 
     @staticmethod
-    def send_password_reset(user: User, reset_token: str):
+    def send_password_reset(user: User, reset_token: str, reset_link):
         """Sends a password reset email."""
         frontend_url = current_app.config.get('FRONTEND_URL', 'http://127.0.0.1:5173')
         reset_url = f"{frontend_url}/reset-password?token={reset_token}"
         EmailService._send_email(
             subject="Réinitialisation de votre mot de passe - Maison Trüvra",
             recipients=[user.email],
+            reset_link=[reset_link],
             template="password_reset.html",
-            context={"reset_url": reset_url, "user_name": user.first_name}
+            context={"reset_url": reset_url, "user_name": user.first_name},
         )
 
     @staticmethod
