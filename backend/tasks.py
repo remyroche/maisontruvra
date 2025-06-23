@@ -24,19 +24,59 @@ def update_tiers():
         current_app.logger.info(f"Updated loyalty tiers for {count} active B2B users.")
         return count
 
+@celery_app.task(name='tasks.send_email')
+def send_email_task(to, subject, html_body):
+    """
+    Celery task to send an email.
+    This runs in the background, so the application doesn't block.
+    """
+    # The application context is required to access `current_app` and `mail`
+    app = celery_app.flask_app
+    with app.app_context():
+        try:
+            msg = Message(
+                subject,
+                recipients=[to],
+                html=html_body,
+                sender=current_app.config['MAIL_DEFAULT_SENDER']
+            )
+            mail.send(msg)
+            current_app.logger.info(f"Email successfully sent to {to}")
+        except Exception as e:
+            current_app.logger.error(f"Failed to send email to {to}: {str(e)}")
+            # You might want to add retry logic here
+            # For example: self.retry(exc=e, countdown=60)
 
-@celery.task(name='app.send_email')
-def send_email_task(to, subject, template, **kwargs):
+@celery_app.task(name='tasks.generate_invoice_pdf')
+def generate_invoice_pdf_task(order_id):
     """
-    Celery task to send an email asynchronously.
+    Celery task to generate a PDF invoice for an order.
     """
-    try:
-        EmailService.send_email(to, subject, template, **kwargs)
-        return f"Email sent to {to} with subject '{subject}'"
-    except Exception as e:
-        current_app.logger.error(f"Failed to send email to {to}: {e}", exc_info=True)
-        # Retry the task, for example, after 10 minutes, for a maximum of 3 times.
-        raise send_email_task.retry(exc=e, countdown=600, max_retries=3)
+    app = celery_app.flask_app
+    with app.app_context():
+        # This is a placeholder for your actual PDF generation logic
+        # You would typically query the order, render an HTML template,
+        # and then use a library like WeasyPrint to create the PDF.
+        current_app.logger.info(f"Generating invoice PDF for order {order_id}...")
+        # from .services.invoice_service import generate_invoice_pdf_data
+        # data = generate_invoice_pdf_data(order_id)
+        # html = render_template('non-email/b2c_invoice.html', **data)
+        # pdf = weasyprint.HTML(string=html).write_pdf()
+        # save_pdf_to_storage(pdf, f"invoice_{order_id}.pdf")
+        current_app.logger.info(f"Successfully generated invoice for order {order_id}")
+
+
+@celery_app.task(name='tasks.generate_passport_pdf')
+def generate_passport_pdf_task(passport_id):
+    """
+    Celery task to generate a product passport PDF.
+    """
+    app = celery_app.flask_app
+    with app.app_context():
+        # Placeholder for PDF generation logic
+        current_app.logger.info(f"Generating product passport PDF for {passport_id}...")
+        # Logic to fetch passport data and render a PDF
+        current_app.logger.info(f"Successfully generated passport for {passport_id}")
 
 @celery.task(name='app.update_b2b_loyalty_tiers')
 def update_b2b_loyalty_tiers_task():
