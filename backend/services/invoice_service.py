@@ -98,9 +98,11 @@ class B2BInvoiceService:
         # The calling service should handle the final db.session.commit()
         return new_invoice
 
-class InvoiceService:
+
+
+class B2CInvoiceService:
     @staticmethod
-    def get_invoices_for_user(user_id):
+    def get_B2Cinvoices_for_user(user_id):
         """Get all invoices for a specific user."""
         return db.session.query(Invoice).join(Order)\
             .filter(Order.user_id == user_id)\
@@ -108,7 +110,7 @@ class InvoiceService:
             .all()
     
     @staticmethod
-    def get_invoice_by_id(invoice_id, user_id=None):
+    def get_B2Cinvoice_by_id(invoice_id, user_id=None):
         """Get a specific invoice, optionally filtered by user."""
         query = db.session.query(Invoice).join(Order)\
             .filter(Invoice.id == invoice_id)
@@ -117,7 +119,7 @@ class InvoiceService:
         return query.first()
     
     @staticmethod
-    def generate_invoice_pdf(invoice_id, user_id):
+    def generate_B2Cinvoice_pdf(invoice_id, user_id):
         """Generate or retrieve the PDF path for an invoice."""
         invoice = InvoiceService.get_invoice_by_id(invoice_id, user_id)
         if not invoice:
@@ -132,7 +134,7 @@ class InvoiceService:
         return f"/invoices/invoice_{invoice_id}.pdf"
     
     @staticmethod
-    def create_invoice_for_order(order_id):
+    def create_B2Cinvoice_for_order(order_id):
         """Create an invoice for a completed order."""
         order = Order.query.get(order_id)
         if not order:
