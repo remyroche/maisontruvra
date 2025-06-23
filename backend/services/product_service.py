@@ -3,6 +3,8 @@ from backend.models.enums import ProductStatus
 from backend.database import db
 from backend.services.exceptions import NotFoundException, ServiceException
 from sqlalchemy import or_
+from backend.services.passport_service import PassportService # Import the new service
+
 
 class ProductService:
     @staticmethod
@@ -37,18 +39,47 @@ class ProductService:
         if not product:
             raise NotFoundException(f"Product with slug {slug} not found")
         return product
-    
+
     @staticmethod
     def create_product(data):
-        """Create new product"""
+        """
+        Creates a new product and automatically generates its digital passport.
+        This is an atomic operation: if passport creation fails, the entire
+        transaction is rolled back, and the product is not created.
+        """
+        new_product = Product(
+            name=data['name'],
+            description=data['description'],
+            price=data['price'],
+            category_id=data['category_id'],
+            # ... other fields
+        )
+        
         try:
-            product = Product(**data)
-            db.session.add(product)
+            # Add the new product to the session
+            db.session.add(new_product)
+            
+            # Flush the session to assign an ID to new_product without committing
+            db.session.flush()
+
+            # --- Passport Creation Hook (Mandatory) ---
+            PassportService.create_for_product(new_product)
+            
+            # Commit the transaction only if both product and passport are created
             db.session.commit()
-            return product
+            
+            return new_product
         except Exception as e:
+            # If any part of the process fails, roll back the entire transaction
             db.session.rollback()
-            raise ServiceException(f"Failed to create product: {str(e)}")
+            current_app.logger.error(
+                f"Failed to create product or its mandatory passport. "
+                f"Transaction rolled back. Error: {e}"
+            )
+            # Re-raise the exception to notify the caller of the failure
+            raise
+
+    
     
     @staticmethod
     def update_product(product_id, data):
