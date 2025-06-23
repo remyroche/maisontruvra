@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facture {{ invoice.number }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Updated Google Fonts Import for Raleway and Teko -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700&family=Teko:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom Properties for Brand Palette */
+        :root {
+            --dark-gray: #374151;
+            --cream: #FDFBF6;
+            --dark-brown: #433830;
+            --truffle-burgundy: #5C2C35;
+            --gold: #D4AF37;
+            --light-gray: #F3F4F6;
+        }
+
+        /* Applying Brand Fonts */
+        body {
+            font-family: 'Raleway', sans-serif;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .font-brand-serif {
+            font-family: 'Teko', serif;
+        }
+        
+        /* Applying Brand Colors */
+        .bg-brand-cream { background-color: var(--cream); }
+        .bg-brand-light-gray { background-color: var(--light-gray); }
+        .text-brand-dark-gray { color: var(--dark-gray); }
+        .text-brand-dark-brown { color: var(--dark-brown); }
+        .text-brand-burgundy { color: var(--truffle-burgundy); }
+        .text-brand-gold { color: var(--gold); }
+        .border-brand-dark-brown { border-color: var(--dark-brown); }
+        .border-brand-burgundy { border-color: var(--truffle-burgundy); }
+        
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body class="bg-brand-light-gray p-8">
+    <div class="max-w-4xl mx-auto bg-brand-cream p-12 shadow-2xl rounded-lg">
+        <header class="flex justify-between items-start mb-12">
+            <div>
+                <div class="font-brand-serif text-4xl text-brand-burgundy">Maison Trüvra</div>
+                <p class="text-sm text-brand-dark-gray">Producteur récoltant</p>
+            </div>
+            <div class="text-right">
+                <h1 class="font-brand-serif text-5xl uppercase text-brand-dark-brown">Facture</h1>
+                <p class="text-sm text-brand-dark-gray mt-2">Facture #<span class="font-semibold">{{ invoice.number }}</span></p>
+                <p class="text-sm text-brand-dark-gray">Date d'émission : <span class="font-semibold">{{ invoice.issue_date }}</span></p>
+            </div>
+        </header>
+
+        <section class="grid grid-cols-2 gap-12 mb-12">
+            <div>
+                <h2 class="text-sm font-semibold uppercase text-brand-burgundy tracking-wider mb-3">Facturé à</h2>
+                <p class="font-bold text-brand-dark-brown">{{ client.first_name }} {{ client.last_name }}</p>
+                <p class="text-brand-dark-gray">{{ client.company_name }}</p>
+                <p class="text-brand-dark-gray">SIRET : {{ client.siret }}</p>
+                <p class="text-brand-dark-gray">{{ client.billing_address.line_1 }}</p>
+                {% if client.billing_address.line_2 %}
+                <p class="text-brand-dark-gray">{{ client.billing_address.line_2 }}</p>
+                {% endif %}
+                <p class="text-brand-dark-gray">{{ client.billing_address.postal_code }} {{ client.billing_address.city }}</p>
+                <p class="text-brand-dark-gray">{{ client.billing_address.country }}</p>
+            </div>
+            <div>
+                <h2 class="text-sm font-semibold uppercase text-brand-burgundy tracking-wider mb-3">Adresse de livraison</h2>
+                <p class="font-bold text-brand-dark-brown">{{ client.shipping_address.contact_person or client.first_name ~ ' ' ~ client.last_name }}</p>
+                <p class="text-brand-dark-gray">{{ client.shipping_address.label }}</p>
+                <p class="text-brand-dark-gray">{{ client.shipping_address.line_1 }}</p>
+                {% if client.shipping_address.line_2 %}
+                <p class="text-brand-dark-gray">{{ client.shipping_address.line_2 }}</p>
+                {% endif %}
+                <p class="text-brand-dark-gray">{{ client.shipping_address.postal_code }} {{ client.shipping_address.city }}</p>
+                <p class="text-brand-dark-gray">{{ client.shipping_address.country }}</p>
+            </div>
+        </section>
+
+        <section>
+            <div class="flow-root">
+                <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+                    <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr class="border-b-2 border-brand-dark-brown">
+                                    <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-brand-dark-brown sm:pl-0">Article</th>
+                                    <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-brand-dark-brown">Numéro d'identification</th>
+                                    <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-brand-dark-brown">Quantité</th>
+                                    <th scope="col" class="px-3 py-3.5 text-right text-sm font-semibold text-brand-dark-brown">Prix Unitaire HT</th>
+                                    <th scope="col" class="py-3.5 pl-3 pr-4 text-right text-sm font-semibold text-brand-dark-brown sm:pr-0">Montant HT</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                {% for item in order.items %}
+                                <tr>
+                                    <td class="w-full max-w-0 py-4 pl-4 pr-3 text-sm font-medium text-brand-dark-brown sm:w-auto sm:max-w-none sm:pl-0">
+                                        {{ item.product_name }}
+                                        <dl class="font-normal lg:hidden">
+                                            <dt class="sr-only">Passport</dt>
+                                            <dd class="mt-1 truncate text-brand-dark-gray">
+                                                <a href="{{ item.passport_url }}" class="hover:text-brand-gold">Passeport: {{ item.passport_id }}</a>
+                                            </dd>
+                                        </dl>
+                                    </td>
+                                    <td class="hidden px-3 py-4 text-sm text-brand-dark-gray lg:table-cell">
+                                        <a href="{{ item.passport_url }}" class="text-brand-burgundy hover:text-brand-gold font-semibold">{{ item.passport_id }}</a>
+                                    </td>
+                                    <td class="hidden px-3 py-4 text-center text-sm text-brand-dark-gray lg:table-cell">{{ item.quantity }}</td>
+                                    <td class="hidden px-3 py-4 text-right text-sm text-brand-dark-gray lg:table-cell">€{{ "%.2f"|format(item.unit_price_ht) }}</td>
+                                    <td class="py-4 pl-3 pr-4 text-right text-sm font-semibold text-brand-dark-brown sm:pr-0">€{{ "%.2f"|format(item.total_ht) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="mt-12">
+            <div class="w-full flex justify-end">
+                <div class="w-full max-w-md space-y-3">
+                    <div class="flex justify-between">
+                        <span class="text-brand-dark-gray">Total HT :</span>
+                        <span class="font-semibold text-brand-dark-brown">€{{ "%.2f"|format(totals.subtotal_ht) }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-brand-dark-gray">TVA 5.5% :</span>
+                        <span class="font-semibold text-brand-dark-brown">€{{ "%.2f"|format(totals.tva_amount) }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-brand-dark-gray">Remise ({{ totals.discount_percentage }}%) :</span>
+                        <span class="font-semibold" style="color: #c0392b;">- €{{ "%.2f"|format(totals.discount_amount) }}</span>
+                    </div>
+                    <div class="flex justify-between pt-3 border-t-2 border-brand-dark-brown">
+                        <span class="font-brand-serif text-xl text-brand-dark-brown">Montant net à payer en € :</span>
+                        <span class="font-brand-serif text-xl text-brand-dark-brown">€{{ "%.2f"|format(totals.net_total) }}</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer class="mt-24 pt-8 border-t border-gray-200">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-xs text-brand-dark-gray">
+                <div>
+                    <h3 class="font-semibold text-brand-burgundy mb-2">Modalités de règlement :</h3>
+                    <p class="mb-4">
+                        La présente facture est payable sous 30 jours. Passé ce délai, sans obligation d'envoi d'une relance, conformément à l'article L441-30 II du Code de Commerce, il sera appliqué une pénalité calculée à un taux annuel de 100%. Une indemnité forfaitaire pour frais de recouvrement de 40€ sera aussi exigible.
+                    </p>
+                    <p><span class="font-semibold">BIC :</span> {{ company.bic }}</p>
+                    <p><span class="font-semibold">IBAN :</span> {{ company.iban }}</p>
+                </div>
+                 <div class="border-l border-gray-200 pl-8">
+                    <h3 class="font-semibold text-brand-burgundy mb-2">Traçabilité et Transparence :</h3>
+                    <p>
+                        Chez Maison Trüvra, la fraîcheur, l'authenticité et la traçabilité de nos produits est primordiale. C'est dans cet esprit que chaque produit a son propre numéro d'identification. En cliquant sur ce numéro, vous serez redirigé vers une page web unique associée à votre produit. Vous trouverez sur cette page la date de récolte et de traitement associées à votre achat.
+                    </p>
+                </div>
+            </div>
+            <div class="mt-8 pt-4 border-t border-gray-200 text-center text-xs text-gray-400">
+                <p>{{ company.legal_status }} Maison Trüvra - SIRET {{ company.siret }} - Capital social de {{ company.capital }}€ - Siège social {{ company.address }} - Numéro d'Identification à la TVA {{ company.vat_number }}</p>
+                <p>Contactez-nous à <a href="mailto:{{ company.email }}" class="text-brand-burgundy hover:text-brand-gold">{{ company.email }}</a> ou sur Instagram @maisontruvra</p>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
