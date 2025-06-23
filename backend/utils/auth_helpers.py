@@ -33,18 +33,14 @@ def b2b_required(f):
             return jsonify({'error': 'B2B account required'}), 403
         return f(*args, **kwargs)
     return decorated_function
+    
+def send_password_change_email(user: User):
+    """Sends a confirmation email after a password change."""
+    EmailService.send_password_change_confirmation(user)
 
-def send_password_change_email(email):
-    # This is a placeholder for a more complete email service implementation
-    email_service = EmailService()
-    subject = "Your Password Has Been Changed"
-    body = "Your password has been successfully changed. If you did not make this change, please contact support immediately."
-    email_service.send_email(email, subject, body)
 
-def send_password_reset_email(email, token):
-    # This is a placeholder for a more complete email service implementation
-    email_service = EmailService()
+def send_password_reset_email(user: User, token: str):
+    """Sends an email with a password reset link."""
     reset_link = f"https://yourfrontend.com/reset-password?token={token}"
-    subject = "Password Reset Request"
-    body = f"Please use the following link to reset your password: {reset_link}"
-    email_service.send_email(email, subject, body)
+    EmailService.send_password_reset(user, token, reset_link)
+
