@@ -7,9 +7,17 @@ from backend.utils.sanitization import sanitize_input
 from backend.models.user_models import User
 from backend.database import db
 from backend.services.email_service import EmailService
+from flask_login import login_required, current_user
+from werkzeug.security import check_password_hash, generate_password_hash
+from models import db, User, Address
+from services.user_service import UserService
+from services.mfa_service import MFAService
+from utils.auth_helpers import send_password_change_email
+from utils.sanitization import sanitize_input
 
-
-account_bp = Blueprint('account_bp', __name__, url_prefix='/api/account')
+account_bp = Blueprint('account', __name__)
+user_service = UserService()
+mfa_service = MFAService()
 
 # GET current user's profile
 @account_bp.route('/profile', methods=['GET'])
@@ -25,6 +33,7 @@ def get_profile():
     
     return jsonify(status="success", data=user.to_dict()), 200
 
+    
 # UPDATE current user's profile
 @account_bp.route('/profile', methods=['PUT'])
 @jwt_required()
@@ -33,7 +42,7 @@ def update_profile():
     Update the profile information for the currently authenticated user.
     """
     user_id = get_jwt_identity()
-    data = request.get_json()
+    data = sanitize_input(request.get_json())
     if not data:
         return jsonify(status="error", message="Invalid or missing JSON body"), 400
     
@@ -74,8 +83,8 @@ def update_password():
 
     try:
         # The service should handle verification of the old password
-        if UserService.update_password(user_id, old_password, new_password):
-            return jsonify(status="success", message="Password updated successfully."), 200
+        if not check_password_hash(current_user.password_hash, old_password):
+            return jsonify({'error': 'Invalid old password'}), 400
         else:
             return jsonify(status="error", message="Invalid current password or failed to update."), 400
     
@@ -180,9 +189,8 @@ def disable_2fa():
 @account_bp.route('/addresses', methods=['GET'])
 @jwt_required()
 def get_addresses():
-    user_id = get_jwt_identity()
-    addresses = AddressService.get_addresses_for_user(user_id)
-    return jsonify(status="success", data=addresses), 200
+    addresses = Address.query.filter_by(user_id=current_user.id).all()
+    return jsonify([address.to_dict() for address in addresses])
 
 @account_bp.route('/addresses', methods=['POST'])
 @jwt_required()
