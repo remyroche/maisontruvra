@@ -1,30 +1,78 @@
-from flask import Blueprint, jsonify
-from backend.services.request_management_service import RequestManagementService
-from backend.auth.permissions import admin_required
+from flask import Blueprint, request, jsonify
+from backend.services.quote_service import QuoteService
+from backend.utils.sanitization import sanitize_input
+from backend.auth.permissions import permissions_required
 
-quote_routes = Blueprint('admin_quote_routes', __name__)
+quote_management_bp = Blueprint('quote_management_bp', __name__, url_prefix='/admin/quotes')
 
-@quote_routes.route('/quotes', methods=['GET'])
-@admin_required
-def get_all_quotes():
+# READ all quotes (paginated and filterable)
+@quote_management_bp.route('/', methods=['GET'])
+@permissions_required('MANAGE_QUOTES')
+def get_quotes():
     """
-    Retrieves all quote requests.
+    Get a paginated list of all B2B quotes.
     """
-    quotes = RequestManagementService.get_all_requests_by_type('quote')
-    return jsonify([q.to_dict() for q in quotes]), 200
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        status = sanitize_input(request.args.get('status'))
+        filters = {'status': status} if status else {}
 
-@quote_routes.route('/quotes/<int:quote_id>/respond', methods=['POST'])
-@admin_required
-def respond_to_quote(quote_id):
+        quotes_pagination = QuoteService.get_all_quotes_paginated(page=page, per_page=per_page, filters=filters)
+        
+        return jsonify({
+            "status": "success",
+            "data": [q.to_dict() for q in quotes_pagination.items],
+            "total": quotes_pagination.total,
+            "pages": quotes_pagination.pages,
+            "current_page": quotes_pagination.page
+        }), 200
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while fetching quotes."), 500
+
+# READ a single quote
+@quote_management_bp.route('/<int:quote_id>', methods=['GET'])
+@permissions_required('MANAGE_QUOTES')
+def get_quote(quote_id):
+    quote = QuoteService.get_quote_by_id(quote_id)
+    if not quote:
+        return jsonify(status="error", message="Quote not found"), 404
+    return jsonify(status="success", data=quote.to_dict_full()), 200
+
+# UPDATE a quote
+@quote_management_bp.route('/<int:quote_id>', methods=['PUT'])
+@permissions_required('MANAGE_QUOTES')
+def update_quote(quote_id):
     """
-    Allows an admin to respond to a quote request.
-    This would typically involve sending an email with pricing details.
+    Update a quote's details or status (e.g., from 'pending' to 'approved').
     """
-    # Simplified logic
-    # In a real app, this would trigger an email with a custom message.
-    quote = RequestManagementService.get_request_by_id(quote_id)
-    if quote and quote.request_type == 'quote':
-        # Mark as responded
-        RequestManagementService.update_request_status(quote_id, 'Responded')
-        return jsonify({"message": f"Quote {quote_id} has been marked as responded."}), 200
-    return jsonify({"error": "Quote not found"}), 404
+    data = request.get_json()
+    if not data:
+        return jsonify(status="error", message="Invalid JSON body"), 400
+    
+    if not QuoteService.get_quote_by_id(quote_id):
+        return jsonify(status="error", message="Quote not found"), 404
+
+    sanitized_data = sanitize_input(data)
+    try:
+        updated_quote = QuoteService.update_quote(quote_id, sanitized_data)
+        return jsonify(status="success", data=updated_quote.to_dict()), 200
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="Failed to update quote."), 500
+
+# DELETE a quote
+@quote_management_bp.route('/<int:quote_id>', methods=['DELETE'])
+@permissions_required('MANAGE_QUOTES')
+def delete_quote(quote_id):
+    if not QuoteService.get_quote_by_id(quote_id):
+        return jsonify(status="error", message="Quote not found"), 404
+    try:
+        QuoteService.delete_quote(quote_id)
+        return jsonify(status="success", message="Quote deleted successfully."), 200
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="Failed to delete quote."), 500
