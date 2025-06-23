@@ -1,39 +1,80 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.services.b2b_service import B2BService
+from backend.utils.sanitization import sanitize_input
 from backend.auth.permissions import b2b_user_required
-from flask_jwt_extended import get_jwt_identity
-from backend.services.order_service import OrderService
-from backend.services.exceptions import ServiceException
 
-order_routes = Blueprint('b2b_order_routes', __name__)
+b2b_order_routes_bp = Blueprint('b2b_order_routes_bp', __name__, url_prefix='/api/b2b/orders')
 
-@order_routes.route('/quick-order', methods=['POST'])
+# GET the B2B user's order history
+@b2b_order_routes_bp.route('/', methods=['GET'])
 @b2b_user_required
-def quick_order():
+def get_b2b_order_history():
     """
-    Allows B2B users to place a quick order, often using SKUs.
+    Get a paginated list of the B2B user's order history.
+    """
+    user_id = get_jwt_identity()
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        
+        orders_pagination = B2BService.get_user_orders_paginated(user_id, page=page, per_page=per_page)
+        
+        return jsonify({
+            "status": "success",
+            "data": [order.to_dict_for_user() for order in orders_pagination.items],
+            "total": orders_pagination.total,
+            "pages": orders_pagination.pages,
+            "current_page": orders_pagination.page
+        }), 200
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while fetching your orders."), 500
+
+# GET a single B2B order by ID
+@b2b_order_routes_bp.route('/<int:order_id>', methods=['GET'])
+@b2b_user_required
+def get_b2b_order(order_id):
+    """
+    Get a single B2B order by its ID, ensuring it belongs to the user.
+    """
+    user_id = get_jwt_identity()
+    try:
+        order = B2BService.get_order_by_id_for_user(order_id, user_id)
+        if order:
+            return jsonify(status="success", data=order.to_dict_for_user()), 200
+        return jsonify(status="error", message="Order not found or you do not have permission to view it."), 404
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred."), 500
+
+# CREATE a new B2B order
+@b2b_order_routes_bp.route('/', methods=['POST'])
+@b2b_user_required
+def create_b2b_order():
+    """
+    Create a new B2B order. This might use different logic than public checkout,
+    e.g., allowing for Purchase Order numbers or different payment methods.
     """
     user_id = get_jwt_identity()
     data = request.get_json()
-    items = data.get('items') # Expects a list of {'sku': '...', 'quantity': ...}
+    if not data:
+        return jsonify(status="error", message="Invalid JSON body"), 400
 
-    if not items:
-        return jsonify({"error": "Order items are required."}), 400
+    sanitized_data = sanitize_input(data)
+    
+    # Example fields for a B2B order
+    required_fields = ['items', 'shipping_address_id', 'purchase_order']
+    if not all(field in sanitized_data for field in required_fields):
+        missing = [f for f in required_fields if f not in sanitized_data]
+        return jsonify(status="error", message=f"Missing required fields: {', '.join(missing)}"), 400
 
     try:
-        order = OrderService.create_b2b_quick_order(user_id, items)
-        return jsonify(order.to_dict()), 201
-    except ServiceException as e:
-        return jsonify({"error": str(e)}), 400
-
-@order_routes.route('/reorder/<int:order_id>', methods=['POST'])
-@b2b_user_required
-def reorder(order_id):
-    """
-    Creates a new cart or order based on a previous order.
-    """
-    user_id = get_jwt_identity()
-    try:
-        new_order = OrderService.reorder(user_id, order_id)
-        return jsonify(new_order.to_dict()), 201
-    except ServiceException as e:
-        return jsonify({"error": str(e)}), 400
+        # The service would handle creating the order from a list of items rather than a cart.
+        order = B2BService.create_b2b_order(user_id, sanitized_data)
+        return jsonify(status="success", message="B2B order created successfully.", data=order.to_dict_for_user()), 201
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An error occurred while creating the order."), 500
