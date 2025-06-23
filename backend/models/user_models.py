@@ -11,8 +11,6 @@ class User(BaseModel):
     first_name = db.Column(db.String(50), nullable=True)
     last_name = db.Column(db.String(50), nullable=True)
     status = db.Column(db.Enum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
-    mfa_secret = db.Column(db.String(16), nullable=True)
-    mfa_enabled = db.Column(db.Boolean, default=False)
     
     roles = db.relationship('Role', secondary='user_roles', back_populates='users')
     addresses = db.relationship('Address', back_populates='user', cascade="all, delete-orphan")
@@ -26,7 +24,23 @@ class User(BaseModel):
 
     loyalty_tier = db.relationship('LoyaltyTier', back_populates='users')
     
-        
+    # --- New fields for 2FA ---
+    is_mfa_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    mfa_secret = db.Column(db.String(255), nullable=True)
+
+    # --- New Relationship for Multiple Addresses ---
+    # The 'addresses' relationship will be a list of Address objects.
+    addresses = db.relationship('Address', backref='user', lazy='dynamic', cascade="all, delete-orphan")
+
+    @validates('addresses')
+    def validate_addresses(self, key, address):
+        """
+        Enforces the business rule that a user cannot have more than 4 addresses.
+        """
+        if len(self.addresses.all()) >= 4:
+            raise ValueError("Un utilisateur ne peut pas avoir plus de 4 adresses.")
+        return address
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -40,6 +54,8 @@ class User(BaseModel):
             'first_name': self.first_name,
             'last_name': self.last_name,
             'roles': [role.name.value for role in self.roles]
+            'is_mfa_enabled': self.is_mfa_enabled,
+            'addresses': [addr.to_dict() for addr in self.addresses]
             data['loyalty_tier'] = self.loyalty_tier.name if self.loyalty_tier else None
             data['last_active_at'] = self.last_active_at.isoformat() if self.last_active_at else None
         }
