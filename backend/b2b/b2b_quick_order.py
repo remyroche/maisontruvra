@@ -19,7 +19,7 @@ def create_b2b_quick_order():
     This performs full SKU validation and inventory checks within a transaction.
     """
     user_id = get_jwt_identity()
-    data = request.get_json()
+    data = sanitize_input(request.get_json())
     items = data.get('items')
 
     if not items or not isinstance(items, list):
