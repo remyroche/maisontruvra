@@ -4,6 +4,8 @@ from backend.database import db
 from backend.services.exceptions import NotFoundException, ServiceException
 from sqlalchemy import or_
 from backend.services.passport_service import PassportService # Import the new service
+from models import db, Product, Category, Collection, Review, WishlistItem, Inventory
+from sqlalchemy.orm import joinedload, subqueryload
 
 
 class ProductService:
@@ -23,7 +25,70 @@ class ProductService:
             ))
         
         return query.paginate(page=page, per_page=per_page, error_out=False)
-    
+
+
+    def get_published_products(self, page, per_page, sort_by, sort_direction, category_name=None, collection_name=None):
+        """
+        Gets a paginated list of published products, eagerly loading relationships
+        to prevent N+1 query problems.
+        """
+        query = Product.query.filter_by(is_active=True).options(
+            joinedload(Product.category),
+            joinedload(Product.collection),
+            subqueryload(Product.images)
+        )
+
+        if category_name:
+            query = query.join(Category).filter(Category.name == category_name)
+        
+        if collection_name:
+            query = query.join(Collection).filter(Collection.name == collection_name)
+
+        if sort_direction == 'desc':
+            query = query.order_by(db.desc(getattr(Product, sort_by, 'name')))
+        else:
+            query = query.order_by(db.asc(getattr(Product, sort_by, 'name')))
+
+        return query.paginate(page=page, per_page=per_page, error_out=False)
+
+    def get_product_by_slug(self, slug):
+        """
+        Gets a single product by slug, eagerly loading all related data.
+        """
+        return Product.query.filter_by(slug=slug).options(
+            subqueryload(Product.variants),
+            subqueryload(Product.images),
+            subqueryload(Product.reviews).joinedload(Review.user),
+            joinedload(Product.category),
+            joinedload(Product.collection)
+        ).first()
+
+    def get_all_products_paginated(self, page, per_page, sort_by, sort_direction, category_id=None, collection_id=None):
+        """
+        Gets a paginated list of all products for the admin, eagerly loading relationships.
+        """
+        query = Product.query.options(
+            joinedload(Product.inventory),
+            joinedload(Product.category),
+            joinedload(Product.collection)
+        )
+
+        if category_id:
+            query = query.filter(Product.category_id == category_id)
+        if collection_id:
+            query = query.filter(Product.collection_id == collection_id)
+
+        if sort_direction == 'desc':
+            query = query.order_by(db.desc(getattr(Product, sort_by, 'name')))
+        else:
+            query = query.order_by(db.asc(getattr(Product, sort_by, 'name')))
+        
+        return query.paginate(page=page, per_page=per_page, error_out=False)
+        
+
+    def search_products(self, search_term, limit=10):
+        return Product.query.filter(Product.name.ilike(f'%{search_term}%')).limit(limit).all()
+        
     @staticmethod
     def get_product_by_id(product_id):
         """Get product by ID"""
@@ -33,15 +98,7 @@ class ProductService:
         return product
     
     @staticmethod
-    def get_product_by_slug(slug):
-        """Get product by slug"""
-        product = Product.query.filter_by(slug=slug).first()
-        if not product:
-            raise NotFoundException(f"Product with slug {slug} not found")
-        return product
-
-    @staticmethod
-    def create_product(data):
+    def create_product(self, data):
         """
         Creates a new product and automatically generates its digital passport.
         This is an atomic operation: if passport creation fails, the entire
