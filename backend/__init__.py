@@ -24,7 +24,9 @@ csrf = CSRFProtect()
 
 def create_app(config_class=Config):
     app = Flask(__name__)
-    app.config.from_object(config_class)
+    config = config_by_name[config_name]
+    app.config.from_object(config)
+
 
     # Initialize extensions
     csrf.init_app(app) # Initialize CSRF protection
@@ -55,6 +57,19 @@ def create_app(config_class=Config):
     with app.app_context():
         from backend.models import user_models, product_models, order_models, blog_models, auth_models, b2b_models, b2b_loyalty_models, inventory_models, newsletter_models, passport_models, referral_models, utility_models
 
+    if config.SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=config.SENTRY_DSN,
+            integrations=[FlaskIntegration()],
+            # Set traces_sample_rate to 1.0 to capture 100% of transactions for performance monitoring. In high-traffic production, adjust this to a lower value (e.g., 0.2).
+            traces_sample_rate=1.0,
+            # Set profiles_sample_rate to 1.0 to profile 100% of sampled transactions. In high-traffic production, adjust this to a lower value.
+            profiles_sample_rate=1.0,
+            # Set the environment based on the Flask config
+            environment=config_name,
+        )
+        app.logger.info("Sentry monitoring is active.")
+
     @app.route('/')
     def index():
         return "Welcome to the Maison Truvrain backend!"
@@ -68,5 +83,7 @@ def create_app(config_class=Config):
         from flask_wtf.csrf import generate_csrf
         response.set_cookie('XSRF-TOKEN', generate_csrf())
         return response
+
+    app.logger.info(f"Application created with '{config_name}' config.")
 
     return app
