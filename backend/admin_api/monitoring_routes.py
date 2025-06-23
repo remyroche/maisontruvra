@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 from backend.auth.permissions import admin_required
-from backend.services.monitoring_service import MonitoringService # Assumed service
+from backend.services.monitoring_service import MonitoringService
 
 monitoring_bp = Blueprint('monitoring_bp', __name__, url_prefix='/admin/monitoring')
 
@@ -21,6 +21,21 @@ def get_system_health():
     except Exception as e:
         # Log error e
         return jsonify(status="error", message="An error occurred while checking system health."), 500
+
+@monitoring_bp.route('/latest-errors', methods=['GET'])
+@admin_required
+def get_latest_errors():
+    """
+    Fetches the latest errors from the application's log file via the MonitoringService.
+    """
+    try:
+        limit = request.args.get('limit', 20, type=int)
+        errors = MonitoringService.get_latest_errors(limit=limit)
+        return jsonify(status="success", data=errors)
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Failed to serve error logs: {e}")
+        return jsonify(status="error", message="An internal error occurred while fetching error logs."), 500
 
 @monitoring_bp.route('/error-logs', methods=['GET'])
 @admin_required
