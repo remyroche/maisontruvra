@@ -1,79 +1,105 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request, jsonify
 from backend.services.product_service import ProductService
-from backend.services.recommendation_service import RecommendationService
+from backend.services.review_service import ReviewService
+from backend.utils.sanitization import sanitize_input
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
-products_bp = Blueprint('public_product_routes', __name__)
+products_bp = Blueprint('products_bp', __name__, url_prefix='/api/products')
 
+# READ all products with filtering, searching, and pagination
 @products_bp.route('/', methods=['GET'])
-def get_all_products():
+def get_products():
     """
-    Get a list of all published products, with optional filtering.
+    Get a list of all available products.
+    Query Params:
+    - page: The page number for pagination.
+    - per_page: The number of items per page.
+    - category: Filter by category slug or ID.
+    - q: Search query for product name or description.
     """
-    category_slug = request.args.get('category')
-    collection_slug = request.args.get('collection')
-    
-    products = ProductService.get_all_published_products(
-        category_slug=category_slug,
-        collection_slug=collection_slug
-    )
-    return jsonify([p.to_dict() for p in products]), 200
-
-@products_bp.route('/<string:slug>', methods=['GET'])
-@products_bp.route('/products/<int:product_id>', methods=['GET'])
-def get_product_details(product_id):
-    """
-    Fetches aggregated data for a single product page.
-    This endpoint is designed to provide all necessary information for the frontend
-    to display a product and its selectable variants (e.g., sizes, colors).
-    """
-    # In a real application, database interactions would be handled
-    # by a service or data access layer.
-    conn = db.get_connection()
-    cursor = conn.cursor(dictionary=True) # Assuming a MySQL-like connector that returns dicts
     try:
-        # 1. Fetch the base product information, joining with its category for context.
-        cursor.execute(
-            """
-            SELECT p.id, p.name, p.description, p.collection, c.name as category_name
-            FROM products p
-            JOIN categories c ON p.category_id = c.id
-            WHERE p.id = %s AND p.deleted_at IS NULL
-            """,
-            (product_id,)
-        )
-        product_data = cursor.fetchone()
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 24, type=int)
+        category = sanitize_input(request.args.get('category'))
+        search_query = sanitize_input(request.args.get('q', ''))
 
-        if not product_data:
-            return jsonify({'error': 'Product not found'}), 404
-
-        # 2. Fetch all available, non-deleted variants (SKUs) for this product.
-        cursor.execute(
-            """
-            SELECT id as variant_id, sku, price, attributes, inventory_count
-            FROM product_variants
-            WHERE product_id = %s AND deleted_at IS NULL AND inventory_count > 0
-            """,
-            (product_id,)
-        )
-        variants = cursor.fetchall()
-
-        # 3. Combine into a single response object for the frontend.
-        product_data['variants'] = variants
-
-        return jsonify(product_data), 200
-
+        filters = {'category': category, 'search': search_query}
+        
+        products_pagination = ProductService.get_all_products_paginated(page=page, per_page=per_page, filters=filters)
+        
+        return jsonify({
+            "status": "success",
+            "data": [product.to_dict_for_public() for product in products_pagination.items],
+            "total": products_pagination.total,
+            "pages": products_pagination.pages,
+            "current_page": products_pagination.page
+        }), 200
     except Exception as e:
-        logger.error(f"Error fetching product details for {product_id}: {e}")
-        return jsonify({'error': 'An internal error occurred.'}), 500
-    finally:
-        cursor.close()
-        conn.close()
+        # Log error e
+        return jsonify(status="error", message="An error occurred while fetching products."), 500
 
+# READ a single product by its slug
+@products_bp.route('/<string:slug>', methods=['GET'])
+def get_product_by_slug(slug):
+    """
+    Get detailed information for a single product by its slug.
+    """
+    clean_slug = sanitize_input(slug)
+    product = ProductService.get_product_by_slug(clean_slug)
+    if not product:
+        return jsonify(status="error", message="Product not found"), 404
+        
+    return jsonify(status="success", data=product.to_dict_for_public()), 200
 
-@products_bp.route('/<int:product_id>/recommendations', methods=['GET'])
-def get_recommendations(product_id):
+# READ all product categories
+@products_bp.route('/categories', methods=['GET'])
+def get_product_categories():
     """
-    Get product recommendations related to the given product.
+    Get a list of all product categories.
     """
-    recommendations = RecommendationService.get_recommendations_for_product(product_id)
-    return jsonify([p.to_dict() for p in recommendations]), 200
+    try:
+        categories = ProductService.get_all_categories()
+        return jsonify(status="success", data=[c.to_dict() for c in categories]), 200
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An error occurred while fetching categories."), 500
+
+# READ reviews for a specific product
+@products_bp.route('/<int:product_id>/reviews', methods=['GET'])
+def get_product_reviews(product_id):
+    """
+    Get all approved reviews for a specific product.
+    """
+    try:
+        reviews = ReviewService.get_approved_reviews_for_product(product_id)
+        return jsonify(status="success", data=[r.to_dict_for_public() for r in reviews]), 200
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An error occurred while fetching reviews."), 500
+
+# CREATE a new review for a product
+@products_bp.route('/<int:product_id>/reviews', methods=['POST'])
+@jwt_required()
+def create_product_review(product_id):
+    """
+    Submit a new review for a product. Requires authentication.
+    """
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    if not data or 'rating' not in data or 'comment' not in data:
+        return jsonify(status="error", message="Rating and comment are required."), 400
+
+    try:
+        sanitized_data = sanitize_input(data)
+        rating = int(sanitized_data['rating'])
+        comment = sanitized_data['comment']
+
+        # The service layer should handle validation, e.g., if the user has purchased the product
+        new_review = ReviewService.create_review(user_id, product_id, rating, comment)
+        return jsonify(status="success", data=new_review.to_dict_for_public()), 201
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400 # Catches validation errors
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An error occurred while submitting your review."), 500
+
