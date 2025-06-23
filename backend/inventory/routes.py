@@ -1,26 +1,23 @@
 from flask import Blueprint, jsonify
-from backend.services.inventory_service import InventoryService
-from backend.auth.permissions import admin_required
+from backend.services.inventory_service import InventoryService # Assumed service
+from backend.auth.permissions import permissions_required
 
-inventory_bp = Blueprint('inventory_routes', __name__)
+inventory_bp = Blueprint('inventory_bp', __name__, url_prefix='/api/inventory')
 
-@inventory_bp.route('/status', methods=['GET'])
-@admin_required
-def get_inventory_status():
+# Check stock level for a specific product
+@inventory_bp.route('/stock/<int:product_id>', methods=['GET'])
+@permissions_required('VIEW_INVENTORY')
+def get_stock_level(product_id):
     """
-    Get the inventory status for all products.
+    Get the current stock level for a specific product.
+    Requires permission to view inventory.
     """
-    inventory_list = InventoryService.get_full_inventory_report()
-    return jsonify(inventory_list), 200
-
-@inventory_bp.route('/status/<string:sku>', methods=['GET'])
-def get_product_stock(sku):
-    """
-    Get the stock level for a specific product by SKU.
-    This might be a public or internal endpoint.
-    For now, let's assume it's public.
-    """
-    stock_level = InventoryService.get_stock_by_sku(sku)
-    if stock_level is None:
-        return jsonify({"error": "Product not found"}), 404
-    return jsonify({"sku": sku, "stock_level": stock_level}), 200
+    try:
+        stock_info = InventoryService.get_stock_for_product(product_id)
+        if stock_info is None:
+            return jsonify(status="error", message="Product not found in inventory."), 404
+        
+        return jsonify(status="success", data=stock_info), 200
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An internal error occurred while fetching stock levels."), 500
