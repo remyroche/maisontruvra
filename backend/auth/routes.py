@@ -3,7 +3,12 @@ from backend.services.auth_service import AuthService
 from backend.utils.sanitization import sanitize_input
 from backend.services.email_service import EmailService
 
-auth_bp = Blueprint('auth_bp', __name__, url_prefix='/api/auth')
+auth_bp = Blueprint('auth', __name__)
+user_service = UserService()
+mfa_service = MFAService()
+email_service = EmailService()
+security_logger = logging.getLogger('security')
+
 
 # User Registration
 @auth_bp.route('/register', methods=['POST'])
@@ -28,6 +33,7 @@ def register():
         
     verification_token = "dummy_token" # Placeholder
     EmailService.send_welcome_and_verification(new_user, verification_token)
+    security_logger.info(f"New user registered: {user.email} (ID: {user.id}) from IP: {request.remote_addr}")
 
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 409 # Conflict
