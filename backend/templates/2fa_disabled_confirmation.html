@@ -1,0 +1,9 @@
+<!-- File: backend/templates/emails/2fa_disabled_confirmation.html -->
+{% extends "emails/b2c_base_template.html" %}
+{% block content %}
+    <h2 style="font-size: 24px; color: #374151; font-family: 'Teko', serif;">Alerte de Sécurité : 2FA Désactivée</h2>
+    <p>Bonjour {{ user.first_name }},</p>
+    <p>L'authentification à deux facteurs (2FA) a été <strong>désactivée</strong> sur votre compte le {{ timestamp }}.</p>
+    <p>Si vous êtes à l'origine de cette action, vous pouvez ignorer cet e-mail. Votre compte n'est désormais plus protégé par une seconde étape de vérification.</p>
+    <p><strong>Si vous n'avez pas autorisé ce changement,</strong> votre compte est potentiellement compromis. Veuillez contacter notre support de toute urgence.</p>
+{% endblock %}
