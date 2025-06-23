@@ -21,3 +21,15 @@ def get_stock_level(product_id):
     except Exception as e:
         # Log error e
         return jsonify(status="error", message="An internal error occurred while fetching stock levels."), 500
+
+
+@inventory_bp.route('/update', methods=['POST'])
+@admin_required
+def update_inventory_levels():
+    data = sanitize_input(request.get_json())
+    # data format: [{'product_id': 1, 'quantity': 100}, ...]
+    try:
+        product_service.update_inventory_levels(data)
+        return jsonify({'message': 'Inventory levels updated successfully.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
