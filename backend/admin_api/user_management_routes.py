@@ -9,7 +9,6 @@ user_management_bp = Blueprint('user_management_bp', __name__, url_prefix='/admi
 # READ all users (with pagination)
 @user_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_USERS')
-@admin_required
 def get_users():
     """
     Get a paginated list of all users.
@@ -36,7 +35,6 @@ def get_users():
 # READ a single user by ID
 @user_management_bp.route('/<int:user_id>', methods=['GET'])
 @permissions_required('MANAGE_USERS')
-@admin_required
 def get_user(user_id):
     """
     Get a single user by their ID.
@@ -49,7 +47,6 @@ def get_user(user_id):
 # CREATE a new user
 @user_management_bp.route('/', methods=['POST'])
 @permissions_required('MANAGE_USERS')
-@admin_required
 def create_user():
     """
     Create a new user. Expects a JSON body with user details.
@@ -81,7 +78,6 @@ def create_user():
 # UPDATE an existing user
 @user_management_bp.route('/<int:user_id>', methods=['PUT'])
 @permissions_required('MANAGE_USERS')
-@admin_required
 def update_user(user_id):
     """
     Update an existing user's information.
@@ -109,7 +105,6 @@ def update_user(user_id):
 # DELETE a user
 @user_management_bp.route('/<int:user_id>', methods=['DELETE'])
 @permissions_required('MANAGE_USERS')
-@admin_required
 def delete_user(user_id):
     """
     Delete a user.
