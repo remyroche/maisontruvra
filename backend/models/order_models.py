@@ -15,20 +15,28 @@ class Order(BaseModel):
     shipping_address = db.relationship('Address')
     invoice = db.relationship('Invoice', back_populates='order', uselist=False)
 
-    def to_dict(self):
+    def to_user_dict(self):
+        """Serialization for the user viewing their own order."""
         return {
             'id': self.id,
-            'user_id': self.user_id,
-            'total_amount': str(self.total_amount),
+            'order_number': self.order_number,
             'status': self.status.value,
-            'created_at': self.created_at.isoformat()
+            'total_amount': str(self.total_amount),
+            'created_at': self.created_at.isoformat(),
+            'items': [item.to_dict() for item in self.items],
+            'shipping_address': self.shipping_address.to_dict() if self.shipping_address else None,
         }
 
-    def to_dict_detailed(self):
-        data = self.to_dict()
-        data['items'] = [item.to_dict() for item in self.items]
-        data['shipping_address'] = self.shipping_address.to_dict() if self.shipping_address else None
+    def to_admin_dict(self):
+        """Serialization for an admin viewing an order."""
+        data = self.to_user_dict()
+        data['user'] = self.user.to_public_dict()
         return data
+
+    def to_dict(self, view='user'):
+        if view == 'admin':
+            return self.to_admin_dict()
+        return self.to_user_dict()
 
 class OrderItem(BaseModel):
     __tablename__ = 'order_items'
