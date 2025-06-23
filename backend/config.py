@@ -20,9 +20,6 @@ class Config:
     WTF_CSRF_SECRET_KEY = os.environ.get('WTF_CSRF_SECRET_KEY', 'a-different-secret-key')
     WTF_CSRF_ENABLED = True
     
-    # Sentry DSN for error reporting
-    SENTRY_DSN = os.environ.get('SENTRY_DSN')
-
     # Base URL for generating links (like in product passports)
     BASE_URL = os.environ.get('BASE_URL', 'http://127.0.0.1:5000')
 
@@ -41,18 +38,16 @@ class TestingConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL', 'sqlite:///:memory:')
     WTF_CSRF_ENABLED = False # Disable CSRF forms in tests for convenience
     SESSION_COOKIE_SECURE = False
-    SENTRY_DSN = None # Disable Sentry for tests
+    LOG_FILE_PATH = None # Disable file logging for tests
 
 
 class ProductionConfig(Config):
     """Production configuration."""
     DEBUG = False
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') # No default for production
-    
     # Enforce secure cookies in production
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_SAMESITE = 'Strict'
-    # SENTRY_DSN will be loaded from environment variables
 
 # Dictionary to map environment names to config classes
 config_by_name = dict(
