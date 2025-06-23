@@ -1,48 +1,58 @@
 <template>
-  <footer class="bg-dark-brown text-cream">
+  <footer class="bg-gray-100 text-gray-700">
     <div class="container mx-auto px-6 py-12">
       <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-        <!-- About -->
         <div>
-          <h3 class="text-lg font-serif uppercase tracking-wider text-white">Maison Trüvra</h3>
-          <p class="mt-4 text-sm text-gray-300">L'excellence de la truffe, de notre terroir à votre table.</p>
+          <h3 class="font-bold uppercase">Maison Trüvra</h3>
+          <p class="mt-4 text-sm">L'art de la truffe, une tradition familiale.</p>
         </div>
-        <!-- Links -->
         <div>
-          <h3 class="text-lg font-serif uppercase tracking-wider text-white">Navigation</h3>
-          <ul class="mt-4 space-y-2 text-sm">
-            <li><router-link :to="{ name: 'catalogue' }" class="hover:text-gold transition-colors">Nos Produits</router-link></li>
-            <li><a href="#" class="hover:text-gold transition-colors">Notre Histoire</a></li>
-            <li><a href="#" class="hover:text-gold transition-colors">Contact</a></li>
-            <li><router-link :to="{ name: 'pro-login' }" class="hover:text-gold transition-colors">Espace Professionnel</router-link></li>
-          </ul>
+          <h3 class="font-bold uppercase">Service Client</h3>
+          <nav class="mt-4 space-y-2 text-sm">
+            <a href="/contact.html" class="hover:text-black transition-colors duration-300">Nous Contacter</a><br>
+            <a href="/faq.html" class="hover:text-black transition-colors duration-300">FAQ</a><br>
+            <a href="/livraison.html" class="hover:text-black transition-colors duration-300">Livraison & Retours</a>
+          </nav>
         </div>
-        <!-- Legal -->
         <div>
-          <h3 class="text-lg font-serif uppercase tracking-wider text-white">Légal</h3>
-          <ul class="mt-4 space-y-2 text-sm">
-            <li><a href="#" class="hover:text-gold transition-colors">Conditions Générales de Vente</a></li>
-            <li><a href="#" class="hover:text-gold transition-colors">Mentions Légales</a></li>
-            <li><a href="#" class="hover:text-gold transition-colors">Politique de Confidentialité</a></li>
-          </ul>
+          <h3 class="font-bold uppercase">Informations</h3>
+          <nav class="mt-4 space-y-2 text-sm">
+            <a href="/mentions-legales.html" class="hover:text-black transition-colors duration-300">Mentions Légales</a><br>
+            <a href="/cgv.html" class="hover:text-black transition-colors duration-300">Conditions Générales de Vente</a><br>
+            <a href="/politique-confidentialite.html" class="hover:text-black transition-colors duration-300">Politique de Confidentialité</a>
+          </nav>
         </div>
-        <!-- Newsletter -->
         <div>
-          <h3 class="text-lg font-serif uppercase tracking-wider text-white">Newsletter</h3>
-          <p class="mt-4 text-sm text-gray-300">Recevez nos offres exclusives et actualités.</p>
-          <form @submit.prevent class="mt-4 flex">
-            <input type="email" placeholder="Votre email" class="input-field w-full text-sm !py-2 !px-3 rounded-r-none" />
-            <button type="submit" class="btn btn-primary rounded-l-none !py-2 !px-4">S'inscrire</button>
+          <h3 class="font-bold uppercase">Devenez un initié de la truffe</h3>
+          <p class="mt-4 text-sm">Recevez nos secrets et offres exclusives.</p>
+          <form class="mt-4 flex" @submit.prevent="submitNewsletter">
+            <input type="email" placeholder="Votre email" class="w-full px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-gray-500">
+            <button type="submit" class="bg-black text-white px-4 py-2 rounded-r-md hover:bg-gray-800 transition-colors duration-300">S'inscrire</button>
           </form>
         </div>
       </div>
-      <div class="mt-12 border-t border-white border-opacity-20 pt-8 text-center text-sm text-gray-400">
-        &copy; {{ new Date().getFullYear() }} Maison Trüvra. Tous droits réservés.
+      <div class="mt-12 pt-8 border-t border-gray-300 flex flex-col md:flex-row justify-between items-center">
+          <div class="flex space-x-4 mb-4 md:mb-0">
+            <a href="#" aria-label="Facebook"><img src="https://placehold.co/24x24/000000/FFFFFF?text=F" alt="Facebook"></a>
+            <a href="#" aria-label="Instagram"><img src="https://placehold.co/24x24/000000/FFFFFF?text=I" alt="Instagram"></a>
+            <a href="#" aria-label="Twitter"><img src="https://placehold.co/24x24/000000/FFFFFF?text=T" alt="Twitter"></a>
+          </div>
+          <div class="flex items-center space-x-2 mb-4 md:mb-0">
+              <img src="https://placehold.co/40x25/e0e0e0/000000?text=VISA" alt="Visa">
+              <img src="https://placehold.co/40x25/e0e0e0/000000?text=MC" alt="Mastercard">
+              <img src="https://placehold.co/40x25/e0e0e0/000000?text=PP" alt="PayPal">
+              <img src="https://placehold.co/40x25/e0e0e0/000000?text=AP" alt="Apple Pay">
+          </div>
+          <p class="text-sm">&copy; {{ new Date().getFullYear() }} Maison Trüvra. Tous droits réservés.</p>
       </div>
     </div>
   </footer>
 </template>
 
 <script setup>
-// No script logic needed for this basic footer
+// For newsletter submission, you would add a method here:
+const submitNewsletter = () => {
+  console.log('Newsletter form submitted');
+  // Add your logic to handle newsletter subscription, e.g., an API call
+};
 </script>
