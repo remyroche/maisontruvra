@@ -42,5 +42,37 @@ def seed_database():
         db.session.commit()
         print("Database seeded successfully!")
 
+
+def seed_roles():
+    """Creates predefined roles in the database."""
+    roles = ['admin', 'staff', 'b2b_customer', 'b2c_customer']
+    for role_name in roles:
+        if not Role.query.filter_by(name=role_name).first():
+            role = Role(name=role_name)
+            db.session.add(role)
+    db.session.commit()
+
+def seed_admin():
+    """Creates a default admin user."""
+    from services.user_service import UserService
+    
+    email = 'admin@example.com'
+    if not User.query.filter_by(email=email).first():
+        admin_data = {
+            'email': email,
+            'password': 'super-secret-password', # Change this in production
+            'first_name': 'Admin',
+            'last_name': 'User',
+            'is_admin': True
+        }
+        user_service = UserService()
+        admin_user = user_service.create_user(admin_data, by_admin=True)
+        
+        # Assign admin role
+        admin_role = Role.query.filter_by(name='admin').first()
+        if admin_role:
+            admin_user.roles.append(admin_role)
+            db.session.commit()
+            
 if __name__ == "__main__":
     seed_database()
