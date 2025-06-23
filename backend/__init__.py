@@ -19,9 +19,32 @@ from backend.passport.routes import passport_bp
 from backend.products.routes import products_bp
 from backend.routes.webhooks import webhooks_bp
 from backend.wishlist.routes import wishlist_bp
+from .config import config_by_name
+from .database import db
+from .extensions import mail, migrate, cors
 
 csrf = CSRFProtect()
 
+def setup_logging(app):
+    """Configures production-ready logging."""
+    log_file = app.config.get('LOG_FILE_PATH')
+    if log_file:
+        # Use RotatingFileHandler to limit log file size
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=1024 * 1024 * 5,  # 5 MB
+            backupCount=5
+        )
+        # Set a clear, structured format for the logs
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+        ))
+        file_handler.setLevel(logging.INFO)
+        app.logger.addHandler(file_handler)
+    
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('Application startup')
+    
 def create_app(config_class=Config):
     app = Flask(__name__)
     config = config_by_name[config_name]
@@ -57,19 +80,6 @@ def create_app(config_class=Config):
     with app.app_context():
         from backend.models import user_models, product_models, order_models, blog_models, auth_models, b2b_models, b2b_loyalty_models, inventory_models, newsletter_models, passport_models, referral_models, utility_models
 
-    if config.SENTRY_DSN:
-        sentry_sdk.init(
-            dsn=config.SENTRY_DSN,
-            integrations=[FlaskIntegration()],
-            # Set traces_sample_rate to 1.0 to capture 100% of transactions for performance monitoring. In high-traffic production, adjust this to a lower value (e.g., 0.2).
-            traces_sample_rate=1.0,
-            # Set profiles_sample_rate to 1.0 to profile 100% of sampled transactions. In high-traffic production, adjust this to a lower value.
-            profiles_sample_rate=1.0,
-            # Set the environment based on the Flask config
-            environment=config_name,
-        )
-        app.logger.info("Sentry monitoring is active.")
-
     @app.route('/')
     def index():
         return "Welcome to the Maison Truvrain backend!"
@@ -84,6 +94,6 @@ def create_app(config_class=Config):
         response.set_cookie('XSRF-TOKEN', generate_csrf())
         return response
 
-    app.logger.info(f"Application created with '{config_name}' config.")
+    setup_logging(app)
 
     return app
