@@ -1,30 +1,37 @@
-from flask import Blueprint, request
-# Assume 'queue' is an RQ or Celery instance and 'payment_gateway' is the Stripe library
+from flask import Blueprint, request, jsonify
+from backend.services.webhook_service import WebhookService # Assumed service
+import os
 
-webhooks_bp = Blueprint('webhooks', __name__)
+webhooks_bp = Blueprint('webhooks_bp', __name__, url_prefix='/webhooks')
 
-@webhooks_bp.route('/payment-status', methods=['POST'])
-def payment_status_webhook():
-    """Listens for events from the payment gateway (e.g., Stripe)."""
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get('stripe-signature')
-    
+@webhooks_bp.route('/stripe', methods=['POST'])
+def stripe_webhook():
+    """
+    Handle incoming webhooks from Stripe.
+    This endpoint must be secured by verifying the Stripe signature.
+    """
+    payload = request.data
+    sig_header = request.headers.get('Stripe-Signature')
+    endpoint_secret = os.environ.get('STRIPE_ENDPOINT_SECRET')
+
+    if not sig_header:
+        return jsonify(status="error", message="Missing Stripe-Signature header"), 400
+    if not endpoint_secret:
+        # Proper logging should be implemented here to alert administrators.
+        return jsonify(status="error", message="Stripe endpoint secret is not configured."), 500
+
     try:
-        event = payment_gateway.Webhook.construct_event(payload, sig_header, "your_webhook_secret")
+        # The service should handle the verification and processing of the event
+        event = WebhookService.process_stripe_event(payload, sig_header, endpoint_secret)
         
-        order_id = event['data']['object']['metadata'].get('orderId')
-        
-        if event['type'] == 'checkout.session.completed':
-            logger.info({'message': 'Payment success event received', 'orderId': order_id})
-            queue.enqueue('worker.finalize_order', order_id)
-        elif event['type'] == 'checkout.session.async_payment_failed':
-            logger.warning({'message': 'Payment failure event received', 'orderId': order_id})
-            queue.enqueue('worker.handle_payment_failure', order_id)
+        if event:
+            return jsonify(status="success", message=f"Processed event: {event.type}"), 200
+        else:
+            return jsonify(status="error", message="Could not process event."), 400
 
-        return 'OK', 200
-        
     except ValueError as e: # Invalid payload
-        return 'Invalid payload', 400
-    except stripe.error.SignatureVerificationError as e:
-        logger.error({'message': 'Webhook signature verification failed', 'error': str(e)})
-        return 'Invalid signature', 400
+        return jsonify(status="error", message=str(e)), 400
+    except Exception as e: # Invalid signature or other processing error
+        # Log error e
+        return jsonify(status="error", message=str(e)), 400
+
