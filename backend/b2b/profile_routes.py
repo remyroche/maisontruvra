@@ -54,3 +54,24 @@ def update_b2b_profile():
         # Log the error e
         return jsonify(status="error", message="An internal error occurred while updating the B2B profile."), 500
 
+
+@b2b_profile_bp.route('/address', methods=['POST'])
+@b2b_required
+def add_b2b_address():
+    data = sanitize_input(request.get_json())
+    address = b2b_user_service.add_address(current_user.id, data)
+    return jsonify(address.to_dict()), 201
+
+@b2b_profile_bp.route('/address/<int:address_id>', methods=['PUT'])
+@b2b_required
+def update_b2b_address(address_id):
+    data = sanitize_input(request.get_json())
+    address = b2b_user_service.update_address(address_id, data, current_user.id)
+    return jsonify(address.to_dict())
+
+@b2b_profile_bp.route('/address/<int:address_id>', methods=['DELETE'])
+@b2b_required
+def delete_b2b_address(address_id):
+    b2b_user_service.delete_address(address_id, current_user.id)
+    return jsonify({'message': 'Address deleted'})
+
