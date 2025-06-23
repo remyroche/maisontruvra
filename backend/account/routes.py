@@ -6,6 +6,7 @@ from backend.services.address_service import AddressService
 from backend.utils.sanitization import sanitize_input
 from backend.models.user_models import User
 from backend.database import db
+from backend.services.email_service import EmailService
 
 
 account_bp = Blueprint('account_bp', __name__, url_prefix='/api/account')
@@ -77,6 +78,9 @@ def update_password():
             return jsonify(status="success", message="Password updated successfully."), 200
         else:
             return jsonify(status="error", message="Invalid current password or failed to update."), 400
+    
+    EmailService.send_security_alert(user, "Votre mot de passe a été modifié")
+
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400
     except Exception as e:
