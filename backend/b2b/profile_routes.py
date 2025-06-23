@@ -1,47 +1,56 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.services.b2b_service import B2BService
+from backend.utils.sanitization import sanitize_input
 from backend.auth.permissions import b2b_user_required
-from flask_jwt_extended import get_jwt_identity
-from backend.services.b2b_partnership_service import B2BPartnershipService
-from backend.services.exceptions import ServiceException, NotFoundException
 
-profile_routes = Blueprint('b2b_profile_routes', __name__)
+b2b_profile_bp = Blueprint('b2b_profile_bp', __name__, url_prefix='/api/b2b/profile')
 
-@profile_routes.route('/profile', methods=['GET'])
+# GET the B2B user's company profile
+@b2b_profile_bp.route('/', methods=['GET'])
 @b2b_user_required
 def get_b2b_profile():
     """
-    Get the B2B company profile for the logged-in user.
+    Get the company profile associated with the currently authenticated B2B user.
     """
     user_id = get_jwt_identity()
     try:
-        b2b_profile = B2BPartnershipService.get_b2b_profile_by_user_id(user_id)
-        return jsonify(b2b_profile.to_dict()), 200
-    except NotFoundException as e:
-        return jsonify({"error": str(e)}), 404
+        # Assumes the service can find the company profile linked to the user
+        profile = B2BService.get_company_profile_by_user(user_id)
+        if not profile:
+            return jsonify(status="error", message="B2B profile not found for this user."), 404
+        
+        return jsonify(status="success", data=profile.to_dict()), 200
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An error occurred while fetching the B2B profile."), 500
 
-@b2b_profile_bp.route('/profile', methods=['POST', 'PUT'])
-@jwt_required()
+# UPDATE the B2B user's company profile
+@b2b_profile_bp.route('/', methods=['PUT'])
+@b2b_user_required
 def update_b2b_profile():
-    b2b_user_id = get_jwt_identity()
-    profile = B2BUserProfile.query.filter_by(b2b_user_id=b2b_user_id).first()
-
+    """
+    Update the company profile information for the authenticated B2B user.
+    """
+    user_id = get_jwt_identity()
     data = request.get_json()
+    if not data:
+        return jsonify(status="error", message="Invalid or missing JSON body"), 400
+
     sanitized_data = sanitize_input(data)
-
-    if not profile:
-        profile = B2BUserProfile(b2b_user_id=b2b_user_id)
-        db.session.add(profile)
-
-    # Update fields from sanitized data
-    profile.contact_person = sanitized_data.get('contact_person', profile.contact_person)
-    profile.phone_number = sanitized_data.get('phone_number', profile.phone_number)
-    profile.address_line1 = sanitized_data.get('address_line1', profile.address_line1)
-    profile.address_line2 = sanitized_data.get('address_line2', profile.address_line2)
-    profile.city = sanitized_data.get('city', profile.city)
-    profile.state = sanitized_data.get('state', profile.state)
-    profile.postal_code = sanitized_data.get('postal_code', profile.postal_code)
-    profile.country = sanitized_data.get('country', profile.country)
     
-    db.session.commit()
+    # Remove sensitive fields that should not be changed here
+    sanitized_data.pop('vat_number', None)
+    sanitized_data.pop('status', None) # Status should only be changed by an admin
 
-    return jsonify({"msg": "B2B profile updated successfully"}), 200
+    try:
+        updated_profile = B2BService.update_company_profile_by_user(user_id, sanitized_data)
+        if not updated_profile:
+            return jsonify(status="error", message="B2B Profile not found or update failed"), 404
+        return jsonify(status="success", data=updated_profile.to_dict()), 200
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while updating the B2B profile."), 500
+
