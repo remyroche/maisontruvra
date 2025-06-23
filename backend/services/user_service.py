@@ -203,3 +203,82 @@ class UserService:
         user.roles = roles
         db.session.commit()
         return user
+from backend.models.user_models import User, UserRole
+from backend.database import db
+from backend.services.exceptions import NotFoundException, ValidationException
+from sqlalchemy.orm import joinedload
+import logging
+
+logger = logging.getLogger(__name__)
+
+class UserService:
+    @staticmethod
+    def get_user_by_id(user_id, include_sensitive=False):
+        """Get user by ID with optional sensitive data."""
+        user = User.query.get(user_id)
+        if not user:
+            raise NotFoundException(f"User with ID {user_id} not found")
+        return user
+        
+    @staticmethod
+    def get_users_list(page=1, per_page=20, role=None):
+        """Get paginated list of users with optimized queries."""
+        query = User.query.options(joinedload(User.loyalty_tier))
+        
+        if role:
+            query = query.filter(User.role == role)
+            
+        users = query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        return {
+            'users': [user.to_dict() for user in users.items],
+            'total': users.total,
+            'pages': users.pages,
+            'current_page': page
+        }
+        
+    @staticmethod
+    def update_user(user_id, data, admin_id=None):
+        """Update user data with audit logging."""
+        user = UserService.get_user_by_id(user_id)
+        
+        # Validate and update fields
+        if 'email' in data:
+            email = data['email'].strip().lower()
+            existing = User.query.filter(User.email == email, User.id != user_id).first()
+            if existing:
+                raise ValidationException("Email already in use")
+            user.email = email
+            
+        if 'role' in data:
+            try:
+                user.role = UserRole(data['role'])
+            except ValueError:
+                raise ValidationException("Invalid role")
+                
+        if 'is_active' in data:
+            user.is_active = bool(data['is_active'])
+            
+        db.session.commit()
+        
+        # Log admin action
+        if admin_id:
+            logger.info(f"Admin {admin_id} updated user {user_id}: {list(data.keys())}")
+            
+        return user
+        
+    @staticmethod
+    def deactivate_user(user_id, admin_id=None):
+        """Deactivate a user account."""
+        user = UserService.get_user_by_id(user_id)
+        user.is_active = False
+        db.session.commit()
+        
+        if admin_id:
+            logger.info(f"Admin {admin_id} deactivated user {user_id}")
+            
+        return user

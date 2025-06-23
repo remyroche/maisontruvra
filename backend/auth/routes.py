@@ -1,17 +1,22 @@
 from flask import Blueprint, request, jsonify
 from backend.services.auth_service import AuthService
-from backend.utils.sanitization import sanitize_input
+from backend.services.mfa_service import MfaService
 from backend.services.email_service import EmailService
+from backend.utils.sanitization import sanitize_input
+from backend.utils.csrf_protection import csrf_required
+from backend.services.exceptions import ValidationException, UnauthorizedException, NotFoundException
+from flask_jwt_extended import create_access_token, set_access_cookies, unset_jwt_cookies
+import logging
 
 auth_bp = Blueprint('auth', __name__)
-user_service = UserService()
-mfa_service = MFAService()
+mfa_service = MfaService()
 email_service = EmailService()
 security_logger = logging.getLogger('security')
 
 
 # User Registration
 @auth_bp.route('/register', methods=['POST'])
+@csrf_required
 def register():
     """
     Register a new user account.
@@ -29,20 +34,22 @@ def register():
     try:
         # The AuthService handles user creation, password hashing, and validation
         user = AuthService.register_user(sanitized_data)
-        return jsonify(status="success", message="User registered successfully.", data=user.to_dict()), 201
         
-    verification_token = "dummy_token" # Placeholder
-    EmailService.send_welcome_and_verification(new_user, verification_token)
-    security_logger.info(f"New user registered: {user.email} (ID: {user.id}) from IP: {request.remote_addr}")
+        verification_token = "dummy_token" # Placeholder
+        email_service.send_welcome_and_verification(user, verification_token)
+        security_logger.info(f"New user registered: {user.email} (ID: {user.id}) from IP: {request.remote_addr}")
+        
+        return jsonify(status="success", message="User registered successfully.", data=user.to_dict()), 201
 
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 409 # Conflict
+    except ValidationException as e:
+        return jsonify(status="error", message=str(e)), 400
     except Exception as e:
-        # Log error e
+        security_logger.error(f"Registration error: {str(e)}")
         return jsonify(status="error", message="An internal server error occurred."), 500
 
 # User Login
 @auth_bp.route('/login', methods=['POST'])
+@csrf_required
 def login():
     """
     Authenticate a user and return JWT tokens.
@@ -58,12 +65,20 @@ def login():
     try:
         # AuthService returns a dictionary with tokens and MFA status
         result = AuthService.login_user(email, password)
-        access_token = create_access_token(identity=user.id)
-        response = jsonify(status="success", message="Login successful.", data=user.to_dict())
-        set_access_cookies(response, access_token)
-        return response, 200
-    except Exception as e:
+        
+        if result.get('requires_mfa'):
+            return jsonify(status="success", message="MFA required", requires_mfa=True, user_id=result['user_id']), 200
+        else:
+            access_token = create_access_token(identity=result['user_id'])
+            response = jsonify(status="success", message="Login successful.")
+            set_access_cookies(response, access_token)
+            return response, 200
+            
+    except (UnauthorizedException, ValidationException) as e:
         return jsonify(status="error", message=str(e)), 401
+    except Exception as e:
+        security_logger.error(f"Login error: {str(e)}")
+        return jsonify(status="error", message="An internal server error occurred."), 500
 
 @auth_bp.route('/logout', methods=['POST'])
 def logout():
@@ -74,6 +89,7 @@ def logout():
     
 # MFA Verification
 @auth_bp.route('/login/verify-mfa', methods=['POST'])
+@csrf_required
 def verify_mfa():
     """
     Verify the MFA token for a user who has already passed the password check.
@@ -88,11 +104,14 @@ def verify_mfa():
     try:
         # AuthService verifies the MFA token and returns final JWTs
         tokens = AuthService.verify_mfa_login(user_id, mfa_token)
-        return jsonify(status="success", **tokens), 200
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 401 # Unauthorized
+        access_token = create_access_token(identity=user_id)
+        response = jsonify(status="success", message="MFA verification successful")
+        set_access_cookies(response, access_token)
+        return response, 200
+    except (UnauthorizedException, NotFoundException, ValidationException) as e:
+        return jsonify(status="error", message=str(e)), 401
     except Exception as e:
-        # Log error e
+        security_logger.error(f"MFA verification error: {str(e)}")
         return jsonify(status="error", message="An internal server error occurred."), 500
 
 # Password Reset Request

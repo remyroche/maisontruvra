@@ -19,15 +19,15 @@ class User(db.Model, UserMixin):
     is_admin = db.Column(db.Boolean, default=False)
     is_b2b = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-    
+
     addresses = db.relationship('Address', backref='user', lazy=True, cascade="all, delete-orphan")
     orders = db.relationship('Order', backref='user', lazy=True)
     reviews = db.relationship('Review', backref='user', lazy=True)
     wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True, cascade="all, delete-orphan")
-    
+
     two_factor_secret = db.Column(db.String(255), nullable=True)
     two_factor_enabled = db.Column(db.Boolean, default=False)
-    
+
     b2b_profile = db.relationship('B2BProfile', back_populates='user', uselist=False, cascade="all, delete-orphan")
 
     def set_password(self, password):
@@ -118,7 +118,7 @@ class Role(BaseModel):
     __tablename__ = 'roles'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.Enum(RoleType), unique=True, nullable=False)
-    
+
     users = db.relationship('User', secondary='user_roles', back_populates='roles')
 
     def to_dict(self):
@@ -139,7 +139,7 @@ class Address(BaseModel):
     state = db.Column(db.String(100))
     postal_code = db.Column(db.String(20), nullable=False)
     country = db.Column(db.String(100), nullable=False)
-    
+
     user = db.relationship('User', back_populates='addresses')
 
     def to_dict(self):

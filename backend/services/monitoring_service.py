@@ -145,3 +145,44 @@ onMounted(fetchErrorLogs);
 <style scoped>
 /* Add any specific styles if needed */
 </style>
+import time
+from flask import current_app
+from backend.database import db
+from backend.services.exceptions import ServiceException
+
+class MonitoringService:
+    @staticmethod
+    def get_system_health():
+        """Check health of system components."""
+        health_status = {}
+        
+        # Database health check
+        try:
+            start_time = time.time()
+            db.session.execute('SELECT 1')
+            db.session.commit()
+            latency = (time.time() - start_time) * 1000
+            
+            health_status['database'] = {
+                'status': 'ok',
+                'latency_ms': round(latency, 2)
+            }
+        except Exception as e:
+            health_status['database'] = {
+                'status': 'error',
+                'error_message': str(e)
+            }
+            
+        # Add other health checks as needed
+        health_status['application'] = {
+            'status': 'ok',
+            'version': getattr(current_app.config, 'VERSION', '1.0.0')
+        }
+        
+        return health_status
+        
+    @staticmethod
+    def get_latest_errors():
+        """Get recent error logs."""
+        # Implementation would query error logs
+        return []

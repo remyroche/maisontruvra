@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify
 from backend.services.product_service import ProductService
-from backend.services.review_service import ReviewService
 from backend.utils.sanitization import sanitize_input
+from backend.services.exceptions import NotFoundException, ValidationException
 from flask_jwt_extended import jwt_required, get_jwt_identity
+import logging
 
 products_bp = Blueprint('products_bp', __name__, url_prefix='/api/products')
+logger = logging.getLogger(__name__)
 
 # READ all products with filtering, searching, and pagination
 @products_bp.route('/', methods=['GET'])
