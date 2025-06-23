@@ -26,3 +26,11 @@ def subscribe_to_newsletter():
     except Exception as e:
         # Log error e
         return jsonify(status="error", message="An error occurred. Please try again later."), 500
+
+
+@newsletter_bp.route('/unsubscribe/<string:token>', methods=['GET'])
+def unsubscribe(token):
+    sanitized_token = sanitize_input(token)
+    if newsletter_service.unsubscribe(sanitized_token):
+        return jsonify({'message': 'You have been unsubscribed.'})
+    return jsonify({'error': 'Invalid unsubscribe link.'}), 400
