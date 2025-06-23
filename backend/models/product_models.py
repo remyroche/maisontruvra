@@ -102,11 +102,24 @@ class Review(BaseModel):
     product = db.relationship('Product', back_populates='reviews')
     user = db.relationship('User')
 
-    def to_dict(self):
+    def to_public_dict(self):
         return {
             'id': self.id,
             'rating': self.rating,
-            'comment': self.comment,
-            'user_name': self.user.first_name,
-            'created_at': self.created_at.isoformat()
+            'title': self.title,
+            'text': self.text,
+            'author': self.user.first_name,
+            'created_at': self.created_at.isoformat(),
         }
+
+    def to_admin_dict(self):
+        data = self.to_public_dict()
+        data['user'] = self.user.to_public_dict()
+        data['product_id'] = self.product_id
+        data['approved'] = self.approved
+        return data
+
+    def to_dict(self, view='public'):
+        if view == 'admin':
+            return self.to_admin_dict()
+        return self.to_public_dict()
