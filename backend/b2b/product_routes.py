@@ -21,10 +21,14 @@ def get_b2b_products():
         
         # This service method should handle fetching products and applying B2B pricing rules.
         products_pagination = ProductService.get_b2b_products_paginated(
-            user_id,
-            page=page,
-            per_page=per_page,
-            search_query=search_query
+            user_id = sanitize_input(request.args.get('user_id', 'asc'))
+            page = request.args.get('page', 1, type=int)
+            per_page = request.args.get('per_page', 12, type=int)
+            sort_by = sanitize_input(request.args.get('sort_by', 'name'))
+            sort_direction = sanitize_input(request.args.get('sort_direction', 'asc'))
+            category = sanitize_input(request.args.get('category'))
+            collection = sanitize_input(request.args.get('collection'))
+            search_term = sanitize_input(request.args.get('search'))
         )
         
         return jsonify({
