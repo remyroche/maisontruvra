@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from backend.services.auth_service import AuthService
 from backend.utils.sanitization import sanitize_input
+from backend.services.email_service import EmailService
 
 auth_bp = Blueprint('auth_bp', __name__, url_prefix='/api/auth')
 
@@ -24,6 +25,10 @@ def register():
         # The AuthService handles user creation, password hashing, and validation
         user = AuthService.register_user(sanitized_data)
         return jsonify(status="success", message="User registered successfully.", data=user.to_dict()), 201
+        
+    verification_token = "dummy_token" # Placeholder
+    EmailService.send_welcome_and_verification(new_user, verification_token)
+
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 409 # Conflict
     except Exception as e:
