@@ -1,59 +1,52 @@
-from flask import Blueprint, request, jsonify
+# backend/blog/routes.py
+
+from flask import Blueprint, jsonify
+from backend.schemas import BlogPostSchema, BlogCategorySchema
 from backend.services.blog_service import BlogService
-from backend.utils.sanitization import sanitize_input
+from backend.services.exceptions import NotFoundException
 
-blog_bp = Blueprint('blog_bp', __name__, url_prefix='/api/blog')
+blog_bp = Blueprint('blog_bp', __name__, url_prefix='/blog')
+blog_service = BlogService()
+blog_post_schema = BlogPostSchema()
+blog_category_schema = BlogCategorySchema()
 
-# READ all published blog posts (paginated and filterable)
-@blog_bp.route('/posts', methods=['GET'])
-def get_public_blog_posts():
-    """
-    Get a paginated list of all published blog posts.
-    """
+
+@blog_bp.route('/articles', methods=['GET'])
+def get_public_articles():
+    """Public endpoint to get all published blog articles."""
     try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 10, type=int)
-        category_slug = sanitize_input(request.args.get('category'))
-        
-        filters = {'status': 'published'}
-        if category_slug:
-            filters['category_slug'] = category_slug
-            
-        posts_pagination = BlogService.get_all_posts_paginated(page=page, per_page=per_page, filters=filters)
-        
-        return jsonify({
-            "status": "success",
-            "data": [p.to_dict_for_public() for p in posts_pagination.items],
-            "total": posts_pagination.total,
-            "pages": posts_pagination.pages,
-            "current_page": posts_pagination.page
-        }), 200
+        # In a real application, you might want a dedicated service method
+        # like get_published_articles() that filters by is_published=True
+        articles = blog_service.get_all_articles()
+        published_articles = [
+            article for article in articles if article.is_published]
+        return jsonify(blog_post_schema.dump(published_articles, many=True))
     except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An error occurred while fetching blog posts."), 500
+        # Add logging for unexpected errors
+        return jsonify({"error": "An error occurred while fetching articles."}), 500
 
-# READ a single published blog post by its slug
-@blog_bp.route('/posts/<string:slug>', methods=['GET'])
-def get_public_blog_post(slug):
-    """
-    Get a single published blog post by its slug.
-    """
-    clean_slug = sanitize_input(slug)
-    post = BlogService.get_published_post_by_slug(clean_slug)
-    if not post:
-        return jsonify(status="error", message="Blog post not found"), 404
-        
-    return jsonify(status="success", data=post.to_dict_for_public()), 200
 
-# READ all blog categories
+@blog_bp.route('/articles/<string:slug>', methods=['GET'])
+def get_public_article_by_slug(slug):
+    """Public endpoint to get a single published blog article by slug."""
+    try:
+        article = blog_service.get_article_by_slug(slug)
+        if not article.is_published:
+            raise NotFoundException("Article not found.")
+        return jsonify(blog_post_schema.dump(article))
+    except NotFoundException:
+        return jsonify({'error': 'Article not found'}), 404
+    except Exception as e:
+        # Add logging for unexpected errors
+        return jsonify({"error": "An error occurred while fetching the article."}), 500
+
+
 @blog_bp.route('/categories', methods=['GET'])
-def get_public_blog_categories():
-    """
-    Get a list of all blog categories that have at least one published post.
-    """
+def get_public_categories():
+    """Public endpoint to get all blog categories."""
     try:
-        categories = BlogService.get_public_categories()
-        return jsonify(status="success", data=[c.to_dict() for c in categories]), 200
+        categories = blog_service.get_all_categories()
+        return jsonify(blog_category_schema.dump(categories, many=True))
     except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An error occurred while fetching categories."), 500
+        # Add logging for unexpected errors
+        return jsonify({"error": "An error occurred while fetching categories."}), 500
