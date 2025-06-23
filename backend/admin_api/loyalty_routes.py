@@ -1,56 +1,69 @@
-from flask import Blueprint, jsonify, request
-from backend.services.b2b_loyalty_service import B2BLoyaltyService
-from backend.services.exceptions import ServiceException, NotFoundException
-from backend.auth.permissions import admin_required
+from flask import Blueprint, request, jsonify
+from backend.services.loyalty_service import LoyaltyService # Assumed service
+from backend.auth.permissions import permissions_required
+from backend.utils.sanitization import sanitize_input
 
-loyalty_routes = Blueprint('admin_loyalty_routes', __name__)
+loyalty_management_bp = Blueprint('loyalty_management_bp', __name__, url_prefix='/admin/loyalty')
 
-@loyalty_routes.route('/loyalty/tiers', methods=['GET'])
-@admin_required
-def get_loyalty_tiers():
+# --- Loyalty Program Settings ---
+
+@loyalty_management_bp.route('/settings', methods=['GET'])
+@permissions_required('MANAGE_LOYALTY_PROGRAM')
+def get_loyalty_settings():
+    """
+    Get the current settings for the loyalty program.
+    """
     try:
-        tiers = B2BLoyaltyService.get_all_tiers()
-        return jsonify([tier.to_dict() for tier in tiers]), 200
-    except ServiceException as e:
-        return jsonify({"error": str(e)}), 500
+        settings = LoyaltyService.get_settings()
+        return jsonify(status="success", data=settings), 200
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="Failed to retrieve loyalty settings."), 500
 
-@loyalty_routes.route('/loyalty/tiers', methods=['POST'])
-@admin_required
-def create_loyalty_tier():
+@loyalty_management_bp.route('/settings', methods=['PUT'])
+@permissions_required('MANAGE_LOYALTY_PROGRAM')
+def update_loyalty_settings():
+    """
+    Update the settings for the loyalty program.
+    e.g., points per dollar, reward thresholds.
+    """
     data = request.get_json()
-    try:
-        tier = B2BLoyaltyService.create_tier(data)
-        return jsonify(tier.to_dict()), 201
-    except ServiceException as e:
-        return jsonify({"error": str(e)}), 400
+    if not data:
+        return jsonify(status="error", message="Invalid JSON body"), 400
 
-@loyalty_routes.route('/loyalty/tiers/<int:tier_id>', methods=['PUT'])
-@admin_required
-def update_loyalty_tier(tier_id):
+    sanitized_data = sanitize_input(data)
+
+    try:
+        updated_settings = LoyaltyService.update_settings(sanitized_data)
+        return jsonify(status="success", data=updated_settings), 200
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="Failed to update loyalty settings."), 500
+
+# --- Manual Point Adjustments ---
+
+@loyalty_management_bp.route('/users/<int:user_id>/points', methods=['POST'])
+@permissions_required('MANAGE_LOYALTY_PROGRAM')
+def adjust_user_points(user_id):
+    """
+    Manually add or remove loyalty points for a specific user.
+    """
     data = request.get_json()
-    try:
-        tier = B2BLoyaltyService.update_tier(tier_id, data)
-        return jsonify(tier.to_dict()), 200
-    except NotFoundException as e:
-        return jsonify({"error": str(e)}), 404
-    except ServiceException as e:
-        return jsonify({"error": str(e)}), 400
+    if not data or 'points' not in data or 'reason' not in data:
+        return jsonify(status="error", message="'points' (integer) and 'reason' (string) are required."), 400
 
-@loyalty_routes.route('/loyalty/tiers/<int:tier_id>', methods=['DELETE'])
-@admin_required
-def delete_loyalty_tier(tier_id):
     try:
-        B2BLoyaltyService.delete_tier(tier_id)
-        return jsonify({"message": "Tier deleted successfully"}), 200
-    except NotFoundException as e:
-        return jsonify({"error": str(e)}), 404
-    except ServiceException as e:
-        return jsonify({"error": str(e)}), 500
+        points = int(sanitize_input(data['points']))
+        reason = sanitize_input(data['reason'])
+        
+        # Service should log this manual adjustment for auditing purposes
+        updated_balance = LoyaltyService.adjust_points(user_id, points, reason)
+        return jsonify(status="success", data={'new_balance': updated_balance}), 200
+    except ValueError as e: # User not found, etc.
+        return jsonify(status="error", message=str(e)), 404
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="Failed to adjust user points."), 500
 
-@loyalty_routes.route('/loyalty/assign-tiers', methods=['POST'])
-@admin_required
-def assign_tiers_manually():
-    """Endpoint to manually trigger the tier assignment task."""
-    from backend.tasks import update_b2b_loyalty_tiers_task
-    task = update_b2b_loyalty_tiers_task.delay()
-    return jsonify({"message": "Tier assignment task has been triggered.", "task_id": task.id}), 202
