@@ -1,7 +1,12 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from backend.services.user_service import UserService
+from backend.services.mfa_service import MfaService
+from backend.services.address_service import AddressService
 from backend.utils.sanitization import sanitize_input
+from backend.models.user_models import User
+from backend.database import db
+
 
 account_bp = Blueprint('account_bp', __name__, url_prefix='/api/account')
 
@@ -102,3 +107,101 @@ def get_order_history():
     except Exception as e:
         # Log the error e
         return jsonify(status="error", message="An error occurred while fetching order history."), 500
+
+# --- NEW: 2FA Management Routes ---
+
+@account_bp.route('/2fa/setup', methods=['POST'])
+@jwt_required()
+def setup_2fa():
+    """Initiates the 2FA setup process for the current user."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if user.is_mfa_enabled:
+        return jsonify(status="error", message="2FA is already enabled."), 400
+
+    secret = MfaService.generate_secret()
+    user.mfa_secret = secret  # Temporarily store the secret
+    db.session.commit()
+    
+    uri = MfaService.get_provisioning_uri(user.email, secret)
+    qr_code_uri = MfaService.generate_qr_code(uri)
+    
+    return jsonify(status="success", data={"qr_code": qr_code_uri, "secret": secret}), 200
+
+
+@account_bp.route('/2fa/verify', methods=['POST'])
+@jwt_required()
+def verify_2fa():
+    """Verifies the token and enables 2FA for the user."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    token = sanitize_input(data.get('token'))
+    
+    if not user.mfa_secret:
+        return jsonify(status="error", message="No 2FA setup process was initiated."), 400
+        
+    if MfaService.verify_token(user.mfa_secret, token):
+        user.is_mfa_enabled = True
+        db.session.commit()
+        return jsonify(status="success", message="2FA enabled successfully."), 200
+    else:
+        return jsonify(status="error", message="Invalid 2FA token."), 400
+
+
+@account_bp.route('/2fa/disable', methods=['POST'])
+@jwt_required()
+def disable_2fa():
+    """Disables 2FA for the user, requires a valid token to do so."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    token = sanitize_input(data.get('token'))
+
+    if not user.is_mfa_enabled:
+        return jsonify(status="error", message="2FA is not currently enabled."), 400
+
+    if MfaService.verify_token(user.mfa_secret, token):
+        user.is_mfa_enabled = False
+        user.mfa_secret = None # Clear the secret
+        db.session.commit()
+        return jsonify(status="success", message="2FA disabled successfully."), 200
+    else:
+        return jsonify(status="error", message="Invalid 2FA token."), 400
+
+# --- NEW: Address Book Management Routes ---
+
+@account_bp.route('/addresses', methods=['GET'])
+@jwt_required()
+def get_addresses():
+    user_id = get_jwt_identity()
+    addresses = AddressService.get_addresses_for_user(user_id)
+    return jsonify(status="success", data=addresses), 200
+
+@account_bp.route('/addresses', methods=['POST'])
+@jwt_required()
+def add_address():
+    user_id = get_jwt_identity()
+    data = sanitize_input(request.get_json())
+    try:
+        new_address = AddressService.add_address_for_user(user_id, data)
+        return jsonify(status="success", data=new_address.to_dict()), 201
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400 # Catches the 4-address limit error
+
+@account_bp.route('/addresses/<int:address_id>', methods=['PUT'])
+@jwt_required()
+def update_address(address_id):
+    user_id = get_jwt_identity()
+    data = sanitize_input(request.get_json())
+    updated_address = AddressService.update_address(address_id, user_id, data)
+    return jsonify(status="success", data=updated_address.to_dict()), 200
+
+@account_bp.route('/addresses/<int:address_id>', methods=['DELETE'])
+@jwt_required()
+def delete_address(address_id):
+    user_id = get_jwt_identity()
+    AddressService.delete_address(address_id, user_id)
+    return jsonify(status="success", message="Address deleted successfully."), 200
+
