@@ -17,11 +17,15 @@ class Config:
     
     # --- Security Settings ---
     # In production, these should be True to ensure secure transmission of cookies.
-    SESSION_COOKIE_SECURE = False
+    SESSION_COOKIE_SECURE = os.environ.get('FLASK_ENV') == 'production'
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
-    REMEMBER_COOKIE_SECURE = False
+    SESSION_COOKIE_SAMESITE = 'Strict'
+    REMEMBER_COOKIE_SECURE = os.environ.get('FLASK_ENV') == 'production'
     REMEMBER_COOKIE_HTTPONLY = True
+    
+    # Additional security headers
+    PERMANENT_SESSION_LIFETIME = 3600  # 1 hour
+    WTF_CSRF_TIME_LIMIT = 3600
     
     # CSRF Protection - Flask-WTF uses SECRET_KEY by default but can be set separately
     WTF_CSRF_SECRET_KEY = os.environ.get('WTF_CSRF_SECRET_KEY', 'a-different-secret-key')

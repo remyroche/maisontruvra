@@ -212,7 +212,7 @@ async function api(endpoint, { method = 'GET', body = null, headers = {} } = {})
             // window.location.href = '/login.html'; // Or your admin login page
             return Promise.reject(new Error("Unauthorized"));
         }
-        
+
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ message: 'An unknown error occurred.' }));
             throw new Error(errorData.msg || errorData.message || `HTTP error! status: ${response.status}`);
@@ -286,8 +286,23 @@ export class ApiClient {
         }
     }
 
+    setupSecurityHeaders() {
+        // Set up default security headers
+        this.defaultHeaders = {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json'
+        };
+    }
+
+    sanitizeInput(data) {
+        if (typeof data === 'string') {
+            return data.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+        }
+        return data;
+    }
+
     /**
-     * The core request method. It ensures the CSRF token is ready before proceeding with state-changing requests.
+     * Make a request to the API.
      * @param {string} endpoint - The API endpoint to call (e.g., '/users/1').
      * @param {object} options - The options object for the native fetch call.
      * @returns {Promise<Response>} - A promise that resolves with the raw fetch Response object.
@@ -301,7 +316,7 @@ export class ApiClient {
         }
 
         const url = `${this.baseUrl}${endpoint}`;
-        
+
         const headers = {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -368,7 +383,7 @@ export class ApiClient {
     post(endpoint, body, options = {}) {
         return this._fetchJson(endpoint, { ...options, method: 'POST', body: JSON.stringify(body) });
     }
-    
+
     put(endpoint, body, options = {}) {
         return this._fetchJson(endpoint, { ...options, method: 'PUT', body: JSON.stringify(body) });
     }
@@ -377,4 +392,3 @@ export class ApiClient {
         return this._fetchJson(endpoint, { ...options, method: 'DELETE' });
     }
 }
-

@@ -7,6 +7,7 @@ import { createPinia } from 'pinia';
 import { defineRule, configure } from 'vee-validate';
 import { required, email, min, confirmed, max } from '@vee-validate/rules';
 import { localize } from '@vee-validate/i18n';
+import { sanitizeHTML } from './security.js';
 
 // --- VeeValidate Global Configuration ---
 // Define validation rules globally

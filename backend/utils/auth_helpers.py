@@ -1,6 +1,8 @@
-port jsonify
+from functools import wraps
+from flask import jsonify
 from flask_login import current_user
-from services.email_service import EmailService
+from backend.services.email_service import EmailService
+from backend.models.user_models import User
 
 def staff_or_admin_required(f):
     """

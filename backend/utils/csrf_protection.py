@@ -2,6 +2,7 @@
 import secrets
 import hmac
 import hashlib
+from functools import wraps
 from flask import session, request, current_app
 from backend.services.exceptions import ValidationException
 
