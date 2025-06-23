@@ -5,24 +5,32 @@ from backend.services.loyalty_service import LoyaltyService
 from backend.models.order_models import Order
 from backend.models.cart_models import Cart # Assuming Cart model exists
 from backend.services.invoice_service import B2BInvoiceService
+from sqlalchemy.orm import joinedload, subqueryload
+import uuid
+from utils.sanitization import sanitize_input
 
 
 class OrderService:
     @staticmethod
-    def get_orders_by_user(user_id, limit=None):
-        """Get orders for a specific user, optionally limited."""
-        query = Order.query.filter_by(user_id=user_id).order_by(desc(Order.created_at))
-        if limit:
-            query = query.limit(limit)
-        return query.all()
+    def get_orders_by_user(self, user_id, limit=None):
+        """
+        Gets a paginated list of orders for a user, eagerly loading items and addresses.
+        """
+        return Order.query.filter_by(user_id=user_id).options(
+            subqueryload(Order.items).joinedload(OrderItem.product),
+            joinedload(Order.shipping_address)
+        ).order_by(Order.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
     
     @staticmethod
-    def get_order_by_id(order_id, user_id=None):
-        """Get a specific order, optionally filtered by user."""
-        query = Order.query.filter_by(id=order_id)
-        if user_id:
-            query = query.filter_by(user_id=user_id)
-        return query.first()
+    def get_order_by_id(self, order_id, user_id=None):
+        """
+        Gets a single order for a user, eagerly loading its details.
+        """
+        return Order.query.filter_by(id=order_id, user_id=user_id).options(
+            subqueryload(Order.items).joinedload(OrderItem.product),
+            joinedload(Order.shipping_address)
+        ).first()
 
 
     @staticmethod
@@ -74,6 +82,27 @@ class OrderService:
             db.session.commit()
             
             return new_order
+
+    @staticmethod
+    def get_all_orders_paginated(self, page, per_page, status=None, sort_by='created_at', sort_direction='desc'):
+        """
+        Gets all orders for an admin, eagerly loading user and items.
+        """
+        query = Order.query.options(
+            joinedload(Order.user),
+            subqueryload(Order.items).joinedload(OrderItem.product)
+        )
+        if status:
+            query = query.filter(Order.status == status)
+
+        order_by_attr = getattr(Order, sort_by, Order.created_at)
+        if sort_direction == 'desc':
+            query = query.order_by(db.desc(order_by_attr))
+        else:
+            query = query.order_by(db.asc(order_by_attr))
+        
+        return query.paginate(page=page, per_page=per_page, error_out=False)
+        
 
     @staticmethod
     def create_order(user_id, order_data):
