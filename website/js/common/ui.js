@@ -18,10 +18,10 @@ export function showToast(message, type = 'info', duration = 3000) {
 
     // Create the toast element
     const toast = document.createElement('div');
-    
+
     // Base classes
     let classes = 'max-w-xs p-4 text-sm text-white rounded-lg shadow-lg transition-all transform';
-    
+
     // Type-specific classes
     if (type === 'success') {
         classes += ' bg-green-500';
@@ -30,14 +30,14 @@ export function showToast(message, type = 'info', duration = 3000) {
     } else {
         classes += ' bg-blue-500';
     }
-    
+
     toast.className = classes;
     toast.textContent = message;
 
     // Add animation for entry
     toast.style.opacity = '0';
     toast.style.transform = 'translateX(100%)';
-    
+
     // Append to container
     toastContainer.appendChild(toast);
 
@@ -73,7 +73,7 @@ export function showModal(title, content, onConfirm) {
     const modalBackdrop = document.createElement('div');
     modalBackdrop.id = 'app-modal';
     modalBackdrop.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-    
+
     modalBackdrop.innerHTML = `
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <h3 class="text-lg font-bold mb-4">${title}</h3>
@@ -93,7 +93,7 @@ export function showModal(title, content, onConfirm) {
     const closeModal = () => modalBackdrop.remove();
 
     cancelButton.addEventListener('click', closeModal);
-    
+
     if (onConfirm && typeof onConfirm === 'function') {
         confirmButton.addEventListener('click', () => {
             onConfirm();

@@ -14,3 +14,8 @@ export const getToken = () => {
 export const removeToken = () => {
     localStorage.removeItem(TOKEN_KEY);
 };
+
+export const getSession = () => {
+    const token = getToken();
+    return token ? { accessToken: token } : null;
+};

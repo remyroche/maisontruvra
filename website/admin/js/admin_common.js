@@ -109,4 +109,20 @@ function setupSessionTimeout() {
   resetTimers();
 }
 
-export { adminApiClient, getCSRFToken, setupAdminPage, initializeAdminPage };
+// Check admin authentication
+async function checkAdminAuth() {
+  const token = localStorage.getItem('admin_token');
+  if (!token) {
+    window.location.href = '/admin/login';
+    return false;
+  }
+  return true;
+}
+
+// Load admin header
+async function loadAdminHeader() {
+  // Implementation for loading admin header
+  console.log('Admin header loaded');
+}
+
+export { adminApiClient, getCSRFToken, setupAdminPage, initializeAdminPage, checkAdminAuth, loadAdminHeader };

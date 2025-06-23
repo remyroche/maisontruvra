@@ -239,7 +239,7 @@ export default api;
  * A centralized helper class for making API requests.
  * It automatically handles fetching and attaching JWT and CSRF tokens.
  */
-class ApiHelper {
+export class ApiClient {
     constructor(baseUrl) {
         this.baseUrl = baseUrl;
         this.csrfToken = null;
