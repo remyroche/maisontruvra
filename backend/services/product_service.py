@@ -1,186 +1,189 @@
-from backend.models.product_models import Product, Category, Collection
-from backend.models.enums import ProductStatus
-from backend.database import db
-from backend.services.exceptions import NotFoundException, ServiceException
-from sqlalchemy import or_
-from backend.services.passport_service import PassportService # Import the new service
-from models import db, Product, Category, Collection, Review, WishlistItem, Inventory
-from sqlalchemy.orm import joinedload, subqueryload
 
+from backend.database import db
+from backend.models.product_models import Product, ProductVariant, ProductCategory
+from backend.models.inventory_models import ProductItem
+from backend.services.exceptions import NotFoundException, ValidationException
+from backend.utils.sanitization import sanitize_input
+from backend.services.audit_log_service import AuditLogService
+from flask import current_app
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ProductService:
     @staticmethod
-    def get_all_products(category_id=None, collection_id=None, search=None, page=1, per_page=20):
-        """Get all products with optional filtering"""
-        query = Product.query.filter_by(status=ProductStatus.ACTIVE)
+    def get_product_by_id(product_id: int, context: str = 'public'):
+        """Get product by ID with different serialization contexts."""
+        # Optimize query to avoid N+1 problem
+        product = Product.query.options(
+            db.selectinload(Product.variants).selectinload(ProductVariant.items),
+            db.selectinload(Product.category),
+            db.selectinload(Product.reviews)
+        ).get(product_id)
         
-        if category_id:
-            query = query.filter_by(category_id=category_id)
-        if collection_id:
-            query = query.join(Product.collections).filter(Collection.id == collection_id)
-        if search:
-            query = query.filter(or_(
-                Product.name.ilike(f'%{search}%'),
-                Product.description.ilike(f'%{search}%')
-            ))
+        if not product:
+            raise NotFoundException(f"Product with ID {product_id} not found")
         
-        return query.paginate(page=page, per_page=per_page, error_out=False)
-
-
-    def get_published_products(self, page, per_page, sort_by, sort_direction, category_name=None, collection_name=None):
-        """
-        Gets a paginated list of published products, eagerly loading relationships
-        to prevent N+1 query problems.
-        """
-        query = Product.query.filter_by(is_active=True).options(
-            joinedload(Product.category),
-            joinedload(Product.collection),
-            subqueryload(Product.images)
-        )
-
-        if category_name:
-            query = query.join(Category).filter(Category.name == category_name)
-        
-        if collection_name:
-            query = query.join(Collection).filter(Collection.name == collection_name)
-
-        if sort_direction == 'desc':
-            query = query.order_by(db.desc(getattr(Product, sort_by, 'name')))
-        else:
-            query = query.order_by(db.asc(getattr(Product, sort_by, 'name')))
-
-        return query.paginate(page=page, per_page=per_page, error_out=False)
-
-    def get_product_by_slug(self, slug):
-        """
-        Gets a single product by slug, eagerly loading all related data.
-        """
-        return Product.query.filter_by(slug=slug).options(
-            subqueryload(Product.variants),
-            subqueryload(Product.images),
-            subqueryload(Product.reviews).joinedload(Review.user),
-            joinedload(Product.category),
-            joinedload(Product.collection)
-        ).first()
-
-    def get_all_products_paginated(self, page, per_page, sort_by, sort_direction, category_id=None, collection_id=None):
-        """
-        Gets a paginated list of all products for the admin, eagerly loading relationships.
-        """
-        query = Product.query.options(
-            joinedload(Product.inventory),
-            joinedload(Product.category),
-            joinedload(Product.collection)
-        )
-
-        if category_id:
-            query = query.filter(Product.category_id == category_id)
-        if collection_id:
-            query = query.filter(Product.collection_id == collection_id)
-
-        if sort_direction == 'desc':
-            query = query.order_by(db.desc(getattr(Product, sort_by, 'name')))
-        else:
-            query = query.order_by(db.asc(getattr(Product, sort_by, 'name')))
-        
-        return query.paginate(page=page, per_page=per_page, error_out=False)
-        
-
-    def search_products(self, search_term, limit=10):
-        return Product.query.filter(Product.name.ilike(f'%{search_term}%')).limit(limit).all()
-        
+        return product.to_dict(context=context)
+    
     @staticmethod
-    def get_product_by_id(product_id):
-        """Get product by ID"""
+    def get_all_products_paginated(page: int, per_page: int, filters: dict = None):
+        """Get paginated products with N+1 optimization."""
+        query = Product.query.options(
+            db.selectinload(Product.variants),
+            db.selectinload(Product.category)
+        )
+        
+        if filters:
+            filters = sanitize_input(filters)
+            if filters.get('category_id'):
+                query = query.filter(Product.category_id == filters['category_id'])
+            if filters.get('is_active') is not None:
+                query = query.filter(Product.is_active == filters['is_active'])
+            if filters.get('search'):
+                search_term = f"%{filters['search']}%"
+                query = query.filter(
+                    db.or_(
+                        Product.name.ilike(search_term),
+                        Product.description.ilike(search_term)
+                    )
+                )
+        
+        return query.order_by(Product.created_at.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+    
+    @staticmethod
+    def create_product(product_data: dict):
+        """Create a new product with proper validation and logging."""
+        product_data = sanitize_input(product_data)
+        
+        # Validate required fields
+        required_fields = ['name', 'description', 'category_id']
+        for field in required_fields:
+            if not product_data.get(field):
+                raise ValidationException(f"Field '{field}' is required")
+        
+        try:
+            product = Product(
+                name=product_data['name'],
+                description=product_data['description'],
+                category_id=product_data['category_id'],
+                is_active=product_data.get('is_active', True),
+                metadata=product_data.get('metadata', {})
+            )
+            
+            db.session.add(product)
+            db.session.flush()
+            
+            # Log the action
+            AuditLogService.log_action(
+                'PRODUCT_CREATED',
+                target_id=product.id,
+                details={'name': product.name, 'category_id': product.category_id}
+            )
+            
+            db.session.commit()
+            
+            logger.info(f"Product created successfully: {product.name} (ID: {product.id})")
+            return product.to_dict(context='admin')
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to create product: {str(e)}")
+            raise ValidationException(f"Failed to create product: {str(e)}")
+    
+    @staticmethod
+    def update_product(product_id: int, update_data: dict):
+        """Update product with proper validation and logging."""
+        update_data = sanitize_input(update_data)
+        
         product = Product.query.get(product_id)
         if not product:
-            raise NotFoundException(f"Product with id {product_id} not found")
-        return product
-    
-    @staticmethod
-    def create_product(self, data):
-        """
-        Creates a new product and automatically generates its digital passport.
-        This is an atomic operation: if passport creation fails, the entire
-        transaction is rolled back, and the product is not created.
-        """
-        new_product = Product(
-            name=data['name'],
-            description=data['description'],
-            price=data['price'],
-            category_id=data['category_id'],
-            # ... other fields
-        )
+            raise NotFoundException(f"Product with ID {product_id} not found")
         
         try:
-            # Add the new product to the session
-            db.session.add(new_product)
+            original_data = {
+                'name': product.name,
+                'description': product.description,
+                'is_active': product.is_active
+            }
             
-            # Flush the session to assign an ID to new_product without committing
+            # Update fields
+            if 'name' in update_data:
+                product.name = update_data['name']
+            if 'description' in update_data:
+                product.description = update_data['description']
+            if 'category_id' in update_data:
+                product.category_id = update_data['category_id']
+            if 'is_active' in update_data:
+                product.is_active = update_data['is_active']
+            if 'metadata' in update_data:
+                product.metadata = update_data['metadata']
+            
             db.session.flush()
-
-            # --- Passport Creation Hook (Mandatory) ---
-            PassportService.create_for_product(new_product)
             
-            # Commit the transaction only if both product and passport are created
+            # Log changes
+            changes = {}
+            for key, original_value in original_data.items():
+                current_value = getattr(product, key)
+                if original_value != current_value:
+                    changes[key] = {'from': original_value, 'to': current_value}
+            
+            if changes:
+                AuditLogService.log_action(
+                    'PRODUCT_UPDATED',
+                    target_id=product.id,
+                    details={'changes': changes}
+                )
+            
             db.session.commit()
             
-            return new_product
+            logger.info(f"Product updated successfully: {product.name} (ID: {product.id})")
+            return product.to_dict(context='admin')
+            
         except Exception as e:
-            # If any part of the process fails, roll back the entire transaction
             db.session.rollback()
-            current_app.logger.error(
-                f"Failed to create product or its mandatory passport. "
-                f"Transaction rolled back. Error: {e}"
+            logger.error(f"Failed to update product {product_id}: {str(e)}")
+            raise ValidationException(f"Failed to update product: {str(e)}")
+    
+    @staticmethod
+    def delete_product(product_id: int):
+        """Soft delete product with logging."""
+        product = Product.query.get(product_id)
+        if not product:
+            raise NotFoundException(f"Product with ID {product_id} not found")
+        
+        try:
+            product.is_active = False
+            product.deleted_at = db.func.now()
+            
+            db.session.flush()
+            
+            AuditLogService.log_action(
+                'PRODUCT_DELETED',
+                target_id=product.id,
+                details={'name': product.name}
             )
-            # Re-raise the exception to notify the caller of the failure
-            raise
-
-    
-    
-    @staticmethod
-    def update_product(product_id, data):
-        """Update existing product"""
-        product = ProductService.get_product_by_id(product_id)
-        try:
-            for key, value in data.items():
-                if hasattr(product, key):
-                    setattr(product, key, value)
+            
             db.session.commit()
-            return product
+            
+            logger.info(f"Product soft deleted: {product.name} (ID: {product.id})")
+            
         except Exception as e:
             db.session.rollback()
-            raise ServiceException(f"Failed to update product: {str(e)}")
+            logger.error(f"Failed to delete product {product_id}: {str(e)}")
+            raise ValidationException(f"Failed to delete product: {str(e)}")
     
     @staticmethod
-    def delete_product(product_id):
-        """Delete product"""
-        product = ProductService.get_product_by_id(product_id)
-        try:
-            db.session.delete(product)
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            raise ServiceException(f"Failed to delete product: {str(e)}")
-    
-    @staticmethod
-    def get_all_categories():
-        """Get all categories"""
-        return Category.query.all()
-    
-    @staticmethod
-    def create_category(data):
-        """Create new category"""
-        try:
-            category = Category(**data)
-            db.session.add(category)
-            db.session.commit()
-            return category
-        except Exception as e:
-            db.session.rollback()
-            raise ServiceException(f"Failed to create category: {str(e)}")
-    
-    @staticmethod
-    def get_products_by_type(product_type):
-        """Get products by type (for blog posts etc)"""
-        return Product.query.filter_by(product_type=product_type).all()
+    def get_low_stock_products(threshold: int = 10):
+        """Get products with low stock levels."""
+        return db.session.query(Product, ProductVariant, db.func.count(ProductItem.id).label('stock_count'))\
+            .join(ProductVariant)\
+            .outerjoin(ProductItem, db.and_(
+                ProductItem.product_variant_id == ProductVariant.id,
+                ProductItem.status == 'in_stock'
+            ))\
+            .group_by(Product.id, ProductVariant.id)\
+            .having(db.func.count(ProductItem.id) <= threshold)\
+            .all()

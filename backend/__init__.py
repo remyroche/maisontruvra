@@ -55,11 +55,35 @@ def create_app(config_class=Config):
 
     app.logger.info('Maison Truvra backend startup')
 
+    # Register CSRF routes
+    from backend.auth.csrf_routes import csrf_bp
+    app.register_blueprint(csrf_bp, url_prefix='/api/auth')
+    
     # --- Signal Handlers for Login Events ---
+    from flask_login import user_logged_in, user_login_failed
+    from flask import request
+    
     @user_logged_in.connect_via(app)
     def _after_login(sender, user, **extra):
         """Log successful logins."""
-        security_logger.info(f"Successful login for user: {user.email} (ID: {user.id}) from IP: {request.remote_addr}")
+        security_logger.info({
+            'event': 'USER_LOGIN_SUCCESS',
+            'user_id': user.id,
+            'email': user.email,
+            'ip_address': request.remote_addr,
+            'user_agent': request.headers.get('User-Agent'),
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    
+    @user_login_failed.connect_via(app)
+    def _login_failed(sender, **extra):
+        """Log failed login attempts."""
+        security_logger.warning({
+            'event': 'USER_LOGIN_FAILED',
+            'ip_address': request.remote_addr,
+            'user_agent': request.headers.get('User-Agent'),
+            'timestamp': datetime.utcnow().isoformat()
+        })
 
     @user_unauthorized.connect_via(app)
     def _login_failed():

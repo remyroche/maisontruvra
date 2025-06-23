@@ -1,122 +1,158 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from backend.services.user_service import UserService
-from backend.models.user_models import User
+from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
+from backend.middleware import rbac_check, sanitize_request_data
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import permissions_required
+from backend.services.audit_log_service import AuditLogService
+from backend.utils.csrf_protection import CSRFProtection
+import logging
 
-user_management_bp = Blueprint('user_management_bp', __name__, url_prefix='/admin/users')
+logger = logging.getLogger(__name__)
+security_logger = logging.getLogger('security')
 
-# READ all users (with pagination)
-@user_management_bp.route('/', methods=['GET'])
-@permissions_required('MANAGE_USERS')
+user_management_bp = Blueprint('user_management', __name__)
+
+@user_management_bp.route('/users', methods=['GET'])
+@rbac_check('ADMIN')
+@sanitize_request_data
 def get_users():
-    """
-    Get a paginated list of all users.
-    Query Params:
-    - page: integer, the page number to retrieve.
-    - per_page: integer, the number of users per page.
-    """
+    """Get paginated list of users with proper N+1 optimization."""
     try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        # Assuming the service method is updated to handle pagination
-        users_pagination = UserService.get_all_users_paginated(page=page, per_page=per_page)
+        # Sanitized request args are already available due to middleware
+        page = int(request.args.get('page', 1))
+        per_page = min(int(request.args.get('per_page', 20)), 100)  # Max 100 per page
+
+        filters = {}
+        if request.args.get('role'):
+            filters['role'] = request.args.get('role')
+        if request.args.get('is_active'):
+            filters['is_active'] = request.args.get('is_active').lower() == 'true'
+        if request.args.get('email'):
+            filters['email'] = request.args.get('email')
+
+        result = UserService.get_all_users_paginated(page, per_page, filters)
+
+        # Log admin action
+        logger.info({
+            'event': 'ADMIN_VIEW_USERS',
+            'admin_id': g.user['id'],
+            'filters': filters,
+            'request_id': getattr(g, 'request_id', 'unknown')
+        })
+
         return jsonify({
-            "status": "success",
-            "data": [user.to_dict() for user in users_pagination.items],
-            "total": users_pagination.total,
-            "pages": users_pagination.pages,
-            "current_page": users_pagination.page
-        }), 200
+            'users': [user.to_dict(context='admin') for user in result.items],
+            'total': result.total,
+            'pages': result.pages,
+            'current_page': result.page,
+            'per_page': result.per_page
+        })
+
+    except ValidationException as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        # In a real app, log the error e
-        return jsonify(status="error", message="An internal error occurred while fetching users."), 500
+        logger.error(f"Error fetching users: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-# READ a single user by ID
-@user_management_bp.route('/<int:user_id>', methods=['GET'])
-@permissions_required('MANAGE_USERS')
-def get_user(user_id):
-    """
-    Get a single user by their ID.
-    """
-    user = UserService.get_user_by_id(user_id)
-    if user:
-        return jsonify(status="success", data=user.to_dict()), 200
-    return jsonify(status="error", message="User not found"), 404
-
-# CREATE a new user
-@user_management_bp.route('/', methods=['POST'])
-@permissions_required('MANAGE_USERS')
+@user_management_bp.route('/users', methods=['POST'])
+@rbac_check('ADMIN')
+@sanitize_request_data
 def create_user():
-    """
-    Create a new user. Expects a JSON body with user details.
-    """
-    data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid or missing JSON body"), 400
-
-    sanitized_data = sanitize_input(data)
-
-    required_fields = ['email', 'password', 'first_name', 'last_name', 'role']
-    if not all(field in sanitized_data for field in required_fields):
-        missing_fields = [field for field in required_fields if field not in sanitized_data]
-        return jsonify(status="error", message=f"Missing required fields: {', '.join(missing_fields)}"), 400
-
-    if User.query.filter_by(email=sanitized_data['email']).first():
-        return jsonify(status="error", message="User with this email already exists"), 409
-
+    """Create a new user with full audit logging."""
     try:
-        # Assuming the service handles hashing the password
-        new_user = UserService.create_user(sanitized_data)
-        return jsonify(status="success", data=new_user.to_dict()), 201
-    except ValueError as e: # Catch specific validation errors from the service
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        # In a real app, log the error e
-        return jsonify(status="error", message="An internal error occurred while creating the user."), 500
+        # CSRF token validation is handled by rbac_check middleware
+        user_data = request.get_json()
+        if not user_data:
+            raise ValidationException("Request data is required")
 
-# UPDATE an existing user
-@user_management_bp.route('/<int:user_id>', methods=['PUT'])
-@permissions_required('MANAGE_USERS')
+        # User data is already sanitized by middleware
+        new_user = UserService.create_user(user_data)
+
+        # Log admin action with full context
+        security_logger.info({
+            'event': 'ADMIN_CREATE_USER',
+            'admin_id': g.user['id'],
+            'admin_email': g.user['email'],
+            'created_user_id': new_user['id'],
+            'created_user_email': new_user['email'],
+            'created_user_role': new_user['role'],
+            'ip_address': request.remote_addr,
+            'user_agent': request.headers.get('User-Agent'),
+            'request_id': getattr(g, 'request_id', 'unknown')
+        })
+
+        return jsonify({
+            'message': 'User created successfully',
+            'user': new_user
+        }), 201
+
+    except ValidationException as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error creating user: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@user_management_bp.route('/users/<int:user_id>', methods=['PUT'])
+@rbac_check('ADMIN')
+@sanitize_request_data
 def update_user(user_id):
-    """
-    Update an existing user's information.
-    """
-    data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid or missing JSON body"), 400
-    
-    if not UserService.get_user_by_id(user_id):
-        return jsonify(status="error", message="User not found"), 404
-
-    sanitized_data = sanitize_input(data)
-    # Prevent password from being updated through this endpoint for security.
-    sanitized_data.pop('password', None)
-    
+    """Update user with full audit logging."""
     try:
-        updated_user = UserService.update_user(user_id, sanitized_data)
-        return jsonify(status="success", data=updated_user.to_dict()), 200
-    except ValueError as e: # Catch specific validation errors from the service
-        return jsonify(status="error", message=str(e)), 400
+        update_data = request.get_json()
+        if not update_data:
+            raise ValidationException("Request data is required")
+
+        updated_user = UserService.update_user(user_id, update_data)
+
+        # Log admin action
+        security_logger.info({
+            'event': 'ADMIN_UPDATE_USER',
+            'admin_id': g.user['id'],
+            'admin_email': g.user['email'],
+            'updated_user_id': user_id,
+            'ip_address': request.remote_addr,
+            'user_agent': request.headers.get('User-Agent'),
+            'request_id': getattr(g, 'request_id', 'unknown')
+        })
+
+        return jsonify({
+            'message': 'User updated successfully',
+            'user': updated_user
+        })
+
+    except NotFoundException as e:
+        return jsonify({'error': str(e)}), 404
+    except ValidationException as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        # In a real app, log the error e
-        return jsonify(status="error", message="An internal error occurred while updating the user."), 500
+        logger.error(f"Error updating user {user_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-# DELETE a user
-@user_management_bp.route('/<int:user_id>', methods=['DELETE'])
-@permissions_required('MANAGE_USERS')
+@user_management_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@rbac_check('ADMIN')
+@sanitize_request_data
 def delete_user(user_id):
-    """
-    Delete a user.
-    """
-    if not UserService.get_user_by_id(user_id):
-        return jsonify(status="error", message="User not found"), 404
-
+    """Soft delete user with full audit logging."""
     try:
         UserService.delete_user(user_id)
-        return jsonify(status="success", message="User deleted successfully"), 200
+
+        # Log critical admin action
+        security_logger.warning({
+            'event': 'ADMIN_DELETE_USER',
+            'admin_id': g.user['id'],
+            'admin_email': g.user['email'],
+            'deleted_user_id': user_id,
+            'ip_address': request.remote_addr,
+            'user_agent': request.headers.get('User-Agent'),
+            'request_id': getattr(g, 'request_id', 'unknown')
+        })
+
+        return jsonify({'message': 'User deleted successfully'})
+
+    except NotFoundException as e:
+        return jsonify({'error': str(e)}), 404
+    except ValidationException as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        # In a real app, log the error e
-        return jsonify(status="error", message="An internal error occurred while deleting the user."), 500
-
-
+        logger.error(f"Error deleting user {user_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
