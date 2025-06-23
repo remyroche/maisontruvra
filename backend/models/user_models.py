@@ -20,6 +20,13 @@ class User(BaseModel):
     cart = db.relationship('Cart', back_populates='user', uselist=False, cascade="all, delete-orphan")
     b2b_account = db.relationship('B2BUser', back_populates='user', cascade="all, delete-orphan")
 
+    # --- New fields for Loyalty Program ---
+    last_active_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    loyalty_tier_id = db.Column(db.Integer, db.ForeignKey('loyalty_tiers.id'), nullable=True)
+
+    loyalty_tier = db.relationship('LoyaltyTier', back_populates='users')
+    
+        
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -33,6 +40,8 @@ class User(BaseModel):
             'first_name': self.first_name,
             'last_name': self.last_name,
             'roles': [role.name.value for role in self.roles]
+            data['loyalty_tier'] = self.loyalty_tier.name if self.loyalty_tier else None
+            data['last_active_at'] = self.last_active_at.isoformat() if self.last_active_at else None
         }
     
     def to_dict_admin(self):
