@@ -1,26 +1,51 @@
 from flask import Blueprint, jsonify
-from flask_jwt_extended import jwt_required
-from backend.auth.permissions import permission_required, Permission
-import datetime
+from backend.auth.permissions import admin_required
+from backend.services.monitoring_service import MonitoringService # Assumed service
 
-monitoring_bp = Blueprint('monitoring_bp', __name__, url_prefix='/monitoring')
+monitoring_bp = Blueprint('monitoring_bp', __name__, url_prefix='/admin/monitoring')
 
 @monitoring_bp.route('/health', methods=['GET'])
-@jwt_required()
-@permission_required(Permission.VIEW_MONITORING)
-def health_check():
-    """A simple health check endpoint."""
-    return jsonify({
-        "status": "ok",
-        "timestamp": datetime.datetime.utcnow().isoformat()
-    })
-
-
-@monitoring_routes.route('/monitoring/system-health', methods=['GET'])
 @admin_required
 def get_system_health():
-    health_status = MonitoringService.get_system_health()
-    return jsonify(health_status)
+    """
+    Get the health status of various system components.
+    This could include database connectivity, external API status, etc.
+    """
+    try:
+        health_status = MonitoringService.get_system_health()
+        # If any component is not healthy, we might want to return a 503 Service Unavailable
+        # For now, we return the status of all components with a 200 OK.
+        is_healthy = all(status['status'] == 'ok' for status in health_status.values())
+        
+        return jsonify(status="success", data={"is_healthy": is_healthy, "components": health_status}), 200
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An error occurred while checking system health."), 500
+
+@monitoring_bp.route('/error-logs', methods=['GET'])
+@admin_required
+def get_error_logs():
+    """
+    Retrieve recent error logs from the system.
+    This is a simplified endpoint; a real system would use a dedicated logging service.
+    """
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+
+        logs_pagination = MonitoringService.get_error_logs_paginated(page=page, per_page=per_page)
+        
+        return jsonify({
+            "status": "success",
+            "data": [log.to_dict() for log in logs_pagination.items],
+            "total": logs_pagination.total,
+            "pages": logs_pagination.pages,
+            "current_page": logs_pagination.page
+        }), 200
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="Failed to retrieve error logs."), 500
+
 
 @monitoring_routes.route('/monitoring/celery-status', methods=['GET'])
 @admin_required
