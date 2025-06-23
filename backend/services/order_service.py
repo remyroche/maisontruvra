@@ -64,11 +64,8 @@ class OrderService:
                 order_id=new_order.id
             )
 
-            # Send invoice & email based on user type
-            if order.user and order.user.user_type == 'B2B':
-                B2BInvoiceService.create_and_send_b2b_invoice(order)
-            if order.user and order.user.user_type == 'B2C':
-                B2CInvoiceService.create_and_send_b2c_invoice(order)
+            # Send invoice & email based on user type (managed later)
+            InvoiceService.create_invoice_for_order(new_order)
 
             # 4. Clear the user's cart
             # CartService.clear_cart(user_id=user_id)
