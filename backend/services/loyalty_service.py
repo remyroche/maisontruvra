@@ -8,6 +8,64 @@ from backend.services.referral_service import ReferralService
 class LoyaltyService:
 
     @staticmethod
+    def get_user_loyalty_status(user_id: int) -> dict | None:
+        """
+        Gets a user's current loyalty status, including valid points and tier.
+
+        Args:
+            user_id: The ID of the user to look up.
+
+        Returns:
+            A dictionary with the user's points, tier name, and referral code, or None if user not found.
+        """
+        user = User.query.get(user_id)
+        if not user:
+            return None
+
+        # 1. Calculate the user's current valid (non-expired) point balance.
+        # This sums up all point transactions that have not expired.
+        valid_points = db.session.query(
+            func.sum(LoyaltyPointTransaction.points)
+        ).filter(
+            LoyaltyPointTransaction.user_id == user_id,
+            LoyaltyPointTransaction.is_expired == False,
+            LoyaltyPointTransaction.expires_at > datetime.utcnow()
+        ).scalar() or 0
+        
+        # 2. Get the user's tier name from the relationship.
+        tier_name = user.loyalty_tier.name if user.loyalty_tier else 'Standard'
+
+        # 3. Get the user's referral code.
+        # Assuming the referral code is stored on the user model.
+        referral_code = user.referral_code if hasattr(user, 'referral_code') else f"B2B-{user.id}-INCOMPLETE"
+
+        return {
+            'points': valid_points,
+            'tier': tier_name,
+            'referralCode': referral_code
+        }
+
+    @staticmethod
+    def get_all_tier_discounts() -> list:
+        """
+        Gets the names and discount percentages for all loyalty tiers
+        as configured by an administrator in the database.
+
+        Returns:
+            A list of dictionaries, e.g., [{'name': 'Partenaire', 'discount_percentage': 10.0}]
+        """
+        tiers = LoyaltyTier.query.order_by(LoyaltyTier.discount_percentage).all()
+        
+        # Serialize the data into the required format
+        return [
+            {
+                "name": tier.name,
+                "discount_percentage": tier.discount_percentage
+            }
+            for tier in tiers
+        ]
+
+    @staticmethod
     def add_points_for_purchase(user_id: int, order_total: float, order_id: int):
         """
         Awards points for a purchase and handles referral bonuses.
