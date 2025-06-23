@@ -1,74 +1,71 @@
-from flask import Blueprint, request, jsonify, g
-from backend.services.order_service import OrderService
-from backend.services.cart_service import CartService
-from backend.services.exceptions import ServiceException, NotFoundException
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.services.order_service import OrderService
+from backend.utils.sanitization import sanitize_input
+from backend.services.cart_service import CartService
 
-orders_bp = Blueprint('public_order_routes', __name__)
+orders_bp = Blueprint('orders_bp', __name__, url_prefix='/api/orders')
 
-@orders_bp.route('/checkout/create-payment-intent', methods=['POST'])
-@jwt_required()
-def create_payment_intent():
+def get_session_id():
     """
-    Creates a Stripe Payment Intent for the user's cart.
+    Placeholder for getting a unique session ID for anonymous users.
+    In a real app, this would likely come from a session cookie.
+    """
+    return request.headers.get('X-Session-ID')
+
+@orders_bp.route('/checkout', methods=['POST'])
+@jwt_required(optional=True)
+def checkout():
+    """
+    Handles the entire checkout process. Creates an order from the user's cart.
+    Works for both authenticated and anonymous users.
     """
     user_id = get_jwt_identity()
-    try:
-        # Calculate amount from the server-side cart to prevent manipulation
-        cart_total = CartService.get_cart_total(user_id)
-        if cart_total == 0:
-            return jsonify({"error": "Cart is empty."}), 400
-            
-        client_secret = OrderService.create_payment_intent(amount=cart_total)
-        return jsonify({'clientSecret': client_secret})
-    except ServiceException as e:
-        return jsonify(error=str(e)), 400
+    session_id = get_session_id() if not user_id else None
 
-def create_order():
-    """Creates a new order with a 'pending_payment' status."""
-    user_id = g.user['id']
+    if not user_id and not session_id:
+        return jsonify(status="error", message="A session is required to check out."), 401
+
     data = request.get_json()
-    cart_id = data.get('cartId')
-    shipping_address = data.get('shippingAddress')
+    if not data:
+        return jsonify(status="error", message="Invalid JSON body"), 400
     
-    conn = db.get_connection()
-    cursor = conn.cursor()
+    sanitized_data = sanitize_input(data)
+
+    required_fields = ['shipping_address', 'billing_address', 'payment_token']
+    if not all(field in sanitized_data for field in required_fields):
+        missing = [f for f in required_fields if f not in sanitized_data]
+        return jsonify(status="error", message=f"Missing required fields: {', '.join(missing)}"), 400
+
     try:
-        conn.begin()
-
-        # 1. Re-validate stock for all cart items, locking the rows.
-        cursor.execute('SELECT product_id, quantity FROM cart_items WHERE cart_id = %s', (cart_id,))
-        cart_items = cursor.fetchall()
-        for item in cart_items:
-            cursor.execute('SELECT inventory_count FROM products WHERE id = %s FOR UPDATE', (item['product_id'],))
-            product = cursor.fetchone()
-            if product['inventory_count'] < item['quantity']:
-                conn.rollback()
-                return jsonify({'error': f"Insufficient stock for product {item['product_id']}"}), 409
-
-        # 2. Create the order.
-        order_total = calculate_total(cart_items) # Assumed function
-        cursor.execute('INSERT INTO orders (user_id, total, status, shipping_address) VALUES (%s, %s, "pending_payment", %s)',
-                       (user_id, order_total, shipping_address))
-        order_id = cursor.lastrowid
-
-        # 3. Move items from cart to order_items.
-        cursor.execute('INSERT INTO order_items (order_id, product_id, quantity) SELECT %s, product_id, quantity FROM cart_items WHERE cart_id = %s',
-                       (order_id, cart_id))
-
-        # 4. Soft-delete the cart.
-        cursor.execute('UPDATE carts SET deleted_at = NOW() WHERE id = %s', (cart_id,))
+        # 1. Get the cart
+        if user_id:
+            cart = CartService.get_cart_by_user_id(user_id)
+        else:
+            cart = CartService.get_cart_by_session_id(session_id)
         
-        conn.commit()
-        
-        # 6. Initiate payment session and return details to frontend.
-        payment_session = payment_gateway.create_session(order_id, order_total)
-        return jsonify({'orderId': order_id, 'paymentSession': payment_session}), 201
+        if not cart or not cart.items:
+            return jsonify(status="error", message="Your cart is empty."), 400
 
+        # 2. Process the order
+        # The OrderService should encapsulate all logic:
+        # - Verifying inventory
+        # - Processing payment via the payment_token (e.g., with Stripe, Adyen)
+        # - Creating the order and order items in the database
+        # - Clearing the cart
+        # - Sending a confirmation email
+        order = OrderService.create_order_from_cart(
+            cart=cart,
+            user_id=user_id,
+            checkout_data=sanitized_data
+        )
+        
+        return jsonify(status="success", message="Order placed successfully!", data=order.to_dict_for_user()), 201
+
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
     except Exception as e:
-        conn.rollback()
-        logger.error({'message': 'Order creation failed', 'error': str(e), 'userId': user_id, 'cartId': cart_id})
-        return jsonify({'error': 'Internal server error during order creation.'}), 500
-    finally:
-        cursor.close()
-        conn.close()
+        # Log the error e
+        return jsonify(status="error", message="An unexpected error occurred during checkout."), 500
+
+
