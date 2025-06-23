@@ -1,148 +1,128 @@
+# backend/admin_api/blog_routes.py
+
 from flask import Blueprint, request, jsonify
-from backend.services.blog_service import BlogService # Assumed service
-from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import permissions_required
+from backend.schemas import BlogPostSchema, BlogCategorySchema
+from flask_jwt_extended import jwt_required
+from backend.utils.auth_helpers import admin_required
+from backend.services.blog_service import BlogService
+from backend.services.exceptions import NotFoundException, ValidationException
 
-blog_management_bp = Blueprint('blog_management_bp', __name__, url_prefix='/admin/blog')
+admin_blog_bp = Blueprint('admin_blog_bp', __name__, url_prefix='/admin/blog')
+blog_service = BlogService()
+blog_post_schema = BlogPostSchema()
+blog_category_schema = BlogCategorySchema()
 
-# --- Blog Post Routes ---
-
-# CREATE a new blog post
-@blog_management_bp.route('/posts', methods=['POST'])
-@permissions_required('MANAGE_BLOG')
-def create_blog_post():
+@admin_blog_bp.route("/articles", methods=["POST"])
+@jwt_required()
+@admin_required
+def create_article():
+    """Admin endpoint to create a new blog article."""
     data = request.get_json()
     if not data:
-        return jsonify(status="error", message="Invalid JSON"), 400
-    
-    required_fields = ['title', 'content', 'author_id', 'category_id']
-    if not all(field in data for field in required_fields):
-        return jsonify(status="error", message="Missing required fields"), 400
-
-    sanitized_data = sanitize_input(data)
+        return jsonify({"error": "Invalid data"}), 400
     try:
-        new_post = BlogService.create_post(sanitized_data)
-        return jsonify(status="success", data=new_post.to_dict()), 201
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
+        new_article = blog_service.create_article(data)
+        return jsonify(blog_post_schema.dump(new_article)), 201
+    except ValidationException as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify(status="error", message="Failed to create blog post."), 500
+        # Add logging for unexpected errors
+        return jsonify({"error": "An unexpected error occurred"}), 500
 
-# READ all blog posts (paginated)
-@blog_management_bp.route('/posts', methods=['GET'])
-@permissions_required('MANAGE_BLOG')
-def get_blog_posts():
+@admin_blog_bp.route("/articles", methods=["GET"])
+@jwt_required()
+@admin_required
+def get_articles():
+    """Admin endpoint to get all blog articles."""
+    articles = blog_service.get_all_articles()
+    return jsonify(blog_post_schema.dump(articles, many=True)), 200
+
+@admin_blog_bp.route("/articles/<int:article_id>", methods=["GET"])
+@jwt_required()
+@admin_required
+def get_article(article_id):
+    """Admin endpoint to get a single blog article by ID."""
     try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 15, type=int)
-        posts_pagination = BlogService.get_all_posts_paginated(page=page, per_page=per_page)
-        return jsonify({
-            "status": "success",
-            "data": [p.to_dict() for p in posts_pagination.items],
-            "total": posts_pagination.total,
-            "pages": posts_pagination.pages,
-            "current_page": posts_pagination.page
-        }), 200
-    except Exception as e:
-        return jsonify(status="error", message="Failed to retrieve blog posts."), 500
+        article = blog_service.get_article_by_id(article_id)
+        return jsonify(blog_post_schema.dump(article)), 200
+    except NotFoundException as e:
+        return jsonify({"error": str(e)}), 404
 
-# READ a single blog post
-@blog_management_bp.route('/posts/<int:post_id>', methods=['GET'])
-@permissions_required('MANAGE_BLOG')
-def get_blog_post(post_id):
-    post = BlogService.get_post_by_id(post_id)
-    if not post:
-        return jsonify(status="error", message="Blog post not found"), 404
-    return jsonify(status="success", data=post.to_dict()), 200
-
-# UPDATE a blog post
-@blog_management_bp.route('/posts/<int:post_id>', methods=['PUT'])
-@permissions_required('MANAGE_BLOG')
-def update_blog_post(post_id):
+@admin_blog_bp.route("/articles/<int:article_id>", methods=["PUT"])
+@jwt_required()
+@admin_required
+def update_article(article_id):
+    """Admin endpoint to update a blog article."""
     data = request.get_json()
     if not data:
-        return jsonify(status="error", message="Invalid JSON"), 400
-    if not BlogService.get_post_by_id(post_id):
-        return jsonify(status="error", message="Blog post not found"), 404
-        
-    sanitized_data = sanitize_input(data)
+        return jsonify({"error": "Invalid data"}), 400
     try:
-        updated_post = BlogService.update_post(post_id, sanitized_data)
-        return jsonify(status="success", data=updated_post.to_dict()), 200
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
+        updated_article = blog_service.update_article(article_id, data)
+        return jsonify(blog_post_schema.dump(updated_article)), 200
+    except NotFoundException as e:
+        return jsonify({"error": str(e)}), 404
+    except ValidationException as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify(status="error", message="Failed to update blog post."), 500
+        # Add logging for unexpected errors
+        return jsonify({"error": "An unexpected error occurred"}), 500
 
-# DELETE a blog post
-@blog_management_bp.route('/posts/<int:post_id>', methods=['DELETE'])
-@permissions_required('MANAGE_BLOG')
-def delete_blog_post(post_id):
-    if not BlogService.get_post_by_id(post_id):
-        return jsonify(status="error", message="Blog post not found"), 404
+@admin_blog_bp.route("/articles/<int:article_id>", methods=["DELETE"])
+@jwt_required()
+@admin_required
+def delete_article(article_id):
+    """Admin endpoint to delete a blog article."""
     try:
-        BlogService.delete_post(post_id)
-        return jsonify(status="success", message="Blog post deleted successfully"), 200
-    except Exception as e:
-        return jsonify(status="error", message="Failed to delete blog post."), 500
+        blog_service.delete_article(article_id)
+        return jsonify({"message": "Article deleted successfully"}), 200
+    except NotFoundException as e:
+        return jsonify({"error": str(e)}), 404
 
-# --- Blog Category Routes ---
-
-# CREATE a new category
-@blog_management_bp.route('/categories', methods=['POST'])
-@permissions_required('MANAGE_BLOG')
-def create_blog_category():
+@admin_blog_bp.route("/categories", methods=["POST"])
+@jwt_required()
+@admin_required
+def create_category():
+    """Admin endpoint to create a new blog category."""
     data = request.get_json()
     if not data or 'name' not in data:
-        return jsonify(status="error", message="Invalid JSON or missing 'name' field"), 400
-    
-    sanitized_name = sanitize_input(data['name'])
+        return jsonify({"error": "Invalid data, 'name' is required"}), 400
     try:
-        new_category = BlogService.create_category({'name': sanitized_name, 'description': sanitize_input(data.get('description'))})
-        return jsonify(status="success", data=new_category.to_dict()), 201
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 409 # 409 Conflict if category exists
-    except Exception as e:
-        return jsonify(status="error", message="Failed to create category."), 500
+        new_category = blog_service.create_category(data)
+        return jsonify(blog_category_schema.dump(new_category)), 201
+    except ValidationException as e:
+        return jsonify({"error": str(e)}), 400
 
-# READ all categories
-@blog_management_bp.route('/categories', methods=['GET'])
-@permissions_required('MANAGE_BLOG')
-def get_blog_categories():
-    try:
-        categories = BlogService.get_all_categories()
-        return jsonify(status="success", data=[c.to_dict() for c in categories]), 200
-    except Exception as e:
-        return jsonify(status="error", message="Failed to retrieve categories."), 500
+@admin_blog_bp.route("/categories", methods=["GET"])
+@jwt_required()
+@admin_required
+def get_categories():
+    """Admin endpoint to get all blog categories."""
+    categories = blog_service.get_all_categories()
+    return jsonify(blog_category_schema.dump(categories, many=True)), 200
 
-# UPDATE a category
-@blog_management_bp.route('/categories/<int:category_id>', methods=['PUT'])
-@permissions_required('MANAGE_BLOG')
-def update_blog_category(category_id):
+@admin_blog_bp.route("/categories/<int:category_id>", methods=["PUT"])
+@jwt_required()
+@admin_required
+def update_category(category_id):
+    """Admin endpoint to update a blog category."""
     data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid JSON"), 400
-    if not BlogService.get_category_by_id(category_id):
-        return jsonify(status="error", message="Category not found"), 404
-
-    sanitized_data = sanitize_input(data)
+    if not data or 'name' not in data:
+        return jsonify({"error": "Invalid data, 'name' is required"}), 400
     try:
-        updated_category = BlogService.update_category(category_id, sanitized_data)
-        return jsonify(status="success", data=updated_category.to_dict()), 200
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        return jsonify(status="error", message="Failed to update category."), 500
+        updated_category = blog_service.update_category(category_id, data)
+        return jsonify(blog_category_schema.dump(updated_category)), 200
+    except NotFoundException as e:
+        return jsonify({"error": str(e)}), 404
+    except ValidationException as e:
+        return jsonify({"error": str(e)}), 400
 
-# DELETE a category
-@blog_management_bp.route('/categories/<int:category_id>', methods=['DELETE'])
-@permissions_required('MANAGE_BLOG')
-def delete_blog_category(category_id):
-    if not BlogService.get_category_by_id(category_id):
-        return jsonify(status="error", message="Category not found"), 404
+@admin_blog_bp.route("/categories/<int:category_id>", methods=["DELETE"])
+@jwt_required()
+@admin_required
+def delete_category(category_id):
+    """Admin endpoint to delete a blog category."""
     try:
-        BlogService.delete_category(category_id)
-        return jsonify(status="success", message="Category deleted successfully"), 200
-    except Exception as e:
-        # Proper logging should be implemented here
-        return jsonify(status="error", message=str(e)), 500
+        blog_service.delete_category(category_id)
+        return jsonify({"message": "Category deleted successfully"}), 200
+    except NotFoundException as e:
+        return jsonify({"error": str(e)}), 404
