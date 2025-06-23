@@ -1,0 +1,17 @@
+<!-- File: backend/templates/emails/b2c_order_confirmation.html -->
+{% extends "emails/b2c_base_template.html" %}
+{% block content %}
+    <h2 style="font-size: 24px; color: #374151; font-family: 'Teko', serif;">Merci pour votre commande ! (n°{{ order.id }})</h2>
+    <p>Bonjour {{ user.first_name }},</p>
+    <p>Votre commande a bien été reçue et est en cours de préparation. Vous trouverez ci-joint votre reçu au format PDF.</p>
+    <p><strong>Résumé de votre achat :</strong></p>
+    <ul>
+        {% for item in order.items %}
+        <li>{{ item.quantity }} x {{ item.product.name }}</li>
+        {% endfor %}
+    </ul>
+     <p style="font-weight: bold; margin-top: 20px;">Total : {{ order.total }}€</p>
+    <p>Nous vous enverrons un autre e-mail dès que votre commande sera expédiée.</p>
+    <p>À bientôt,<br>L'équipe Maison Trüvra</p>
+{% endblock %}
+
