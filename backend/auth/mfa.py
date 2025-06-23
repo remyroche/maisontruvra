@@ -8,6 +8,7 @@ import io
 from flask import Blueprint, jsonify, request, g, Response
 from flask_jwt_extended import get_jwt_identity
 from backend.auth.permissions import permission_required
+from backend.services.email_service import EmailService
 # Assume 'db' is a database connection manager and 'encryption_service' is configured
 
 mfa_bp = Blueprint('mfa', __name__)
@@ -94,6 +95,7 @@ def verify_mfa_setup():
         )
         conn.commit()
         # You should also generate and show the user their one-time recovery codes here.
+        EmailService.send_security_alert(user, "L'authentification à deux facteurs (2FA) a été activée")
         return jsonify({"message": "MFA has been successfully enabled."}), 200
     except Exception as e:
         conn.rollback()
