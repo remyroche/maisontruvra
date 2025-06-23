@@ -1,39 +1,37 @@
 from flask import Blueprint, request, jsonify
-from backend.services.audit_log_service import AuditLogService  # Assumed service
-from backend.auth.permissions import permissions_required
+from services.audit_log_service import AuditLogService
+from utils.auth_helpers import admin_required
+from utils.sanitization import sanitize_input
 
-audit_log_bp = Blueprint('audit_log_bp', __name__, url_prefix='/admin/audit-log')
+admin_audit_log_bp = Blueprint('admin_audit_log_bp', __name__)
+audit_log_service = AuditLogService()
 
-# READ all audit logs (with pagination and filtering)
-@audit_log_bp.route('/', methods=['GET'])
-@permissions_required('VIEW_AUDIT_LOG')
+@admin_audit_log_bp.route('/', methods=['GET'])
+@admin_required
 def get_audit_logs():
-    """
-    Get a paginated list of audit log entries.
-    Query Params:
-    - page: The page number to retrieve.
-    - per_page: The number of entries per page.
-    - user_id: Filter by the ID of the user who performed the action.
-    - action: Filter by the type of action performed.
-    """
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 50, type=int)
-        filters = {
-            'user_id': request.args.get('user_id', type=int),
-            'action': request.args.get('action', type=str)
-        }
-        filters = {k: v for k, v in filters.items() if v is not None}
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    user_id = sanitize_input(request.args.get('user_id'))
+    action_type = sanitize_input(request.args.get('action_type'))
+    start_date = sanitize_input(request.args.get('start_date'))
+    end_date = sanitize_input(request.args.get('end_date'))
+    sort_by = sanitize_input(request.args.get('sort_by', 'timestamp'))
+    sort_direction = sanitize_input(request.args.get('sort_direction', 'desc'))
 
-        logs_pagination = AuditLogService.get_all_logs_paginated(page=page, per_page=per_page, filters=filters)
-        
-        return jsonify({
-            "status": "success",
-            "data": [log.to_dict() for log in logs_pagination.items],
-            "total": logs_pagination.total,
-            "pages": logs_pagination.pages,
-            "current_page": logs_pagination.page
-        }), 200
-    except Exception as e:
-        # In a real app, log the error e
-        return jsonify(status="error", message="An internal error occurred while fetching audit logs."), 500
+    logs = audit_log_service.get_logs(
+        page=page,
+        per_page=per_page,
+        user_id=user_id,
+        action_type=action_type,
+        start_date=start_date,
+        end_date=end_date,
+        sort_by=sort_by,
+        sort_direction=sort_direction
+    )
+    
+    return jsonify({
+        'logs': [log.to_dict() for log in logs.items],
+        'total': logs.total,
+        'pages': logs.pages,
+        'current_page': logs.page
+    })
