@@ -1,71 +1,50 @@
-from flask import Blueprint, jsonify, send_file, redirect
-from backend.auth.permissions import b2b_user_required
-from flask_jwt_extended import get_jwt_identity
-from backend.services.invoice_service import InvoiceService
-from backend.services.exceptions import NotFoundException
+from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.services.b2b_service import B2BService
 from backend.auth.permissions import b2b_user_required
 
-invoice_routes = Blueprint('b2b_invoice_routes', __name__)
+b2b_invoice_bp = Blueprint('b2b_invoice_bp', __name__, url_prefix='/api/b2b/invoices')
 
-@b2b_bp.route('/invoices', methods=['GET'])
+# GET a list of invoices for the current B2B user
+@b2b_invoice_bp.route('/', methods=['GET'])
 @b2b_user_required
-def list_invoices():
+def get_invoices():
     """
-    Returns a list of all available invoices for the logged-in B2B user.
+    Get a paginated list of invoices for the currently authenticated B2B user.
     """
     user_id = get_jwt_identity()
-    conn = db.get_connection()
-    cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute(
-            """
-            SELECT id, order_id, invoice_number, generated_at
-            FROM invoices
-            WHERE user_id = %s AND deleted_at IS NULL
-            ORDER BY generated_at DESC
-            """,
-            (user_id,)
-        )
-        invoices = cursor.fetchall()
-        return jsonify(invoices), 200
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        
+        invoices_pagination = B2BService.get_user_invoices_paginated(user_id, page=page, per_page=per_page)
+        
+        return jsonify({
+            "status": "success",
+            "data": [invoice.to_dict() for invoice in invoices_pagination.items],
+            "total": invoices_pagination.total,
+            "pages": invoices_pagination.pages,
+            "current_page": invoices_pagination.page
+        }), 200
     except Exception as e:
-        logger.error(f"Failed to list invoices for user {user_id}: {e}")
-        return jsonify({"error": "An internal error occurred."}), 500
-    finally:
-        cursor.close()
-        conn.close()
+        # Log error e
+        return jsonify(status="error", message="An internal error occurred while fetching invoices."), 500
 
-@b2b_bp.route('/invoices/<int:invoice_id>/download', methods=['GET'])
+# GET a single invoice by ID
+@b2b_invoice_bp.route('/<int:invoice_id>', methods=['GET'])
 @b2b_user_required
-def download_invoice(invoice_id):
+def get_invoice(invoice_id):
     """
-    Provides a secure, temporary link to download a specific invoice PDF.
-    It generates a pre-signed URL to the private file in storage.
+    Get a single invoice by its ID.
+    Ensures the invoice belongs to the currently authenticated B2B user.
     """
     user_id = get_jwt_identity()
-    conn = db.get_connection()
-    cursor = conn.cursor(dictionary=True)
     try:
-        # 1. Verify the user owns this invoice before proceeding.
-        cursor.execute(
-            "SELECT file_path FROM invoices WHERE id = %s AND user_id = %s",
-            (invoice_id, user_id)
-        )
-        invoice = cursor.fetchone()
-        if not invoice:
-            return jsonify({"error": "Invoice not found or access denied."}), 404
-
-        # 2. Generate a temporary, secure URL to the file in storage (e.g., S3 pre-signed URL).
-        # This prevents direct, public access to the invoice files.
-        download_url = storage_service.generate_presigned_url(invoice['file_path'])
-        
-        # 3. Redirect the user's browser to the pre-signed URL to initiate the download.
-        return redirect(download_url, code=302)
-
+        invoice = B2BService.get_invoice_by_id_for_user(invoice_id, user_id)
+        if invoice:
+            return jsonify(status="success", data=invoice.to_dict_with_details()), 200
+        return jsonify(status="error", message="Invoice not found or you do not have permission to view it."), 404
     except Exception as e:
-        logger.error(f"Failed to generate download link for invoice {invoice_id}: {e}")
-        return jsonify({"error": "An internal error occurred."}), 500
-    finally:
-        cursor.close()
-        conn.close()
-        
+        # Log error e
+        return jsonify(status="error", message="An internal error occurred."), 500
+
