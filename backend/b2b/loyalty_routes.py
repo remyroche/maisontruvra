@@ -24,3 +24,31 @@ def get_loyalty_status():
         # Log the error e
         return jsonify(status="error", message="An internal error occurred while fetching loyalty status."), 500
 
+
+@b2b_loyalty_bp.route('/program-details', methods=['GET'])
+@b2b_user_required
+def get_loyalty_program_details():
+    """
+    Get all necessary information for the loyalty page.
+    This is now optimized to only fetch dynamic data:
+    1. The current user's status (points, tier, referral code).
+    2. A list of all available tiers with their admin-defined discount percentages.
+    """
+    user_id = get_jwt_identity()
+    try:
+        user_status = LoyaltyService.get_user_loyalty_status(user_id)
+        
+        # This method in LoyaltyService should be created to return a simple list:
+        # e.g., [{'name': 'Partenaire', 'discount_percentage': 10}, ...]
+        tier_discounts = LoyaltyService.get_all_tier_discounts() 
+        
+        if user_status is None:
+            return jsonify(status="error", message="Could not retrieve loyalty information for this user."), 404
+            
+        return jsonify(status="success", data={
+            "userStatus": user_status,
+            "tierDiscounts": tier_discounts
+        }), 200
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An internal error occurred while fetching loyalty program details."), 500
