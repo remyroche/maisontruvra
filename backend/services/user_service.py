@@ -1,4 +1,5 @@
 from models import db, User, Address, Role
+from sqlalchemy.orm import joinedload, subqueryload
 from werkzeug.security import generate_password_hash, check_password_hash
 from utils.auth_helpers import send_password_reset_email
 from argon2 import PasswordHasher
@@ -7,6 +8,36 @@ from utils.encryption import encrypt_data
 ph = PasswordHasher()
 
 class UserService:
+    def get_all_users_paginated(self, page, per_page, role=None, search_term=None):
+        """
+        Gets a paginated list of users, eagerly loading relationships
+        to prevent N+1 query problems.
+        """
+        query = User.query.options(
+            joinedload(User.addresses),
+            subqueryload(User.orders) # Use subqueryload for collections to avoid cartesian product
+        )
+        
+        if role:
+            query = query.filter(User.roles.any(name=role))
+        if search_term:
+            # Note: Searching encrypted fields with ILIKE is not efficient and 
+            # might not work depending on the database. For production, consider
+            # a different approach for searching encrypted data.
+            search_term_encrypted = encrypt_data(f"%{search_term}%")
+            query = query.filter(User._email.ilike(search_term_encrypted) | User._first_name.ilike(search_term_encrypted) | User._last_name.ilike(search_term_encrypted))
+            
+        return query.order_by(User.id).paginate(page=page, per_page=per_page, error_out=False)
+
+    def get_user_by_id(self, user_id):
+        """
+        Gets a single user by ID, eagerly loading relationships.
+        """
+        return User.query.options(
+            joinedload(User.addresses),
+            subqueryload(User.orders)
+        ).get(user_id)
+
     def create_user(self, data, by_admin=False):
         email = data.get('email')
         if User.query.filter_by(_email=encrypt_data(email)).first():
@@ -54,9 +85,6 @@ class UserService:
         user = self.get_user_by_id(user_id)
         user.set_password(new_password)
         db.session.commit()
-
-    def get_user_by_id(self, user_id):
-        return User.query.get(user_id)
 
     def get_user_by_email(self, email):
         return User.query.filter_by(_email=encrypt_data(email)).first()
@@ -114,7 +142,52 @@ class UserService:
             db.session.commit()
             return True
         return False
+    
+    def get_all_roles(self):
+        return Role.query.all()
 
+    def update_user_roles(self, user_id, role_ids):
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        
+        roles = Role.query.filter(Role.id.in_(role_ids)).all()
+        user.roles = roles
+        db.session.commit()
+        return user
+    
+    def update_password(self, user_id, new_password):
+        user = self.get_user_by_id(user_id)
+        user.set_password(new_password)
+        db.session.commit()
+
+        
+    def authenticate_user(self, email, password):
+        user = self.get_user_by_email(email)
+        if user and user.check_password(password):
+            return user
+        return None
+    
+    def authenticate_admin(self, email, password):
+        user = self.get_user_by_email(email)
+        if user and user.check_password(password) and user.is_admin:
+            return user
+        return None
+
+    def delete_user(self, user_id):
+        user = self.get_user_by_id(user_id)
+        if user:
+            db.session.delete(user)
+            db.session.commit()
+            return True
+        return False
+
+    def add_address(self, user_id, data):
+        address = Address(user_id=user_id, **data)
+        db.session.add(address)
+        db.session.commit()
+        return address
+        
     def get_all_users_paginated(self, page, per_page, role=None, search_term=None):
         query = User.query
         if role:
@@ -124,13 +197,7 @@ class UserService:
             query = query.filter(User._email.ilike(search_term_encrypted) | User._first_name.ilike(search_term_encrypted) | User._last_name.ilike(search_term_encrypted))
         return query.paginate(page=page, per_page=per_page, error_out=False)
     
-    def get_all_roles(self):
-        return Role.query.all()
 
-    def update_user_roles(self, user_id, role_ids):
-        user = self.get_user_by_id(user_id)
-        if not user:
-            return None
         
         roles = Role.query.filter(Role.id.in_(role_ids)).all()
         user.roles = roles
