@@ -1,9 +1,12 @@
 from flask import Blueprint, request, jsonify
 from backend.services.b2b_service import B2BService  # Assumed service
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import permissions_required
+from backend.auth.permissions import permissions_required, admin_required
+from utils.sanitization import sanitize_input
+from services.user_service import UserService
 
 b2b_management_bp = Blueprint('b2b_management_bp', __name__, url_prefix='/admin/b2b')
+user_service = UserService()
 
 # READ all B2B accounts (paginated with filtering)
 @b2b_management_bp.route('/', methods=['GET'])
@@ -18,8 +21,10 @@ def get_b2b_accounts():
     """
     try:
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        status = request.args.get('status', type=str)
+        per_page = request.args.get('per_page', 10, type=int)
+        status = sanitize_input(request.args.get('status'))
+        sort_by = sanitize_input(request.args.get('sort_by', 'company_name'))
+        sort_direction = sanitize_input(request.args.get('sort_direction', 'asc'))
         
         filters = {'status': status} if status else {}
         
