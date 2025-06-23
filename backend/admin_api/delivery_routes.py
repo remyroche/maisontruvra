@@ -23,7 +23,7 @@ def get_all_tiers():
 @permissions_required('MANAGE_DELIVERY')
 def create_delivery_method():
     """Admin endpoint to create a new delivery method."""
-    data = request.get_json()
+    data = sanitize_input(request.get_json())
     if not data or not data.get('name') or 'price' not in data:
         return jsonify(status="error", message="Name and price are required."), 400
     
@@ -38,7 +38,7 @@ def create_delivery_method():
 @permissions_required('MANAGE_DELIVERY')
 def update_delivery_method(method_id):
     """Admin endpoint to update a delivery method."""
-    data = request.get_json()
+    data = sanitize_input(request.get_json())
     try:
         updated_method = DeliveryService.update_method(method_id, data)
         return jsonify(status="success", data=updated_method.to_dict())
