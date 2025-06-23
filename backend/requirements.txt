@@ -3,6 +3,7 @@ celery
 redis
 mysql-connector-python
 APScheduler
+flask-talisman
 alembic==1.13.1
 blinker==1.7.0
 bleach==6.1.0
