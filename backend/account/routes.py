@@ -1,174 +1,104 @@
-from flask_jwt_extended import jwt_required, get_jwt_identity,create_access_token
-from backend.services.user_service import UserService
-from backend.services.order_service import OrderService
-from backend.services.exceptions import ServiceException
-from backend.auth.permissions import permission_required
-import datetime
 from flask import Blueprint, request, jsonify
-from backend.models.user_models import User
-from backend.extensions import db
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.services.user_service import UserService
 from backend.utils.sanitization import sanitize_input
 
+account_bp = Blueprint('account_bp', __name__, url_prefix='/api/account')
 
-account_bp = Blueprint('account_bp', __name__)
-
+# GET current user's profile
 @account_bp.route('/profile', methods=['GET'])
 @jwt_required()
 def get_profile():
+    """
+    Get the profile information for the currently authenticated user.
+    """
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = UserService.get_user_by_id(user_id)
     if not user:
-        return jsonify({"msg": "User not found"}), 404
+        return jsonify(status="error", message="User not found"), 404
+    
+    return jsonify(status="success", data=user.to_dict()), 200
 
-    return jsonify({
-        "id": user.id,
-        "email": user.email,
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-        "phone_number": user.phone_number,
-        "address": user.address,
-        "siret_number": user.siret_number
-        # Add other user fields as needed
-    }), 200
-
-
-@account_bp.route('/orders', methods=['GET'])
-@jwt_required()
-def get_user_orders():
-    user_id = get_jwt_identity()
-    try:
-        orders = OrderService.get_orders_by_user(user_id)
-        return jsonify([order.to_dict() for order in orders]), 200
-    except ServiceException as e:
-        return jsonify({"msg": str(e)}), 500
-
-@account_bp.route('/orders/<int:order_id>', methods=['GET'])
-@jwt_required()
-def get_user_order_detail(order_id):
-    user_id = get_jwt_identity()
-    try:
-        order = OrderService.get_order_details(order_id, user_id)
-        if not order:
-             return jsonify({"msg": "Order not found or access denied"}), 404
-        return jsonify(order.to_dict_detailed()), 200
-    except ServiceException as e:
-        return jsonify({"msg": str(e)}), 500
-
-
-# --- User Registration ---
-
-@account_bp.route('/register', methods=['POST'])
-def create_account():
-    """
-    Creates a new B2C user account.
-    B2B registration would likely have a separate, more complex flow.
-    """
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
-    name = data.get('name')
-
-    if not all([email, password, name]):
-        return jsonify({"error": "Email, password, and name are required."}), 400
-
-    if User.find_by_email(email):
-        return jsonify({"error": "An account with this email already exists."}), 409
-
-    try:
-        # The create method on the User model should handle password hashing.
-        user = User.create(name=name, email=email, password=password, role='B2C')
-        
-        # Add a job to the queue to send a welcome email.
-        queue.enqueue('worker.send_email', {'type': 'welcome', 'recipient': user.email})
-
-        return jsonify({"message": f"Account for {user.email} created successfully."}), 201
-
-    except Exception as e:
-        logger.error(f"Error during account registration for {email}: {e}")
-        return jsonify({"error": "An internal error occurred during registration."}), 500
-
-# --- Password Reset Flow ---
-
-@account_bp.route('/password/request-reset', methods=['POST'])
-def request_password_reset():
-    """
-    Initiates the password reset process for a user.
-    Generates a secure, single-use token and sends it to the user's email.
-    """
-    data = request.get_json()
-    email = data.get('email')
-    user = User.find_by_email(email)
-
-    if user:
-        try:
-            # Generate a secure token and its expiration.
-            token = PasswordResetToken.generate(user.id)
-            reset_link = f"https://yourfrontend.com/reset-password?token={token}"
-            
-            # Queue an email to be sent with the reset link.
-            queue.enqueue(
-                'worker.send_email',
-                {
-                    'type': 'password_reset',
-                    'recipient': user.email,
-                    'context': {'reset_link': reset_link}
-                }
-            )
-        except Exception as e:
-            logger.error(f"Error generating password reset token for {email}: {e}")
-            # Do not expose the error to the user for security reasons.
-
-    # Always return a success message to prevent user enumeration attacks.
-    return jsonify({"message": "If an account with that email exists, a password reset link has been sent."}), 200
-
-@account_bp.route('/password/reset', methods=['POST'])
-def reset_password():
-    """
-    Resets the user's password using a valid token.
-    """
-    data = request.get_json()
-    token = data.get('token')
-    new_password = data.get('new_password')
-
-    if not all([token, new_password]):
-        return jsonify({"error": "Token and new_password are required."}), 400
-
-    # The service method should validate the token, check its expiry,
-    # find the user, update the password, and invalidate the token.
-    success = PasswordResetToken.use_token_to_reset_password(token, new_password)
-
-    if success:
-        return jsonify({"message": "Your password has been reset successfully."}), 200
-    else:
-        return jsonify({"error": "Invalid or expired token."}), 400
-
-# --- Profile Management ---
-
+# UPDATE current user's profile
 @account_bp.route('/profile', methods=['PUT'])
-@permission_required() # Requires a logged-in user
+@jwt_required()
 def update_profile():
     """
-    Allows a logged-in user to update their personal information.
+    Update the profile information for the currently authenticated user.
     """
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({"msg": "User not found"}), 404
-
     data = request.get_json()
+    if not data:
+        return jsonify(status="error", message="Invalid or missing JSON body"), 400
+    
     sanitized_data = sanitize_input(data)
 
-    # Define which fields are updatable to prevent unwanted changes.
-    updatable_fields = ['name', 'shipping_address', 'phone_number']
-    update_data = {key: value for key, value in data.items() if key in updatable_fields}
-
-    if not update_data:
-        return jsonify({"error": "No updatable fields provided."}), 400
+    # For security, certain fields should not be updatable via this endpoint.
+    sanitized_data.pop('password', None)
+    sanitized_data.pop('email', None) # Email changes should have a separate, verified flow.
+    sanitized_data.pop('role', None) # Role should only be changed by an admin.
+    sanitized_data.pop('is_mfa_enabled', None)
 
     try:
-        user = User.update(user_id, update_data)
-        return jsonify({"message": "Profile updated successfully.", "user": user.to_dict()}), 200
+        updated_user = UserService.update_user(user_id, sanitized_data)
+        if not updated_user:
+             return jsonify(status="error", message="User not found or update failed"), 404
+        return jsonify(status="success", data=updated_user.to_dict()), 200
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
     except Exception as e:
-        logger.error(f"Error updating profile for user {user_id}: {e}")
-        return jsonify({"error": "An internal error occurred."}), 500
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred while updating the profile."), 500
 
+# UPDATE current user's password
+@account_bp.route('/password', methods=['PUT'])
+@jwt_required()
+def update_password():
+    """
+    Update the password for the currently authenticated user.
+    Requires the old password for verification.
+    """
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    if not data or 'old_password' not in data or 'new_password' not in data:
+        return jsonify(status="error", message="Both old_password and new_password are required."), 400
+
+    old_password = data['old_password'] # Do not sanitize passwords
+    new_password = data['new_password']
+
+    try:
+        # The service should handle verification of the old password
+        if UserService.update_password(user_id, old_password, new_password):
+            return jsonify(status="success", message="Password updated successfully."), 200
+        else:
+            return jsonify(status="error", message="Invalid current password or failed to update."), 400
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An internal error occurred."), 500
+
+# GET current user's order history
+@account_bp.route('/orders', methods=['GET'])
+@jwt_required()
+def get_order_history():
+    """
+    Get the order history for the currently authenticated user.
+    """
+    user_id = get_jwt_identity()
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        # Assumes a service method to get orders for a specific user
+        orders_pagination = UserService.get_user_orders_paginated(user_id, page=page, per_page=per_page)
+        
+        return jsonify({
+            "status": "success",
+            "data": [order.to_dict_for_user() for order in orders_pagination.items], # Use a user-safe serializer
+            "total": orders_pagination.total,
+            "pages": orders_pagination.pages,
+            "current_page": orders_pagination.page
+        }), 200
+    except Exception as e:
+        # Log the error e
+        return jsonify(status="error", message="An error occurred while fetching order history."), 500
