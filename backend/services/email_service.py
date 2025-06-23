@@ -89,10 +89,10 @@ class EmailService:
         frontend_url = current_app.config.get('FRONTEND_URL', 'http://127.0.0.1:5173')
         reset_url = f"{frontend_url}/reset-password?token={reset_token}"
         EmailService._send_email(
-            subject="Réinitialisation de votre mot de passe - Maison Trüvra",
+            subject="Demande de réinitialisation de votre mot de passe - Maison Trüvra",
             recipients=[user.email],
             reset_link=[reset_link],
-            template="password_reset.html",
+            template="password_reset_request.html",
             context={"reset_url": reset_url, "user_name": user.first_name},
         )
 
