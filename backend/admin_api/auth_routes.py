@@ -1,9 +1,64 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from backend.auth.mfa import MfaService # Assumed service
-from backend.utils.sanitization import sanitize_input
+from backend.utils.sanitization import sanitize_inputfrom flask import Blueprint, request, jsonify, session
+from services.user_service import UserService
+from services.mfa_service import MFAService
+from flask_login import login_user, logout_user, current_user
+from utils.auth_helpers import admin_required
+from utils.sanitization import sanitize_input
 
-admin_auth_bp = Blueprint('admin_auth_bp', __name__, url_prefix='/admin/auth')
+admin_auth_bp = Blueprint('admin_auth_bp', __name__)
+user_service = UserService()
+mfa_service = MFAService()
+
+@admin_auth_bp.route('/login', methods=['POST'])
+def admin_login():
+    data = sanitize_input(request.get_json())
+    email = data.get('email')
+    password = data.get('password')
+    
+    user = user_service.authenticate_admin(email, password)
+    if user:
+        if user.two_factor_enabled:
+            session['2fa_user_id'] = user.id
+            return jsonify({'2fa_required': True}), 200
+        else:
+            login_user(user)
+            return jsonify({'message': 'Admin login successful'}), 200
+    
+    return jsonify({'error': 'Invalid credentials or not an admin'}), 401
+
+@admin_auth_bp.route('/2fa/verify', methods=['POST'])
+def verify_2fa_login():
+    data = sanitize_input(request.get_json())
+    user_id = session.get('2fa_user_id')
+    token = data.get('token')
+
+    if not user_id:
+        return jsonify({'error': '2FA process not initiated'}), 400
+
+    if mfa_service.verify_2fa_login(user_id, token):
+        user = user_service.get_user_by_id(user_id)
+        login_user(user)
+        session.pop('2fa_user_id', None)
+        return jsonify({'message': '2FA verification successful'}), 200
+    
+    return jsonify({'error': 'Invalid 2FA token'}), 401
+
+
+@admin_auth_bp.route('/logout', methods=['POST'])
+@admin_required
+def admin_logout():
+    logout_user()
+    return jsonify({'message': 'Admin logout successful'})
+
+@admin_auth_bp.route('/check-auth', methods=['GET'])
+def check_auth_status():
+    if current_user.is_authenticated and current_user.is_admin():
+        return jsonify({'is_authenticated': True, 'user': current_user.to_dict()})
+    return jsonify({'is_authenticated': False})
+
 
 # Setup MFA for an admin user
 @admin_auth_bp.route('/mfa/setup', methods=['POST'])
