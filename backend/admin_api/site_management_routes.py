@@ -1,29 +1,45 @@
 from flask import Blueprint, request, jsonify
-from backend.services.settings_service import SettingsService
-from backend.auth.permissions import admin_required
+from backend.services.site_settings_service import SiteSettingsService # Assumed service
+from backend.utils.sanitization import sanitize_input
+from backend.auth.permissions import permissions_required
 
-site_management_routes = Blueprint('site_management_routes', __name__)
+site_management_bp = Blueprint('site_management_bp', __name__, url_prefix='/admin/site-settings')
 
-@site_management_routes.route('/settings', methods=['GET'])
-@admin_required
+# READ all site settings
+@site_management_bp.route('/', methods=['GET'])
+@permissions_required('MANAGE_SITE_SETTINGS')
 def get_site_settings():
-    settings = SettingsService.get_all_settings()
-    return jsonify(settings), 200
-
-@site_management_routes.route('/settings', methods=['POST'])
-@admin_required
-def update_site_settings():
-    settings_data = request.get_json()
+    """
+    Retrieve all site settings.
+    """
     try:
-        SettingsService.update_settings(settings_data)
-        return jsonify({"message": "Settings updated successfully"}), 200
+        settings = SiteSettingsService.get_all_settings()
+        return jsonify(status="success", data=settings), 200
     except Exception as e:
-        return jsonify({"error": f"Failed to update settings: {str(e)}"}), 500
+        # Proper logging should be implemented here
+        return jsonify(status="error", message="An internal error occurred while fetching site settings."), 500
 
-@site_management_routes.route('/maintenance-mode', methods=['POST'])
-@admin_required
-def toggle_maintenance_mode():
+# UPDATE site settings
+@site_management_bp.route('/', methods=['PUT'])
+@permissions_required('MANAGE_SITE_SETTINGS')
+def update_site_settings():
+    """
+    Update one or more site settings.
+    Expects a JSON object where keys are the setting names and values are the new values.
+    """
     data = request.get_json()
-    is_enabled = data.get('enabled', False)
-    SettingsService.set_setting('maintenance_mode', is_enabled)
-    return jsonify({"message": f"Maintenance mode {'enabled' if is_enabled else 'disabled'}."})
+    if not data or not isinstance(data, dict):
+        return jsonify(status="error", message="Invalid or missing JSON object in request body"), 400
+
+    # Sanitize all incoming values
+    sanitized_data = sanitize_input(data)
+
+    try:
+        updated_settings = SiteSettingsService.update_settings(sanitized_data)
+        return jsonify(status="success", message="Site settings updated successfully.", data=updated_settings), 200
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
+    except Exception as e:
+        # Proper logging should be implemented here
+        return jsonify(status="error", message="An internal error occurred while updating site settings."), 500
+
