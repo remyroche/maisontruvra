@@ -1,143 +1,124 @@
-from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
-from backend.models.user_models import User
-from backend.extensions import db, bcrypt
-from backend.utils.auth_helpers import send_password_reset_email
-from backend.extensions import limiter
+from flask import Blueprint, request, jsonify
+from backend.services.auth_service import AuthService
 from backend.utils.sanitization import sanitize_input
 
-auth_bp = Blueprint('auth_bp', __name__)
+auth_bp = Blueprint('auth_bp', __name__, url_prefix='/api/auth')
 
-
+# User Registration
 @auth_bp.route('/register', methods=['POST'])
-@limiter.limit("10/hour")
 def register():
-    """User registration route."""
-    data = sanitize_input(request.get_json())
-    email = data.get('email')
-    password = data.get('password')
-
-    if not email or not password:
-        return jsonify({"msg": "Email and password are required"}), 400
-
-    if User.query.filter_by(email=email).first():
-        return jsonify({"msg": "Email already exists"}), 409
-
-    hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
-    new_user = User(email=email, password=hashed_password)
-    db.session.add(new_user)
-    db.session.commit()
-
-    return jsonify({"msg": "User created successfully"}), 201
-
-@auth_bp.route('/login', methods=['POST'])
-@limiter.limit("10/hour")
-def login():
-    """User login route."""
-    data = sanitize_input(request.get_json())
-    email = data.get('email')
-    password = data.get('password')
-    user = User.query.filter_by(email=email).first()
-
-    if user and bcrypt.check_password_hash(user.password, password):
-        access_token = create_access_token(identity=user.id)
-        refresh_token = create_refresh_token(identity=user.id)
-        return jsonify(access_token=access_token, refresh_token=refresh_token), 200
-
-    return jsonify({"msg": "Bad email or password"}), 401
-
-@auth_bp.route('/refresh', methods=['POST'])
-@jwt_required(refresh=True)
-def refresh():
-    """Refresh token route."""
-    current_user_id = get_jwt_identity()
-    new_access_token = create_access_token(identity=current_user_id)
-    return jsonify(access_token=new_access_token), 200
-
-@auth_bp.route('/forgot-password', methods=['POST'])
-@limiter.limit("5/hour")
-def forgot_password():
-    """Forgot password route."""
-    data = sanitize_input(request.get_json())
-    email = data.get('email')
-    user = User.query.filter_by(email=email).first()
-
-    if user:
-        send_password_reset_email(user)
-
-    # Return a generic message to prevent user enumeration
-    return jsonify({"msg": "If your email is in our system, you will receive a password reset link."}), 200
-
-@auth_bp.route('/reset-password', methods=['POST'])
-@limiter.limit("5/hour")
-def reset_password():
-    """Reset password route."""
-    data = sanitize_input(request.get_json())
-    token = data.get('token')
-    new_password = data.get('password')
-
-    if not token or not new_password:
-        return jsonify({"msg": "Token and new password are required"}), 400
-
-    user = User.verify_reset_password_token(token)
-
-    if not user:
-        return jsonify({"msg": "Invalid or expired token"}), 400
-
-    user.password = bcrypt.generate_password_hash(new_password).decode('utf-8')
-    db.session.commit()
-
-    return jsonify({"msg": "Password has been reset successfully"}), 200
-    
-@auth_bp.route('/login/verify-mfa', methods=['POST'])
-def verify_login_mfa():
     """
-    Verifies the MFA token for a staff user.
-    Requires the temporary 'mfa_token' from the first login step.
+    Register a new user account.
     """
     data = request.get_json()
-    mfa_token = data.get('mfa_token')
-    totp_code = data.get('totp_code')
+    if not data:
+        return jsonify(status="error", message="Invalid JSON"), 400
 
-    # This endpoint must be accessed with the temporary token.
-    # A custom decorator would be ideal here. For simplicity:
-    try:
-        # Decode the token to verify it and get the user identity.
-        decoded_token = decode_token(mfa_token)
-        if not decoded_token['mfa_required']:
-             return jsonify({"error": "Invalid token for MFA verification."}), 401
-        user_id = decoded_token['sub']
-    except:
-        return jsonify({"error": "Invalid or expired MFA token."}), 401
-
-    # Fetch user's MFA secret from DB
-    secret = User.get_mfa_secret(user_id) # This should decrypt the secret
+    sanitized_data = sanitize_input(data)
     
-    # Verify the code
-    totp = pyotp.TOTP(secret)
-    if not totp.verify(totp_code):
-        return jsonify({"error": "Invalid MFA code."}), 401
+    required_fields = ['email', 'password', 'first_name', 'last_name']
+    if not all(field in sanitized_data for field in required_fields):
+        return jsonify(status="error", message="Missing required fields"), 400
 
-    # On success, issue a new, fully-scoped access token.
-    # Crucially, this new token contains a claim indicating MFA was completed.
-    additional_claims = {"mfa_verified": True}
-    access_token = create_access_token(
-        identity=user_id,
-        additional_claims=additional_claims
-    )
-    return jsonify(access_token=access_token), 200
+    try:
+        # The AuthService handles user creation, password hashing, and validation
+        user = AuthService.register_user(sanitized_data)
+        return jsonify(status="success", message="User registered successfully.", data=user.to_dict()), 201
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 409 # Conflict
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An internal server error occurred."), 500
 
-
-@auth_bp.route('/logout', methods=['POST'])
-@jwt_required()
-def logout():
+# User Login
+@auth_bp.route('/login', methods=['POST'])
+def login():
     """
-    Endpoint to handle user logout.
-    In a token-based system, the client is responsible for discarding the token.
-    This endpoint can be used for logging or to manage a token blocklist if implemented.
+    Authenticate a user and return JWT tokens.
+    Handles the first step of MFA if enabled.
     """
-    # For a simple implementation, we just confirm the action.
-    # For a more advanced setup, you could add the token's jti to a blocklist.
-    return jsonify({"msg": "Successfully logged out"}), 200
+    data = request.get_json()
+    if not data or 'email' not in data or 'password' not in data:
+        return jsonify(status="error", message="Email and password are required."), 400
 
+    email = sanitize_input(data['email'])
+    password = data['password'] # Do not sanitize password
+    
+    try:
+        # AuthService returns a dictionary with tokens and MFA status
+        result = AuthService.login_user(email, password)
+        return jsonify(status="success", **result), 200
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 401 # Unauthorized
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An internal server error occurred."), 500
 
+# MFA Verification
+@auth_bp.route('/login/verify-mfa', methods=['POST'])
+def verify_mfa():
+    """
+    Verify the MFA token for a user who has already passed the password check.
+    """
+    data = request.get_json()
+    if not data or 'user_id' not in data or 'mfa_token' not in data:
+        return jsonify(status="error", message="user_id and mfa_token are required."), 400
+
+    user_id = data['user_id']
+    mfa_token = sanitize_input(data['mfa_token'])
+
+    try:
+        # AuthService verifies the MFA token and returns final JWTs
+        tokens = AuthService.verify_mfa_login(user_id, mfa_token)
+        return jsonify(status="success", **tokens), 200
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 401 # Unauthorized
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An internal server error occurred."), 500
+
+# Password Reset Request
+@auth_bp.route('/password/request-reset', methods=['POST'])
+def request_password_reset():
+    """
+    Initiate a password reset request. Sends an email with a reset token.
+    """
+    data = request.get_json()
+    if not data or 'email' not in data:
+        return jsonify(status="error", message="Email is required."), 400
+    
+    email = sanitize_input(data['email'])
+
+    try:
+        # This service method finds the user, generates a token, and dispatches an email.
+        # It should always return a success message to prevent user enumeration.
+        AuthService.request_password_reset(email)
+        return jsonify(status="success", message="If an account with that email exists, a password reset link has been sent."), 200
+    except Exception as e:
+        # Log error e but still return a generic message
+        return jsonify(status="success", message="If an account with that email exists, a password reset link has been sent."), 200
+
+# Password Reset Confirmation
+@auth_bp.route('/password/confirm-reset', methods=['POST'])
+def confirm_password_reset():
+    """
+    Reset a user's password using a valid token.
+    """
+    data = request.get_json()
+    if not data or 'token' not in data or 'new_password' not in data:
+        return jsonify(status="error", message="A token and new_password are required."), 400
+
+    token = data['token']
+    new_password = data['new_password']
+
+    try:
+        # This service method verifies the token and updates the password
+        if AuthService.confirm_password_reset(token, new_password):
+            return jsonify(status="success", message="Your password has been reset successfully."), 200
+        else:
+            return jsonify(status="error", message="Invalid or expired token."), 400
+    except ValueError as e:
+        return jsonify(status="error", message=str(e)), 400
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An internal server error occurred."), 500
