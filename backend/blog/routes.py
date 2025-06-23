@@ -1,35 +1,59 @@
-from flask import Blueprint, jsonify, abort
-from backend.services.product_service import ProductService
+from flask import Blueprint, request, jsonify
+from backend.services.blog_service import BlogService
+from backend.utils.sanitization import sanitize_input
 
-blog_bp = Blueprint('blog_bp', __name__)
+blog_bp = Blueprint('blog_bp', __name__, url_prefix='/api/blog')
 
+# READ all published blog posts (paginated and filterable)
 @blog_bp.route('/posts', methods=['GET'])
-def get_published_posts():
+def get_public_blog_posts():
     """
-    Get all published blog posts.
+    Get a paginated list of all published blog posts.
     """
-    # Simplified: using ProductService to get 'blog' type products.
-    # A real implementation would likely have a dedicated BlogService with more features.
-    posts = ProductService.get_published_products_by_type('blog')
-    return jsonify([p.to_dict() for p in posts]), 200
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        category_slug = sanitize_input(request.args.get('category'))
+        
+        filters = {'status': 'published'}
+        if category_slug:
+            filters['category_slug'] = category_slug
+            
+        posts_pagination = BlogService.get_all_posts_paginated(page=page, per_page=per_page, filters=filters)
+        
+        return jsonify({
+            "status": "success",
+            "data": [p.to_dict_for_public() for p in posts_pagination.items],
+            "total": posts_pagination.total,
+            "pages": posts_pagination.pages,
+            "current_page": posts_pagination.page
+        }), 200
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An error occurred while fetching blog posts."), 500
 
+# READ a single published blog post by its slug
 @blog_bp.route('/posts/<string:slug>', methods=['GET'])
-def get_post_by_slug(slug):
+def get_public_blog_post(slug):
     """
-    Get a single blog post by its slug.
+    Get a single published blog post by its slug.
     """
-    post = ProductService.get_product_by_slug(slug)
-    if not post or post.product_type != 'blog':
-        abort(404, description="Blog post not found.")
-    
-    return jsonify(post.to_dict()), 200
+    clean_slug = sanitize_input(slug)
+    post = BlogService.get_published_post_by_slug(clean_slug)
+    if not post:
+        return jsonify(status="error", message="Blog post not found"), 404
+        
+    return jsonify(status="success", data=post.to_dict_for_public()), 200
 
+# READ all blog categories
 @blog_bp.route('/categories', methods=['GET'])
-def get_blog_categories():
+def get_public_blog_categories():
     """
-    Get all blog post categories.
+    Get a list of all blog categories that have at least one published post.
     """
-    # This might need a dedicated service method to distinguish blog categories
-    # from product categories if they share the same model.
-    categories = ProductService.get_all_categories() # Assuming shared categories for now
-    return jsonify([c.to_dict() for c in categories]), 200
+    try:
+        categories = BlogService.get_public_categories()
+        return jsonify(status="success", data=[c.to_dict() for c in categories]), 200
+    except Exception as e:
+        # Log error e
+        return jsonify(status="error", message="An error occurred while fetching categories."), 500
