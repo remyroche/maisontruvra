@@ -138,7 +138,7 @@ def setup_security_headers(app):
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         return response
 
-# Note: The following functions (rbac_check, sanitize_request_data) are decorators.
+# Note: The following functions (sanitize_request_data) are decorators.
 # They are not middleware in the same way as the functions above. They are designed
 # to be applied manually to specific routes that require them, offering granular control.
 
