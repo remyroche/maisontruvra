@@ -1,58 +1,110 @@
 <template>
-  <footer class="bg-gray-100 text-gray-700">
-    <div class="container mx-auto px-6 py-12">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-        <div>
-          <h3 class="font-bold uppercase">Maison Trüvra</h3>
-          <p class="mt-4 text-sm">L'art de la truffe, une tradition familiale.</p>
+  <footer class="bg-gray-50" aria-labelledby="footer-heading">
+    <h2 id="footer-heading" class="sr-only">Footer</h2>
+    <div class="mx-auto max-w-7xl px-4 pt-16 pb-8 sm:px-6 lg:px-8 lg:pt-24">
+      <div class="xl:grid xl:grid-cols-3 xl:gap-8">
+        <div class="grid grid-cols-2 gap-8 xl:col-span-2">
+          <div class="md:grid md:grid-cols-2 md:gap-8">
+            <div>
+              <h3 class="text-sm font-semibold leading-6 text-gray-900">Explorer</h3>
+              <ul role="list" class="mt-6 space-y-4">
+                <li>
+                  <a href="/products.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Boutique</a>
+                </li>
+                 <li>
+                  <a href="/notre-maison.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Notre Maison</a>
+                </li>
+                <li>
+                  <a href="/le-journal.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Le Journal</a>
+                </li>
+                 <li>
+                  <a href="/charte-qualite.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Charte Qualité</a>
+                </li>
+              </ul>
+            </div>
+            <div class="mt-10 md:mt-0">
+              <h3 class="text-sm font-semibold leading-6 text-gray-900">Professionnels</h3>
+              <ul role="list" class="mt-6 space-y-4">
+                <li>
+                  <a href="/professionnels.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Espace Pro</a>
+                </li>
+                <li>
+                  <a href="/pro/register.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Devenir Partenaire</a>
+                </li>
+                 <li>
+                  <a href="/pro/contact.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Contact Pro</a>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="md:grid md:grid-cols-2 md:gap-8">
+            <div>
+              <h3 class="text-sm font-semibold leading-6 text-gray-900">Aide</h3>
+              <ul role="list" class="mt-6 space-y-4">
+                <li>
+                  <a href="/contact.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Contact</a>
+                </li>
+                <li>
+                  <a href="/faq.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">FAQ</a>
+                </li>
+                <li>
+                  <a href="/livraison.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Livraison & Retours</a>
+                </li>
+              </ul>
+            </div>
+            <div class="mt-10 md:mt-0">
+              <h3 class="text-sm font-semibold leading-6 text-gray-900">Légal</h3>
+              <ul role="list" class="mt-6 space-y-4">
+                <li>
+                  <a href="/politique-confidentialite.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Confidentialité</a>
+                </li>
+                <li>
+                  <a href="/cgv.html" class="text-sm leading-6 text-gray-600 hover:text-gray-900">CGV</a>
+                </li>
+                 <li>
+                  <a href="#" @click.prevent="openCookieSettings" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Préférences cookies</a>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
-        <div>
-          <h3 class="font-bold uppercase">Service Client</h3>
-          <nav class="mt-4 space-y-2 text-sm">
-            <a href="/contact.html" class="hover:text-black transition-colors duration-300">Nous Contacter</a><br>
-            <a href="/faq.html" class="hover:text-black transition-colors duration-300">FAQ</a><br>
-            <a href="/livraison.html" class="hover:text-black transition-colors duration-300">Livraison & Retours</a>
-          </nav>
-        </div>
-        <div>
-          <h3 class="font-bold uppercase">Informations</h3>
-          <nav class="mt-4 space-y-2 text-sm">
-            <a href="/mentions-legales.html" class="hover:text-black transition-colors duration-300">Mentions Légales</a><br>
-            <a href="/cgv.html" class="hover:text-black transition-colors duration-300">Conditions Générales de Vente</a><br>
-            <a href="/politique-confidentialite.html" class="hover:text-black transition-colors duration-300">Politique de Confidentialité</a>
-          </nav>
-        </div>
-        <div>
-          <h3 class="font-bold uppercase">Devenez un initié de la truffe</h3>
-          <p class="mt-4 text-sm">Recevez nos secrets et offres exclusives.</p>
-          <form class="mt-4 flex" @submit.prevent="submitNewsletter">
-            <input type="email" placeholder="Votre email" class="w-full px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-gray-500">
-            <button type="submit" class="bg-black text-white px-4 py-2 rounded-r-md hover:bg-gray-800 transition-colors duration-300">S'inscrire</button>
-          </form>
+        <div class="mt-10 xl:mt-0">
+          <Newsletter />
         </div>
       </div>
-      <div class="mt-12 pt-8 border-t border-gray-300 flex flex-col md:flex-row justify-between items-center">
-          <div class="flex space-x-4 mb-4 md:mb-0">
-            <a href="#" aria-label="Facebook"><img src="https://placehold.co/24x24/000000/FFFFFF?text=F" alt="Facebook"></a>
-            <a href="#" aria-label="Instagram"><img src="https://placehold.co/24x24/000000/FFFFFF?text=I" alt="Instagram"></a>
-            <a href="#" aria-label="Twitter"><img src="https://placehold.co/24x24/000000/FFFFFF?text=T" alt="Twitter"></a>
+      <div class="mt-16 border-t border-gray-900/10 pt-8 sm:mt-20 lg:mt-24 lg:flex lg:items-center lg:justify-between">
+        <div>
+          <h3 class="text-sm font-semibold leading-6 text-gray-900">Suivez-nous</h3>
+          <div class="mt-6 flex gap-x-4">
+            <!-- Social links here -->
+            <a href="#" class="text-gray-400 hover:text-gray-500">
+              <span class="sr-only">Instagram</span>
+              <svg class="h-6 w-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill-rule="evenodd" d="M12.315 2c-4.02.094-5.55.584-6.817 1.096A5.38 5.38 0 002.095 6.817C1.583 8.084 1.094 9.615 1.001 13.635c-.093 4.02.4 5.55 1.095 6.817a5.38 5.38 0 003.704 3.704c1.267.512 2.797 1.001 6.817 1.095 4.02-.094 5.55-.584 6.817-1.095a5.38 5.38 0 003.704-3.704c.512-1.267 1.001-2.797 1.095-6.817-.094-4.02-.584-5.55-1.096-6.817a5.38 5.38 0 00-3.703-3.704C17.865 2.583 16.335 2.094 12.315 2zm-1.03 1.802c3.927-.085 5.242.383 6.38 1.002a3.57 3.57 0 012.168 2.168c.62 1.138 1.087 2.453 1.002 6.38-.085 3.927-.383 5.242-1.002 6.38a3.57 3.57 0 01-2.168 2.168c-1.138.62-2.453 1.087-6.38 1.002-3.927.085-5.242-.383-6.38-1.002a3.57 3.57 0 01-2.168-2.168c-.62-1.138-1.087-2.453-1.002-6.38.085-3.927.383-5.242 1.002-6.38a3.57 3.57 0 012.168-2.168c1.138-.62 2.453-1.087 6.38-1.002zM12 7.875a4.125 4.125 0 100 8.25 4.125 4.125 0 000-8.25zM12 14.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5zm5.125-7.125a.938.938 0 100-1.875.938.938 0 000 1.875z" clip-rule="evenodd" />
+              </svg>
+            </a>
           </div>
-          <div class="flex items-center space-x-2 mb-4 md:mb-0">
-              <img src="https://placehold.co/40x25/e0e0e0/000000?text=VISA" alt="Visa">
-              <img src="https://placehold.co/40x25/e0e0e0/000000?text=MC" alt="Mastercard">
-              <img src="https://placehold.co/40x25/e0e0e0/000000?text=PP" alt="PayPal">
-              <img src="https://placehold.co/40x25/e0e0e0/000000?text=AP" alt="Apple Pay">
-          </div>
-          <p class="text-sm">&copy; {{ new Date().getFullYear() }} Maison Trüvra. Tous droits réservés.</p>
+        </div>
+        <div class="mt-8 lg:mt-0 lg:flex-shrink-0 lg:flex-grow">
+          <p class="text-sm leading-6 text-gray-500 lg:text-right">© 2024 Maison Truv-ra. Tous droits réservés.</p>
+        </div>
       </div>
     </div>
   </footer>
 </template>
 
 <script setup>
-// For newsletter submission, you would add a method here:
-const submitNewsletter = () => {
-  console.log('Newsletter form submitted');
-  // Add your logic to handle newsletter subscription, e.g., an API call
-};
+import Newsletter from './Newsletter.vue';
+
+/**
+ * Opens the cookie consent manager settings.
+ * This assumes you have a cookie consent library initialized that provides such a function.
+ */
+function openCookieSettings() {
+  if (window.CCM) {
+    window.CCM.openWidget();
+  } else {
+    alert("Le gestionnaire de cookies n'est pas disponible.");
+  }
+}
 </script>
