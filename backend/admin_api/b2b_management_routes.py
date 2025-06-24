@@ -14,7 +14,7 @@ user_service = UserService()
 @b2b_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_B2B_ACCOUNTS')
 @log_admin_action
-@roles_required ('Admin')
+@roles_required ('Admin', 'Manager')
 @admin_required
 def get_b2b_accounts():
     """
@@ -50,7 +50,7 @@ def get_b2b_accounts():
 @admin_b2b_bp.route('/approve/<int:account_id>', methods=['POST'])
 @jwt_required()
 @log_admin_action
-@roles_required ('Admin')
+@roles_required ('Admin', 'Manager')
 @admin_required
 def approve_b2b_account(account_id):
     # Assuming this service returns the primary user of the approved account
@@ -66,7 +66,7 @@ def approve_b2b_account(account_id):
 @b2b_management_bp.route('/<int:account_id>', methods=['GET'])
 @permissions_required('MANAGE_B2B_ACCOUNTS')
 @log_admin_action
-@roles_required ('Admin')
+@roles_required ('Admin', 'Manager')
 @admin_required
 def get_b2b_account(account_id):
     """
@@ -81,7 +81,7 @@ def get_b2b_account(account_id):
 @b2b_management_bp.route('/<int:account_id>', methods=['PUT'])
 @permissions_required('MANAGE_B2B_ACCOUNTS')
 @log_admin_action
-@roles_required ('Admin')
+@roles_required ('Admin', 'Manager')
 @admin_required
 def update_b2b_account(account_id):
     """
@@ -109,7 +109,7 @@ def update_b2b_account(account_id):
 @b2b_management_bp.route('/<int:account_id>', methods=['DELETE'])
 @permissions_required('MANAGE_B2B_ACCOUNTS')
 @log_admin_action
-@roles_required ('Admin')
+@roles_required ('Admin', 'Manager')
 @admin_required
 def delete_b2b_account(account_id):
     """
