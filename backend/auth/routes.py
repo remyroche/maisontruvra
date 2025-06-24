@@ -34,9 +34,8 @@ def register():
     try:
         # The AuthService handles user creation, password hashing, and validation
         user = AuthService.register_user(sanitized_data)
-        
-        verification_token = "dummy_token" # Placeholder
-        email_service.send_welcome_and_verification(user, verification_token)
+        token = AuthService.generate_email_confirmation_token(user)
+        EmailService.send_verification_email(user, token)
         security_logger.info(f"New user registered: {user.email} (ID: {user.id}) from IP: {request.remote_addr}")
         
         return jsonify(status="success", message="User registered successfully.", data=user.to_dict()), 201
