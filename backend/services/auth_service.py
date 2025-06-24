@@ -13,6 +13,49 @@ security_logger = logging.getLogger('security')
 
 class AuthService:
     @staticmethod
+    def get_token_serializer(salt='default'):
+        """Creates a token serializer with a specific salt."""
+        return URLSafeTimedSerializer(current_app.config['SECRET_KEY'], salt=salt)
+
+    @staticmethod
+    def request_password_reset(email):
+        user = User.query.filter_by(email=email).first()
+        if user:
+            # Standard token for B2C users
+            ts = AuthService.get_token_serializer(salt='password-reset-salt')
+            token = ts.dumps(user.email)
+            reset_url = f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/reset-password/{token}"
+            EmailService.send_password_reset_email(user, reset_url)
+
+    @staticmethod
+    def request_admin_password_reset(email):
+        """
+        Handles a password reset request specifically for an admin user.
+        """
+        user = User.query.filter_by(email=email).first()
+        # CRITICAL: Verify the user is an administrator before proceeding
+        if user and user.is_admin:
+            # Use a DIFFERENT salt for admin resets for enhanced security
+            ts = AuthService.get_token_serializer(salt='admin-password-reset-salt')
+            token = ts.dumps(user.email)
+            
+            # This URL should point to the admin password reset page, not the B2C one.
+            reset_url = f"{os.environ.get('ADMIN_URL', 'http://localhost:8080')}/admin_reset_password.html?token={token}"
+            
+            # A dedicated email template should be used
+            EmailService.send_admin_password_reset_email(user, reset_url)
+        # Note: We don't confirm if the email exists to prevent user enumeration.
+
+    @staticmethod
+    def verify_password_reset_token(token, salt='password-reset-salt'):
+        ts = AuthService.get_token_serializer(salt=salt)
+        try:
+            email = ts.loads(token, max_age=3600)  # Token is valid for 1 hour
+            return User.query.filter_by(email=email).first()
+        except (SignatureExpired, BadTimeSignature):
+            return None
+
+    @staticmethod
     def register_user(user_data):
         """Register a new user with validation."""
         email = user_data.get('email', '').strip().lower()
@@ -88,18 +131,6 @@ class AuthService:
         security_logger.info(f"MFA verification successful for user ID: {user_id}")
         return generate_tokens(user.id)
         
-    @staticmethod
-    def request_password_reset(email):
-        """Request password reset."""
-        email = email.strip().lower()
-        user = User.query.filter_by(email=email).first()
-        
-        if user:
-            # Generate reset token and send email
-            # Implementation would go here
-            security_logger.info(f"Password reset requested for: {email}")
-        
-        # Always return success to prevent user enumeration
         
     @staticmethod
     def confirm_password_reset(token, new_password):
