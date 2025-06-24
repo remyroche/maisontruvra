@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
-from backend.auth.permissions import permissions_required
+from ..utils.decorators import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 from backend.services.delivery_service import DeliveryService
 from backend.services.loyalty_service import LoyaltyService
 
@@ -7,6 +8,9 @@ delivery_admin_bp = Blueprint('delivery_admin_bp', __name__, url_prefix='/admin/
 
 @delivery_admin_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')
+@log_admin_action
+@roles_required ('Admin')
+@admin_required
 def get_delivery_methods():
     """Admin endpoint to get all delivery methods."""
     methods = DeliveryService.get_all_methods_for_admin()
@@ -14,6 +18,9 @@ def get_delivery_methods():
 
 @delivery_admin_bp.route('/tiers', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')
+@log_admin_action
+@roles_required ('Admin')
+@admin_required
 def get_all_tiers():
     """Helper endpoint to get all loyalty tiers for the form."""
     tiers = LoyaltyService.get_all_tier_discounts() # Reusing this as it returns names and discounts
@@ -21,6 +28,9 @@ def get_all_tiers():
 
 @delivery_admin_bp.route('/', methods=['POST'])
 @permissions_required('MANAGE_DELIVERY')
+@log_admin_action
+@roles_required ('Admin')
+@admin_required
 def create_delivery_method():
     """Admin endpoint to create a new delivery method."""
     data = sanitize_input(request.get_json())
@@ -36,6 +46,9 @@ def create_delivery_method():
 
 @delivery_admin_bp.route('/<int:method_id>', methods=['PUT'])
 @permissions_required('MANAGE_DELIVERY')
+@log_admin_action
+@roles_required ('Admin')
+@admin_required
 def update_delivery_method(method_id):
     """Admin endpoint to update a delivery method."""
     data = sanitize_input(request.get_json())
@@ -47,6 +60,9 @@ def update_delivery_method(method_id):
 
 @delivery_admin_bp.route('/<int:method_id>', methods=['DELETE'])
 @permissions_required('MANAGE_DELIVERY')
+@log_admin_action
+@roles_required ('Admin')
+@admin_required
 def delete_delivery_method(method_id):
     """Admin endpoint to delete a delivery method."""
     try:
