@@ -1,16 +1,60 @@
-<!-- File: backend/templates/emails/b2b_order_confirmation.html -->
-{% extends "emails/b2b_base_template.html" %}
+{% extends "b2b_base_template.html" %}
+
 {% block content %}
-    <h2 style="font-size: 24px; color: #5C2C35; font-family: 'Teko', serif;">Confirmation de votre commande n°{{ order.id }}</h2>
-    <p>Bonjour {{ user.first_name }},</p>
-    <p>Nous vous remercions pour votre commande. Vous trouverez ci-joint la facture correspondante au format PDF.</p>
-    <p><strong>Résumé de la commande :</strong></p>
-    <ul>
-        {% for item in order.items %}
-        <li>{{ item.quantity }} x {{ item.product.name }} - {{ item.price }}€</li>
-        {% endfor %}
-    </ul>
-    <p style="font-weight: bold; margin-top: 20px;">Total : {{ order.total }}€</p>
-    <p>Vous pouvez consulter les détails de votre commande dans votre <a href="{{ dashboard_url }}">tableau de bord</a>.</p>
-    <p>Cordialement,<br>L'équipe Maison Trüvra</p>
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+        <td style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 16px; line-height: 24px;">
+            <h1 style="font-family: 'Playfair Display', Georgia, serif; color: #4A2E2A; font-size: 28px; margin: 0 0 20px 0;">Confirmation de votre commande</h1>
+            <p style="margin: 0 0 20px 0;">À l'attention de l'équipe {{ order.b2b_account.company_name }},</p>
+            <p style="margin: 0 0 30px 0;">Nous vous confirmons la bonne réception de votre commande n°{{ order.id }}. Nos artisans vont la préparer avec la plus grande attention pour garantir une qualité à la hauteur de vos attentes.</p>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <h2 style="font-size: 22px; margin: 0 0 20px 0; border-bottom: 1px solid #E0D6CC; padding-bottom: 10px;">Récapitulatif de votre commande</h2>
+            
+            {% for item in order.items %}
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 15px;">
+                <tr>
+                    <td valign="top" style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 15px;">
+                        <p style="margin: 0 0 5px 0; font-weight: bold;">{{ item.product.name }}</p>
+                        <p style="margin: 0;">Quantité : {{ item.quantity }}</p>
+                    </td>
+                    <td valign="top" align="right" style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 15px; font-weight: bold;">
+                        {{ "%.2f"|format(item.price * item.quantity) }} € HT
+                    </td>
+                </tr>
+            </table>
+            {% endfor %}
+
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 20px; border-top: 1px solid #E0D6CC; padding-top: 20px;">
+                <tr>
+                    <td style="font-family: 'Lato', Arial, sans-serif; font-size: 15px;">Sous-total HT</td>
+                    <td align="right" style="font-family: 'Lato', Arial, sans-serif; font-size: 15px;">{{ "%.2f"|format(order.subtotal) }} €</td>
+                </tr>
+                 <tr>
+                    <td style="padding-top: 5px; font-family: 'Lato', Arial, sans-serif; font-size: 15px;">TVA</td>
+                    <td align="right" style="padding-top: 5px; font-family: 'Lato', Arial, sans-serif; font-size: 15px;">{{ "%.2f"|format(order.tax) }} €</td>
+                </tr>
+                <tr>
+                    <td style="padding-top: 5px; font-family: 'Lato', Arial, sans-serif; font-size: 15px;">Livraison HT</td>
+                    <td align="right" style="padding-top: 5px; font-family: 'Lato', Arial, sans-serif; font-size: 15px;">{{ "%.2f"|format(order.shipping_cost) }} €</td>
+                </tr>
+                 <tr>
+                    <td style="padding-top: 15px; font-family: 'Lato', Arial, sans-serif; font-size: 16px; font-weight: bold;">Total TTC</td>
+                    <td align="right" style="padding-top: 15px; font-family: 'Lato', Arial, sans-serif; font-size: 16px; font-weight: bold; color: #4A2E2A;">{{ "%.2f"|format(order.total) }} €</td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+     <tr>
+        <td style="padding: 40px 0 20px 0; font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 16px;">
+            <p style="margin: 0;">Vous serez notifié par e-mail dès l'expédition de votre commande. Votre facture sera disponible dans votre espace client.</p>
+            <p style="margin: 20px 0 0 0;">Nous vous remercions de votre confiance et restons à votre disposition pour toute question.</p>
+            <p style="margin: 20px 0 0 0;">Cordialement,</p>
+            <p style="margin: 10px 0 0 0; font-family: 'Playfair Display', serif; color: #4A2E2A;">L'équipe Maison Truvrā</p>
+        </td>
+    </tr>
+</table>
 {% endblock %}
+
