@@ -1,11 +1,13 @@
 from flask import Blueprint, request, jsonify, g
 from backend.services.user_service import UserService
 from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
-from backend.middleware import rbac_check, sanitize_request_data
+from backend.middleware import sanitize_request_data
 from backend.utils.sanitization import sanitize_input
 from backend.services.audit_log_service import AuditLogService
 from backend.utils.csrf_protection import CSRFProtection
 import logging
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
@@ -13,7 +15,9 @@ security_logger = logging.getLogger('security')
 user_management_bp = Blueprint('user_management', __name__)
 
 @user_management_bp.route('/users', methods=['GET'])
-@rbac_check('ADMIN')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
 @sanitize_request_data
 def get_users():
     """Get paginated list of users with proper N+1 optimization."""
@@ -55,7 +59,9 @@ def get_users():
         return jsonify({'error': 'Internal server error'}), 500
 
 @user_management_bp.route('/users', methods=['POST'])
-@rbac_check('ADMIN')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
 @sanitize_request_data
 def create_user():
     """Create a new user with full audit logging."""
@@ -93,7 +99,9 @@ def create_user():
         return jsonify({'error': 'Internal server error'}), 500
 
 @user_management_bp.route('/users/<int:user_id>', methods=['PUT'])
-@rbac_check('ADMIN')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 @sanitize_request_data
 def update_user(user_id):
     """Update user with full audit logging."""
@@ -129,7 +137,9 @@ def update_user(user_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @user_management_bp.route('/users/<int:user_id>', methods=['DELETE'])
-@rbac_check('ADMIN')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 @sanitize_request_data
 def delete_user(user_id):
     """Soft delete user with full audit logging."""
