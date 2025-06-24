@@ -1,6 +1,7 @@
 /*
  * FILENAME: website/js/stores/adminSiteSettings.js
  * DESCRIPTION: Pinia store for managing site-wide settings.
+ * UPDATED: Fully implemented with fetch and update actions.
  */
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
@@ -16,7 +17,11 @@ export const useAdminSiteSettingsStore = defineStore('adminSiteSettings', () => 
         error.value = null;
         try {
             const response = await adminApiClient.get('/site-management/settings');
-            settings.value = response.data.settings;
+            // The backend sends an array, let's convert it to an object for easier access
+            settings.value = response.data.settings.reduce((obj, item) => {
+                obj[item.key] = item.value;
+                return obj;
+            }, {});
         } catch (err) {
             error.value = 'Failed to fetch site settings.';
             console.error(err);
@@ -25,15 +30,22 @@ export const useAdminSiteSettingsStore = defineStore('adminSiteSettings', () => 
         }
     }
 
-    async function updateSettings(data) {
+    async function updateSettings(settingsData) {
         isLoading.value = true;
         error.value = null;
         try {
-            const response = await adminApiClient.put('/site-management/settings', data);
-            settings.value = response.data.settings;
+            // Convert back to array of key-value pairs for the backend
+            const payload = Object.keys(settingsData).map(key => ({ key, value: settingsData[key] }));
+            const response = await adminApiClient.put('/site-management/settings', { settings: payload });
+            settings.value = response.data.settings.reduce((obj, item) => {
+                obj[item.key] = item.value;
+                return obj;
+            }, {});
+            // --- LOGGING ---
+            // The backend should log this 'site_settings_update' event.
             return true;
         } catch (err) {
-             error.value = 'Failed to update settings.';
+             error.value = `Failed to update settings: ${err.response?.data?.message || 'error'}`;
             return false;
         } finally {
             isLoading.value = false;
