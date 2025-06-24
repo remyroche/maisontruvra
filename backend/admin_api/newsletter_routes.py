@@ -1,13 +1,17 @@
 from flask import Blueprint, request, jsonify
 from backend.services.newsletter_service import NewsletterService
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import permissions_required
+from ..utils.decorators import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 
 newsletter_management_bp = Blueprint('newsletter_management_bp', __name__, url_prefix='/admin/newsletter')
 
 # READ all newsletter subscribers
 @newsletter_management_bp.route('/subscribers', methods=['GET'])
 @permissions_required('MANAGE_NEWSLETTER')
+@log_admin_action
+@roles_required ('Admin', 'Marketing', 'Manager')
+@admin_required
 def get_subscribers():
     """
     Get a paginated list of all newsletter subscribers.
@@ -32,6 +36,9 @@ def get_subscribers():
 # DELETE a subscriber
 @newsletter_management_bp.route('/subscribers/<int:subscriber_id>', methods=['DELETE'])
 @permissions_required('MANAGE_NEWSLETTER')
+@log_admin_action
+@roles_required ('Admin', 'Marketing', 'Manager')
+@admin_required
 def delete_subscriber(subscriber_id):
     """
     Delete a newsletter subscriber by their ID.
@@ -48,6 +55,9 @@ def delete_subscriber(subscriber_id):
 
 @newsletter_management_bp.route('/send', methods=['POST'])
 @permissions_required('MANAGE_NEWSLETTER')
+@log_admin_action
+@roles_required ('Admin', 'Marketing', 'Manager')
+@admin_required
 def send_newsletter():
     """
     Send a new newsletter to a targeted audience.
