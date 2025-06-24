@@ -32,6 +32,45 @@ def create_product():
         # Log the error e
         return jsonify(status="error", message="An internal error occurred while creating the product."), 500
 
+@admin_api_bp.route('/inventory/<int:inventory_id>', methods=['PUT'])
+@admin_required
+def update_inventory(inventory_id):
+    """
+    Updates the quantity of an inventory item and triggers back-in-stock
+    notifications if the product was previously out of stock.
+    """
+    data = request.get_json()
+    if 'quantity' not in data:
+        return jsonify({"error": "Quantity is required"}), 400
+
+    inventory_item = Inventory.query.get(inventory_id)
+    if not inventory_item:
+        return jsonify({"error": "Inventory item not found"}), 404
+
+    try:
+        new_quantity = int(data['quantity'])
+    except ValueError:
+        return jsonify({"error": "Invalid quantity format"}), 400
+
+    # --- Back-in-Stock Notification Logic ---
+    # Check the available stock *before* making changes
+    was_out_of_stock = inventory_item.available_quantity <= 0
+    
+    # Update the total physical stock
+    inventory_item.quantity = new_quantity
+    db.session.commit()
+
+    # Check the available stock *after* making changes
+    is_now_in_stock = inventory_item.available_quantity > 0
+
+    # If the status changed from out-of-stock to in-stock, trigger the task
+    if was_out_of_stock and is_now_in_stock:
+        # Use .delay() to run this as a background task via Celery
+        send_back_in_stock_emails_task.delay(inventory_item.product_id)
+    # --- End Logic ---
+
+    return jsonify({"message": f"Inventory for product {inventory_item.product_id} updated to {new_quantity}."}), 200
+
 # READ all products (with pagination)
 @product_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
