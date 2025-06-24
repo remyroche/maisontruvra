@@ -3,9 +3,9 @@
     <div class="container mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <div class="flex-shrink-0">
-          <a href="/professionnels.html" aria-label="Portail Professionnel">
+          <router-link to="/pro/dashboard" aria-label="Portail Professionnel">
             <img class="h-8 w-auto" src="/assets/logo-white.svg" alt="Maison Truv-ra Pro Logo" />
-          </a>
+          </router-link>
         </div>
 
         <div class="flex items-center space-x-4">
@@ -28,30 +28,20 @@
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../../js/stores/auth';
 import { useNotificationStore } from '../../../js/stores/notification';
 
 const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
-const router = useRouter();
 
-/**
- * Handles the B2B user logout process.
- */
 const logout = async () => {
   try {
     await authStore.logoutB2B();
     notificationStore.showNotification('Vous avez été déconnecté.', 'success');
-    // Redirect to the professional login page after logout
-    window.location.href = '/professionnels.html';
+    window.location.href = '/professionnels';
   } catch (error) {
     console.error('B2B Logout failed:', error);
     notificationStore.showNotification(error.data?.message || 'La déconnexion a échoué.', 'error');
   }
 };
 </script>
-
-<style scoped>
-/* You can add component-specific styles here if needed */
-</style>
