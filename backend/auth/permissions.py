@@ -1,41 +1,27 @@
 from functools import wraps
-from flask import jsonify
-from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt
+from flask import jsonify, request, g # Import request and g for access within decorators
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt, jwt_required # Ensure jwt_required is imported
+import logging
+
+# Assuming these utilities exist from previous implementations
 from backend.services.rbac_service import RBACService
-_current_user_identity = None
-_current_jwt_claims = {}
+from backend.utils.csrf_protection import CSRFProtection # Assuming this is available
+from backend.models.user_models import User # Assuming your User model is here
 
-def verify_jwt_in_request():
-    """Simulates JWT verification."""
-    global _current_user_identity
-    if _current_user_identity is None:
-        raise Exception("No JWT in request (simulated). Call set_test_jwt_identity() first.")
-    print(f"JWT verified for user: {_current_user_identity}")
-
-def get_jwt_identity():
-    """Simulates getting user identity from JWT."""
-    return _current_user_identity
-
-def get_jwt():
-    """Simulates getting all claims from JWT."""
-    return _current_jwt_claims
-
-# Helper functions for testing/demonstration
-def set_test_jwt_identity(user_id, claims=None):
-    """Sets a simulated JWT identity for testing."""
-    global _current_user_identity, _current_jwt_claims
-    _current_user_identity = user_id
-    _current_jwt_claims = claims if claims is not None else {}
-    print(f"Test JWT identity set to: {user_id} with claims: {_current_jwt_claims}")
-
-def clear_test_jwt_identity():
-    """Clears the simulated JWT identity."""
-    global _current_user_identity, _current_jwt_claims
-    _current_user_identity = None
-    _current_jwt_claims = {}
-    print("Test JWT identity cleared.")
+# It's good practice to get loggers this way.
+logger = logging.getLogger(__name__)
+security_logger = logging.getLogger('security') # Use the dedicated security logger
 
 
+# Instantiate the RBACService (this would typically be a singleton or dependency injected)
+# Ensure RBACService is defined before being instantiated here.
+# For demonstration purposes, I'll keep the RBACService class here,
+# but in a real app, it would be imported from backend.services.rbac_service
+# as per your import statement.
+
+# --- Start of RBACService for self-contained demonstration ---
+# This part is included for the immersive to be runnable on its own.
+# In your actual project, RBACService would be imported from backend.services.rbac_service
 class RBACService:
     """
     A conceptual Role-Based Access Control Service.
@@ -56,10 +42,11 @@ class RBACService:
             "Manager": {"MANAGE_PRODUCTS", "VIEW_INVENTORY", "GENERATE_REPORTS"},
             "Editor": {"CREATE_CONTENT", "EDIT_CONTENT", "UPLOAD_MEDIA"},
             "Viewer": {"VIEW_CONTENT", "DOWNLOAD_REPORTS"},
+            "B2B": {"VIEW_B2B_DASHBOARD", "ACCESS_B2B_DATA"}, # New B2B permissions
             # Add more roles and their permissions here
         }
-        print("RBACService initialized with default roles and permissions.")
-        print(f"Initial Role Permissions: {self._role_permissions}")
+        security_logger.info("RBACService initialized with default roles and permissions.")
+        # print(f"Initial Role Permissions: {self._role_permissions}") # Avoid printing sensitive structure directly
 
     def _get_user_roles_from_storage(self, user_id):
         """
@@ -79,9 +66,9 @@ class RBACService:
         """Adds a user to the RBAC system, initially with no roles."""
         if user_id not in self._user_roles:
             self._user_roles[user_id] = set()
-            print(f"User '{user_id}' added to RBACService.")
+            security_logger.info(f"User '{user_id}' added to RBACService.")
         else:
-            print(f"User '{user_id}' already exists in RBACService.")
+            security_logger.debug(f"User '{user_id}' already exists in RBACService.")
 
     def assign_role(self, user_id, role_name):
         """Assigns a role to a user."""
@@ -89,17 +76,17 @@ class RBACService:
             self.add_user(user_id) # Ensure user exists
         if role_name in self._role_permissions: # Check if role is defined
             self._user_roles[user_id].add(role_name)
-            print(f"Assigned role '{role_name}' to user '{user_id}'. Current roles: {self._user_roles[user_id]}")
+            security_logger.info(f"Assigned role '{role_name}' to user '{user_id}'.")
         else:
-            print(f"Warning: Role '{role_name}' is not defined in RBACService._role_permissions.")
+            security_logger.warning(f"Attempted to assign undefined role '{role_name}' to user '{user_id}'.")
 
     def remove_role(self, user_id, role_name):
         """Removes a role from a user."""
         if user_id in self._user_roles and role_name in self._user_roles[user_id]:
             self._user_roles[user_id].remove(role_name)
-            print(f"Removed role '{role_name}' from user '{user_id}'. Current roles: {self._user_roles[user_id]}")
+            security_logger.info(f"Removed role '{role_name}' from user '{user_id}'.")
         else:
-            print(f"User '{user_id}' does not have role '{role_name}'.")
+            security_logger.debug(f"User '{user_id}' does not have role '{role_name}' or user not found.")
 
     def get_user_roles(self, user_id):
         """Retrieves all roles assigned to a user."""
@@ -136,51 +123,184 @@ class RBACService:
         This can be defined by having a specific 'Staff' role or other criteria.
         """
         return self.user_has_role(user_id, 'Staff')
+# --- End of RBACService for self-contained demonstration ---
 
-
-# Instantiate the RBACService (this would typically be a singleton or dependency injected)
+# Instantiate RBACService
 RBACService = RBACService()
+
+# --- Placeholder for CSRFProtection and User Model for self-contained demonstration ---
+# In your actual project, these would be imported from their respective paths.
+class CSRFProtection:
+    @staticmethod
+    def validate_csrf_token():
+        # In a real app, this would check headers/cookies for a valid token
+        # For demonstration, we'll simulate a failure for testing
+        if request.headers.get('X-CSRF-TOKEN') != 'valid-csrf-token':
+            raise Exception("Invalid CSRF token")
+        security_logger.info("CSRF token validated successfully.")
+
+class User:
+    # A simplified User model for demonstration
+    _users_db = {} # user_id -> User object
+    class Role:
+        def __init__(self, value):
+            self.value = value
+    def __init__(self, id, email, role, is_active=True):
+        self.id = id
+        self.email = email
+        self.role = self.Role(role)
+        self.is_active = is_active
+        User._users_db[id] = self
+
+    @staticmethod
+    def query_get(user_id): # Simulates ORM query.get
+        return User._users_db.get(user_id)
+
+# Populate some test users for demonstration
+User("user123", "user1@example.com", "Viewer")
+User("admin456", "admin@example.com", "Admin")
+User("staff789", "staff@example.com", "Staff")
+User("manager012", "manager@example.com", "Manager")
+User("editor345", "editor@example.com", "Editor")
+User("b2buser", "b2b@example.com", "B2B")
+User("inactive_user", "inactive@example.com", "Viewer", is_active=False)
+
+RBACService.add_user("user123")
+RBACService.assign_role("user123", "Viewer")
+RBACService.add_user("admin456")
+RBACService.assign_role("admin456", "Admin")
+RBACService.add_user("staff789")
+RBACService.assign_role("staff789", "Staff")
+RBACService.add_user("manager012")
+RBACService.assign_role("manager012", "Manager")
+RBACService.add_user("editor345")
+RBACService.assign_role("editor345", "Editor")
+RBACService.add_user("b2buser")
+RBACService.assign_role("b2buser", "B2B")
+RBACService.add_user("inactive_user")
+RBACService.assign_role("inactive_user", "Viewer")
+
+
+# --- End of Placeholder for CSRFProtection and User Model ---
+
+
+def _common_auth_check(fn, user_id):
+    """
+    Helper function to perform common authentication and user status checks.
+    """
+    if not user_id:
+        security_logger.warning({
+            'message': 'Unauthenticated access attempt',
+            'endpoint': request.path,
+            'ip': request.remote_addr,
+            'request_id': getattr(g, 'request_id', 'unknown')
+        })
+        return jsonify(status="error", message="Authentication required."), 401
+
+    user = User.query_get(user_id) # Use the simplified static method for demonstration
+    if not user:
+        security_logger.warning({
+            'message': 'User ID from JWT not found in DB',
+            'userId': user_id,
+            'endpoint': request.path,
+            'ip': request.remote_addr,
+            'request_id': getattr(g, 'request_id', 'unknown')
+        })
+        return jsonify(status="error", message="User not found."), 401
+
+    if not user.is_active:
+        security_logger.warning({
+            'message': 'Inactive user access attempt',
+            'userId': user_id,
+            'endpoint': request.path,
+            'ip': request.remote_addr,
+            'request_id': getattr(g, 'request_id', 'unknown')
+        })
+        return jsonify(status="error", message="Account inactive."), 401
+
+    # Store user info in g for use in the route
+    g.user = {
+        'id': user.id,
+        'email': user.email,
+        'role': user.role.value
+    }
+    security_logger.debug(f"User {user_id} authenticated and active. Role: {user.role.value}")
+    return None # Indicates success, no error response
+
+
+def _csrf_and_state_change_check(fn):
+    """
+    Helper function to validate CSRF token for state-changing requests.
+    Assumes g.user is already populated by a prior check.
+    """
+    if request.method in ['POST', 'PUT', 'DELETE', 'PATCH']:
+        try:
+            CSRFProtection.validate_csrf_token()
+            security_logger.info({
+                'message': 'CSRF token validated',
+                'userId': g.user['id'],
+                'endpoint': request.path,
+                'method': request.method,
+                'request_id': getattr(g, 'request_id', 'unknown')
+            })
+        except Exception as e:
+            security_logger.warning({
+                'message': 'CSRF validation failed',
+                'userId': g.user['id'],
+                'endpoint': request.path,
+                'method': request.method,
+                'error': str(e),
+                'request_id': getattr(g, 'request_id', 'unknown')
+            })
+            return jsonify(status="error", message="CSRF validation failed"), 403
+    return None # Indicates success, no error response
 
 
 def permissions_required(*required_permissions):
     """
     Decorator that checks if a user has EITHER the 'Admin' role OR
     ALL of the specified permissions.
-
-    This acts as a single, clean authorization check, fulfilling the need for
-    an 'Admin fallback' without stacking multiple decorators. It improves on
-    the original by centralizing the logic.
-
-    Usage:
-    @permissions_required('MANAGE_PRODUCTS', 'VIEW_INVENTORY')
     """
     def decorator(fn):
         @wraps(fn)
+        @jwt_required() # Ensure JWT is present and valid
         def wrapper(*args, **kwargs):
             try:
-                verify_jwt_in_request()
                 user_id = get_jwt_identity()
 
-                if not user_id:
-                    return jsonify(status="error", message="Authentication required."), 401
+                # Common authentication and user status check
+                error_response = _common_auth_check(fn, user_id)
+                if error_response:
+                    return error_response
+
+                # CSRF protection for state-changing methods
+                error_response = _csrf_and_state_change_check(fn)
+                if error_response:
+                    return error_response
 
                 # 1. Admin fallback: If the user is an Admin, grant access immediately.
                 if RBACService.user_has_role(user_id, 'Admin'):
-                    print(f"User {user_id} is Admin, granting access.")
+                    security_logger.info(f"User {user_id} (Admin) granted access to {request.path}")
                     return fn(*args, **kwargs)
 
                 # 2. Permission check: If not an admin, check for all required permissions.
                 if not RBACService.user_has_permissions(user_id, *required_permissions):
                     perms_str = ", ".join(required_permissions)
-                    print(f"User {user_id} lacks required permissions or Admin role. Required: {perms_str}")
+                    security_logger.warning({
+                        'message': 'Insufficient permissions',
+                        'userId': user_id,
+                        'requiredPermissions': list(required_permissions),
+                        'endpoint': request.path,
+                        'ip': request.remote_addr,
+                        'request_id': getattr(g, 'request_id', 'unknown')
+                    })
                     return jsonify(status="error", message=f"Insufficient permissions. Requires: {perms_str} or Admin role."), 403
 
-                print(f"User {user_id} has all required permissions: {required_permissions}. Granting access.")
+                security_logger.info(f"User {user_id} granted access with permissions {required_permissions} to {request.path}")
                 return fn(*args, **kwargs)
             except Exception as e:
-                print(f"Error during permissions_required check: {e}")
-                # Log the exception e
-                return jsonify(status="error", message="An error occurred during permission check."), 500
+                security_logger.error(f"Unhandled error in permissions_required for {request.path}: {e}", exc_info=True)
+                return jsonify(status="error", message="An internal server error occurred during permission check."), 500
         return wrapper
     return decorator
 
@@ -190,22 +310,36 @@ def admin_required(fn):
     This is intended for actions that ONLY an admin should perform, without fallbacks.
     """
     @wraps(fn)
+    @jwt_required() # Ensure JWT is present and valid
     def wrapper(*args, **kwargs):
         try:
-            verify_jwt_in_request()
             user_id = get_jwt_identity()
 
-            if not user_id:
-                return jsonify(status="error", message="Authentication required."), 401
+            # Common authentication and user status check
+            error_response = _common_auth_check(fn, user_id)
+            if error_response:
+                return error_response
+
+            # CSRF protection for state-changing methods
+            error_response = _csrf_and_state_change_check(fn)
+            if error_response:
+                return error_response
+
             if not RBACService.user_has_role(user_id, 'Admin'):
-                print(f"User {user_id} is not Admin. Access denied.")
+                security_logger.warning({
+                    'message': 'Admin access denied',
+                    'userId': user_id,
+                    'endpoint': request.path,
+                    'ip': request.remote_addr,
+                    'request_id': getattr(g, 'request_id', 'unknown')
+                })
                 return jsonify(status="error", message="Administrator access required."), 403
-            print(f"User {user_id} is Admin. Granting access.")
+
+            security_logger.info(f"User {user_id} (Admin) granted access to {request.path}")
             return fn(*args, **kwargs)
         except Exception as e:
-            print(f"Error during admin_required check: {e}")
-            # Log the exception e
-            return jsonify(status="error", message="An error occurred during admin check."), 500
+            security_logger.error(f"Unhandled error in admin_required for {request.path}: {e}", exc_info=True)
+            return jsonify(status="error", message="An internal server error occurred during admin check."), 500
     return wrapper
 
 def staff_required(fn):
@@ -215,33 +349,50 @@ def staff_required(fn):
     ensures the JWT indicates that MFA has been verified.
     """
     @wraps(fn)
+    @jwt_required() # Ensure JWT is present and valid
     def wrapper(*args, **kwargs):
         try:
-            verify_jwt_in_request()
             user_id = get_jwt_identity()
 
-            if not user_id:
-                return jsonify(status="error", message="Authentication required."), 401
+            # Common authentication and user status check
+            error_response = _common_auth_check(fn, user_id)
+            if error_response:
+                return error_response
+
+            # CSRF protection for state-changing methods
+            error_response = _csrf_and_state_change_check(fn)
+            if error_response:
+                return error_response
 
             # Check if the user has a staff role via the RBAC service.
             if not RBACService.user_is_staff(user_id):
-                print(f"User {user_id} is not staff. Access denied.")
+                security_logger.warning({
+                    'message': 'Staff access denied',
+                    'userId': user_id,
+                    'endpoint': request.path,
+                    'ip': request.remote_addr,
+                    'request_id': getattr(g, 'request_id', 'unknown')
+                })
                 return jsonify(status="error", message="Staff account required."), 403
 
             # This assumes the login flow adds an 'mfa_verified' claim to the JWT
             # if the user has MFA enabled and has successfully passed the second factor.
-            # A more robust implementation might re-verify with the database in some cases.
             claims = get_jwt()
             if claims.get("mfa_required") and not claims.get("mfa_verified"):
-                print(f"User {user_id} requires MFA but it's not verified.")
+                security_logger.warning({
+                    'message': 'MFA required but not verified for staff access',
+                    'userId': user_id,
+                    'endpoint': request.path,
+                    'ip': request.remote_addr,
+                    'request_id': getattr(g, 'request_id', 'unknown')
+                })
                 return jsonify(status="error", message="Multi-Factor Authentication is required for this action."), 403
 
-            print(f"User {user_id} is staff and MFA status is okay. Granting access.")
+            security_logger.info(f"User {user_id} (Staff) granted access to {request.path}")
             return fn(*args, **kwargs)
         except Exception as e:
-            print(f"Error during staff_required check: {e}")
-            # Log the exception e
-            return jsonify(status="error", message="An error occurred during staff check."), 500
+            security_logger.error(f"Unhandled error in staff_required for {request.path}: {e}", exc_info=True)
+            return jsonify(status="error", message="An internal server error occurred during staff check."), 500
     return wrapper
 
 def roles_required(*required_roles):
@@ -249,19 +400,23 @@ def roles_required(*required_roles):
     Decorator that checks if a user has at least ONE of the specified roles.
     This provides a flexible way to restrict access based on broader roles
     rather than granular permissions, or to allow multiple roles for a single endpoint.
-
-    Usage:
-    @roles_required('Manager', 'Editor') # User needs to be EITHER Manager OR Editor
     """
     def decorator(fn):
         @wraps(fn)
+        @jwt_required() # Ensure JWT is present and valid
         def wrapper(*args, **kwargs):
             try:
-                verify_jwt_in_request()
                 user_id = get_jwt_identity()
 
-                if not user_id:
-                    return jsonify(status="error", message="Authentication required."), 401
+                # Common authentication and user status check
+                error_response = _common_auth_check(fn, user_id)
+                if error_response:
+                    return error_response
+
+                # CSRF protection for state-changing methods
+                error_response = _csrf_and_state_change_check(fn)
+                if error_response:
+                    return error_response
 
                 user_roles = RBACService.get_user_roles(user_id)
 
@@ -270,30 +425,109 @@ def roles_required(*required_roles):
 
                 if not has_required_role:
                     roles_str = ", ".join(required_roles)
-                    print(f"User {user_id} does not have any of the required roles: {required_roles}. Access denied.")
+                    security_logger.warning({
+                        'message': 'Role access denied',
+                        'userId': user_id,
+                        'requiredRoles': list(required_roles),
+                        'userRoles': user_roles,
+                        'endpoint': request.path,
+                        'ip': request.remote_addr,
+                        'request_id': getattr(g, 'request_id', 'unknown')
+                    })
                     return jsonify(status="error", message=f"Access denied. One of these roles is required: {roles_str}."), 403
 
-                print(f"User {user_id} has one of the required roles: {required_roles}. Granting access.")
+                security_logger.info(f"User {user_id} granted access with roles {user_roles} to {request.path}")
                 return fn(*args, **kwargs)
             except Exception as e:
-                print(f"Error during roles_required check: {e}")
-                # Log the exception e
-                return jsonify(status="error", message="An error occurred during role check."), 500
+                security_logger.error(f"Unhandled error in roles_required for {request.path}: {e}", exc_info=True)
+                return jsonify(status="error", message="An internal server error occurred during role check."), 500
         return wrapper
     return decorator
+
 
 def b2b_user_required(fn):
     """
     A decorator to protect routes that require a logged-in B2B user.
+    Strengthened with logging, user status checks, and CSRF protection.
     """
     @wraps(fn)
+    @jwt_required() # Ensure JWT is present and valid
     def wrapper(*args, **kwargs):
-        verify_jwt_in_request()
-        user_id = get_jwt_identity()
-        if not user_id:
-            return jsonify(status="error", message="Authentication required."), 401
-        if not RBACService.user_has_role(user_id, 'B2B'):
-            return jsonify(status="error", message="B2B account required."), 403
-        return fn(*args, **kwargs)
+        try:
+            user_id = get_jwt_identity()
+
+            # Common authentication and user status check
+            error_response = _common_auth_check(fn, user_id)
+            if error_response:
+                return error_response
+
+            # CSRF protection for state-changing methods
+            error_response = _csrf_and_state_change_check(fn)
+            if error_response:
+                return error_response
+
+            # Explicit B2B role check
+            if not RBACService.user_has_role(user_id, 'B2B'):
+                security_logger.warning({
+                    'message': 'B2B user access denied',
+                    'userId': user_id,
+                    'endpoint': request.path,
+                    'ip': request.remote_addr,
+                    'request_id': getattr(g, 'request_id', 'unknown')
+                })
+                return jsonify(status="error", message="B2B account required."), 403
+
+            security_logger.info(f"User {user_id} (B2B) granted access to {request.path}")
+            return fn(*args, **kwargs)
+        except Exception as e:
+            security_logger.error(f"Unhandled error in b2b_user_required for {request.path}: {e}", exc_info=True)
+            return jsonify(status="error", message="An internal server error occurred during B2B user check."), 500
     return wrapper
 
+
+def rbac_check(required_role):
+    """
+    Enhanced RBAC decorator with proper logging and CSRF protection.
+    """
+    def decorator(f):
+        @wraps(f)
+        @jwt_required()
+        def decorated_function(*args, **kwargs):
+            user_id = get_jwt_identity()
+
+            # Common authentication and user status check
+            error_response = _common_auth_check(f, user_id) # Note: Pass 'f' here not 'fn'
+            if error_response:
+                return error_response
+
+            # CSRF protection for state-changing methods
+            error_response = _csrf_and_state_change_check(f) # Note: Pass 'f' here not 'fn'
+            if error_response:
+                return error_response
+
+            # The original rbac_check logic
+            user = User.query_get(user_id) # g.user is already populated by _common_auth_check
+            if user.role.value != required_role:
+                security_logger.warning({
+                    'message': 'RBAC Access Denied',
+                    'userId': user_id,
+                    'requiredRole': required_role,
+                    'userRole': user.role.value,
+                    'endpoint': request.path,
+                    'ip': request.remote_addr,
+                    'request_id': getattr(g, 'request_id', 'unknown')
+                })
+                return jsonify({'error': 'Forbidden: Insufficient permissions.'}), 403
+
+            security_logger.info(f"User {user_id} granted access with role {required_role} to {request.path}")
+            return f(*args, **kwargs) # Ensure 'f' is called here
+        return decorated_function
+    return decorator
+
+
+# Configure basic logging (usually done in your main app.py or config)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Set security logger to capture WARN and above
+logging.getLogger('security').setLevel(logging.WARNING)
+# Set the current module's logger to DEBUG to see more internal RBAC logs
+logging.getLogger(__name__).setLevel(logging.DEBUG)
