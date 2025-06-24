@@ -68,7 +68,7 @@ export const useAdminUserStore = defineStore('adminUsers', () => {
     }
   }
 
-                                               /**
+  /**
    * Updates a user's data.
    * @param {number} userId - The ID of the user to update.
    * @param {object} userData - The user data to update.
