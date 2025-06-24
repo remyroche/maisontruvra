@@ -156,33 +156,6 @@ class User:
     def query_get(user_id): # Simulates ORM query.get
         return User._users_db.get(user_id)
 
-# Populate some test users for demonstration
-User("user123", "user1@example.com", "Viewer")
-User("admin456", "admin@example.com", "Admin")
-User("staff789", "staff@example.com", "Staff")
-User("manager012", "manager@example.com", "Manager")
-User("editor345", "editor@example.com", "Editor")
-User("b2buser", "b2b@example.com", "B2B")
-User("inactive_user", "inactive@example.com", "Viewer", is_active=False)
-
-RBACService.add_user("user123")
-RBACService.assign_role("user123", "Viewer")
-RBACService.add_user("admin456")
-RBACService.assign_role("admin456", "Admin")
-RBACService.add_user("staff789")
-RBACService.assign_role("staff789", "Staff")
-RBACService.add_user("manager012")
-RBACService.assign_role("manager012", "Manager")
-RBACService.add_user("editor345")
-RBACService.assign_role("editor345", "Editor")
-RBACService.add_user("b2buser")
-RBACService.assign_role("b2buser", "B2B")
-RBACService.add_user("inactive_user")
-RBACService.assign_role("inactive_user", "Viewer")
-
-
-# --- End of Placeholder for CSRFProtection and User Model ---
-
 
 def _common_auth_check(fn, user_id):
     """
@@ -255,28 +228,47 @@ def _csrf_and_state_change_check(fn):
             return jsonify(status="error", message="CSRF validation failed"), 403
     return None # Indicates success, no error response
 
+def _apply_base_security_checks(fn):
+    """
+    A helper decorator that performs common authentication, CSRF,
+    and mandatory MFA checks (if MFA is enabled for the user).
+    This decorator assumes @jwt_required() has already run.
+    """
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        user_id = get_jwt_identity() # Should be available as jwt_required has run
+
+        # Perform common authentication and user status check
+        error_response = _common_auth_check(fn, user_id)
+        if error_response:
+            return error_response
+
+        # Perform CSRF protection for state-changing methods
+        error_response = _csrf_and_state_change_check(fn)
+        if error_response:
+            return error_response
+
+        # Enforce MFA if enabled for the user
+        mfa_error_response = _check_mfa_status()
+        if mfa_error_response:
+            return mfa_error_response
+
+        # If all common security checks pass, execute the original function
+        return fn(*args, **kwargs)
+    return wrapper
 
 def permissions_required(*required_permissions):
     """
     Decorator that checks if a user has EITHER the 'Admin' role OR
-    ALL of the specified permissions.
+    ALL of the specified permissions, and passes common security checks including MFA if enabled.
     """
     def decorator(fn):
         @wraps(fn)
         @jwt_required() # Ensure JWT is present and valid
+        @_apply_base_security_checks # Apply the common security checks
         def wrapper(*args, **kwargs):
             try:
-                user_id = get_jwt_identity()
-
-                # Common authentication and user status check
-                error_response = _common_auth_check(fn, user_id)
-                if error_response:
-                    return error_response
-
-                # CSRF protection for state-changing methods
-                error_response = _csrf_and_state_change_check(fn)
-                if error_response:
-                    return error_response
+                user_id = get_jwt_identity() # User ID and g.user is now guaranteed to be populated and active
 
                 # 1. Admin fallback: If the user is an Admin, grant access immediately.
                 if RBACService.user_has_role(user_id, 'Admin'):
@@ -306,24 +298,15 @@ def permissions_required(*required_permissions):
 
 def admin_required(fn):
     """
-    A decorator to protect routes that require the 'Admin' role specifically.
-    This is intended for actions that ONLY an admin should perform, without fallbacks.
+    A decorator to protect routes that require the 'Admin' role specifically,
+    and passes common security checks including MFA if enabled.
     """
     @wraps(fn)
     @jwt_required() # Ensure JWT is present and valid
+    @_apply_base_security_checks # Apply the common security checks
     def wrapper(*args, **kwargs):
         try:
-            user_id = get_jwt_identity()
-
-            # Common authentication and user status check
-            error_response = _common_auth_check(fn, user_id)
-            if error_response:
-                return error_response
-
-            # CSRF protection for state-changing methods
-            error_response = _csrf_and_state_change_check(fn)
-            if error_response:
-                return error_response
+            user_id = get_jwt_identity() # User ID and g.user is now guaranteed to be populated and active
 
             if not RBACService.user_has_role(user_id, 'Admin'):
                 security_logger.warning({
@@ -344,25 +327,15 @@ def admin_required(fn):
 
 def staff_required(fn):
     """
-    A decorator to protect routes that require staff privileges.
-    It checks for a staff role and, if MFA is enabled for that user,
-    ensures the JWT indicates that MFA has been verified.
+    A decorator to protect routes that require staff privileges,
+    and passes common security checks including MFA if enabled.
     """
     @wraps(fn)
     @jwt_required() # Ensure JWT is present and valid
+    @_apply_base_security_checks # Apply the common security checks
     def wrapper(*args, **kwargs):
         try:
-            user_id = get_jwt_identity()
-
-            # Common authentication and user status check
-            error_response = _common_auth_check(fn, user_id)
-            if error_response:
-                return error_response
-
-            # CSRF protection for state-changing methods
-            error_response = _csrf_and_state_change_check(fn)
-            if error_response:
-                return error_response
+            user_id = get_jwt_identity() # User ID and g.user is now guaranteed to be populated and active
 
             # Check if the user has a staff role via the RBAC service.
             if not RBACService.user_is_staff(user_id):
@@ -375,19 +348,6 @@ def staff_required(fn):
                 })
                 return jsonify(status="error", message="Staff account required."), 403
 
-            # This assumes the login flow adds an 'mfa_verified' claim to the JWT
-            # if the user has MFA enabled and has successfully passed the second factor.
-            claims = get_jwt()
-            if claims.get("mfa_required") and not claims.get("mfa_verified"):
-                security_logger.warning({
-                    'message': 'MFA required but not verified for staff access',
-                    'userId': user_id,
-                    'endpoint': request.path,
-                    'ip': request.remote_addr,
-                    'request_id': getattr(g, 'request_id', 'unknown')
-                })
-                return jsonify(status="error", message="Multi-Factor Authentication is required for this action."), 403
-
             security_logger.info(f"User {user_id} (Staff) granted access to {request.path}")
             return fn(*args, **kwargs)
         except Exception as e:
@@ -397,26 +357,16 @@ def staff_required(fn):
 
 def roles_required(*required_roles):
     """
-    Decorator that checks if a user has at least ONE of the specified roles.
-    This provides a flexible way to restrict access based on broader roles
-    rather than granular permissions, or to allow multiple roles for a single endpoint.
+    Decorator that checks if a user has at least ONE of the specified roles,
+    and passes common security checks including MFA if enabled.
     """
     def decorator(fn):
         @wraps(fn)
         @jwt_required() # Ensure JWT is present and valid
+        @_apply_base_security_checks # Apply the common security checks
         def wrapper(*args, **kwargs):
             try:
-                user_id = get_jwt_identity()
-
-                # Common authentication and user status check
-                error_response = _common_auth_check(fn, user_id)
-                if error_response:
-                    return error_response
-
-                # CSRF protection for state-changing methods
-                error_response = _csrf_and_state_change_check(fn)
-                if error_response:
-                    return error_response
+                user_id = get_jwt_identity() # User ID and g.user is now guaranteed to be populated and active
 
                 user_roles = RBACService.get_user_roles(user_id)
 
