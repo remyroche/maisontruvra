@@ -2,11 +2,16 @@
 
 from sqlalchemy.orm import Session
 from ..models import db
-from ..models.blog_models import BlogPost, BlogCategory
 from ..services.exceptions import NotFoundException, ValidationException
 from ..utils.sanitization import sanitize_input
 import bleach
 import re
+from ..models import BlogPost, BlogCategory
+from .. import db
+from .exceptions import ServiceError
+
+ALLOWED_TAGS = ['p', 'a', 'strong', 'em', 'u', 'ol', 'ul', 'li', 'br', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote']
+ALLOWED_ATTRIBUTES = {'a': ['href', 'title']}
 
 class BlogService:
     """
@@ -61,20 +66,34 @@ class BlogService:
 
     def create_article(self, article_data: dict) -> BlogPost:
         """
-        Creates a new blog post with sanitized data.
+        Creates a new blog post after sanitizing its content.
         """
-        sanitized_data = self._sanitize_article_data(article_data)
-        
-        if 'title' not in sanitized_data:
-            raise ValidationException("Title is a required field.")
+        try:
+            # Sanitize the HTML content before creating the post
+            sanitized_content = bleach.clean(
+                data.get('content'),
+                tags=ALLOWED_TAGS,
+                attributes=ALLOWED_ATTRIBUTES,
+                strip=True  # Remove disallowed tags instead of escaping them
+            )
 
-        # Generate slug from title if not provided
-        if not sanitized_data.get('slug'):
-            sanitized_data['slug'] = self._generate_slug(sanitized_data['title'])
-
-        new_article = BlogPost(**sanitized_data)
-        self.session.add(new_article)
-        self.session.commit()
+            new_post = BlogPost(
+                title=data.get('title'),
+                slug=data.get('slug'),
+                content=sanitized_content,  # Use the sanitized content
+                excerpt=data.get('excerpt'),
+                image_url=data.get('image_url'),
+                author_id=data.get('author_id'),
+                category_id=data.get('category_id')
+            )
+            db.session.add(new_post)
+            db.session.commit()
+            return new_post
+        except Exception as e:
+            db.session.rollback()
+            # In a real app, you'd log this error.
+            print(f"Error creating blog post: {e}")
+            raise ServiceError("Could not create blog post.")
         return new_article
 
     def get_all_articles(self):
@@ -103,15 +122,34 @@ class BlogService:
 
     def update_article(self, article_id: int, article_data: dict) -> BlogPost:
         """
-        Updates an existing blog post with sanitized data.
+        Updates an existing blog post after sanitizing its content.
         """
-        article = self.get_article_by_id(article_id)
-        sanitized_data = self._sanitize_article_data(article_data)
-        
-        for key, value in sanitized_data.items():
-            setattr(article, key, value)
-        
-        self.session.commit()
+        post = BlogPost.query.get(post_id)
+        if not post:
+            raise ServiceError("Blog post not found.")
+
+        try:
+            if 'content' in data:
+                # Sanitize the HTML content before updating
+                post.content = bleach.clean(
+                    data['content'],
+                    tags=ALLOWED_TAGS,
+                    attributes=ALLOWED_ATTRIBUTES,
+                    strip=True
+                )
+            
+            if 'title' in data:
+                post.title = data['title']
+            if 'slug' in data:
+                post.slug = data['slug']
+            
+            db.session.commit()
+            return post
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error updating blog post: {e}")
+            raise ServiceError("Could not update blog post.")
+
         return article
 
     def delete_article(self, article_id: int):
