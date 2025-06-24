@@ -13,6 +13,34 @@ def get_session_id():
     """
     return request.headers.get('X-Session-ID')
 
+@orders_bp.route('/create/guest', methods=['POST'])
+def create_guest_order():
+    """
+    Creates an order for a guest user.
+    """
+    data = request.get_json()
+    try:
+        order = OrderService.create_guest_order(data)
+        return jsonify(OrderSchema().dump(order)), 201
+    except ServiceError as e:
+        return jsonify({"error": e.message}), e.status_code
+    except Exception as e:
+        # Proper logging should be here
+        return jsonify({"error": "An internal error occurred"}), 500
+
+@orders_bp.route('/create', methods=['POST'])
+@login_required
+def create_authenticated_order():
+    """
+    Creates an order for an authenticated user.
+    """
+    data = request.get_json()
+    try:
+        order = OrderService.create_authenticated_order(current_user.id, data)
+        return jsonify(OrderSchema().dump(order)), 201
+    except ServiceError as e:
+        return jsonify({"error": e.message}), e.status_code
+
 @orders_bp.route('/checkout', methods=['POST'])
 @jwt_required(optional=True)
 def checkout():
