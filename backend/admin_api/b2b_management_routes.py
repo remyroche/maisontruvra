@@ -4,6 +4,7 @@ from backend.utils.sanitization import sanitize_input
 from backend.auth.permissions import permissions_required, admin_required
 from utils.sanitization import sanitize_input
 from services.user_service import UserService
+from ..utils.decorators import log_admin_action
 
 b2b_management_bp = Blueprint('b2b_management_bp', __name__, url_prefix='/admin/b2b')
 user_service = UserService()
@@ -40,6 +41,21 @@ def get_b2b_accounts():
     except Exception as e:
         # Log the error e
         return jsonify(status="error", message="An internal error occurred while fetching B2B accounts."), 500
+
+
+@admin_b2b_bp.route('/approve/<int:account_id>', methods=['POST'])
+@jwt_required()
+@log_admin_action
+@staff_required
+def approve_b2b_account(account_id):
+    # Assuming this service returns the primary user of the approved account
+    approved_user = B2BAuthService.approve_account(account_id)
+    
+    # --- Send "Account Approved" Email ---
+    EmailService.send_b2b_account_approved_email(approved_user)
+    
+    return jsonify({"message": "B2B account approved and user notified."}), 200
+
 
 # READ a single B2B account
 @b2b_management_bp.route('/<int:account_id>', methods=['GET'])
