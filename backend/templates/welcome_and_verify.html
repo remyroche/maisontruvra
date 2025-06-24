@@ -1,11 +1,32 @@
-<!-- File: backend/templates/emails/welcome_and_verify.html -->
-{% extends "emails/general_base_template.html" %}
+{% extends "general_base_template.html" %}
+
 {% block content %}
-    <h2>Bienvenue chez Maison Trüvra !</h2>
-    <p>Bonjour {{ user.first_name }},</p>
-    <p>Merci pour votre inscription. Pour activer votre compte, veuillez vérifier votre adresse e-mail en cliquant sur le lien ci-dessous :</p>
-    <p style="text-align: center; margin: 30px 0;">
-        <a href="{{ verification_url }}" class="button">Vérifier mon e-mail</a>
-    </p>
-    <p>Ce lien est valide pour les prochaines 24 heures.</p>
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+        <td style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 16px; line-height: 24px;">
+            <h1 style="font-family: 'Playfair Display', Georgia, serif; color: #4A2E2A; font-size: 28px; margin: 0 0 20px 0;">Bienvenue à la Maison Truvrā</h1>
+            <p style="margin: 0 0 20px 0;">Cher(e) {{ user.first_name or 'amateur de chocolat' }},</p>
+            <p style="margin: 0 0 30px 0;">Nous sommes honorés de vous accueillir dans l'univers de nos créations. Votre passion pour le goût et l'excellence nous inspire. Pour finaliser votre inscription et débuter votre voyage sensoriel, nous vous invitons à confirmer votre adresse e-mail.</p>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="padding: 10px 0 30px 0;">
+            <!-- Button -->
+            <table border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                    <td class="button" align="center" style="background-color: #4A2E2A; border-radius: 5px;">
+                        <a href="{{ confirmation_link }}" target="_blank" style="font-size: 16px; font-family: 'Lato', Arial, sans-serif; font-weight: bold; color: #FFFFFF; text-decoration: none; border-radius: 5px; padding: 15px 25px; border: 1px solid #4A2E2A; display: inline-block;">Confirmer mon compte</a>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr>
+        <td style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 16px; line-height: 24px;">
+            <p style="margin: 0 0 20px 0;">Ce lien est votre passeport pour un monde de saveurs exclusives et d'avantages réservés à nos membres.</p>
+            <p style="margin: 0;">Avec nos salutations gourmandes,</p>
+            <p style="margin: 10px 0 0 0; font-family: 'Playfair Display', serif; color: #4A2E2A;">L'équipe de la Maison Truvrā</p>
+        </td>
+    </tr>
+</table>
 {% endblock %}
