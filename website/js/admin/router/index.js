@@ -2,15 +2,15 @@
  * FILENAME: website/js/admin/router/index.js
  * DESCRIPTION: Vue Router configuration for the Admin Portal.
  *
- * UPDATED: Added the route for the new 'Manage Products' page.
+ * UPDATED: Added the route for the new 'Manage Orders' page.
  */
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAdminAuthStore } from '../../stores/adminAuth';
 
-// Import Admin Views
 import AdminDashboardView from '../views/AdminDashboardView.vue';
 import ManageUsersView from '../views/ManageUsersView.vue';
-import ManageProductsView from '../views/ManageProductsView.vue'; // <-- New Import
+import ManageProductsView from '../views/ManageProductsView.vue';
+import ManageOrdersView from '../views/ManageOrdersView.vue'; // <-- New Import
 
 const routes = [
   {
@@ -25,12 +25,18 @@ const routes = [
     component: ManageUsersView,
     meta: { requiresAuth: true, requiredPermission: 'manage_users' }
   },
-  // --- New Route ---
   {
     path: '/admin/products',
     name: 'AdminManageProducts',
     component: ManageProductsView,
     meta: { requiresAuth: true, requiredPermission: 'manage_products' }
+  },
+  // --- New Route ---
+  {
+    path: '/admin/orders',
+    name: 'AdminManageOrders',
+    component: ManageOrdersView,
+    meta: { requiresAuth: true, requiredPermission: 'manage_orders' }
   },
   {
     path: '/admin/:pathMatch(.*)*',
