@@ -1,6 +1,7 @@
 /*
  * FILENAME: website/js/stores/adminMarketing.js
- * DESCRIPTION: New Pinia store for managing marketing tools like Newsletters and Quotes.
+ * DESCRIPTION: Pinia store for managing marketing tools.
+ * UPDATED: Implemented functionality for Newsletters and Quotes.
  */
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
@@ -13,11 +14,29 @@ export const useAdminMarketingStore = defineStore('adminMarketing', () => {
     const error = ref(null);
 
     async function fetchSubscribers() {
-        // ... API call to fetch newsletter subscribers
+        isLoading.value = true;
+        error.value = null;
+        try {
+            const response = await adminApiClient.get('/newsletter/subscribers');
+            subscribers.value = response.data.subscribers;
+        } catch(err) {
+            error.value = 'Failed to fetch subscribers.';
+        } finally {
+            isLoading.value = false;
+        }
     }
     
     async function fetchQuotes() {
-        // ... API call to fetch quote requests
+        isLoading.value = true;
+        error.value = null;
+        try {
+            const response = await adminApiClient.get('/quotes');
+            quotes.value = response.data.quotes;
+        } catch(err) {
+            error.value = 'Failed to fetch quotes.';
+        } finally {
+            isLoading.value = false;
+        }
     }
 
     return { subscribers, quotes, isLoading, error, fetchSubscribers, fetchQuotes };
