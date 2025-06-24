@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify
-from ..utils.decorators import admin_required, staff_required, roles_required, permissions_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 from backend.services.monitoring_service import MonitoringService
 
