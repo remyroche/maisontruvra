@@ -8,7 +8,7 @@ class Product(BaseModel):
     slug = db.Column(db.String(120), unique=True, nullable=False)
     description = db.Column(db.Text, nullable=True)
     price = db.Column(db.Numeric(10, 2), nullable=False)
-    sku = db.Column(db.String(50), unique=True, nullable=False)
+    base_sku = db.Column(db.String(100), nullable=False, unique=True)
     is_published = db.Column(db.Boolean, default=True)
     product_type = db.Column(db.String(50), default='standard') # e.g., standard, b2b_exclusive, blog
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
@@ -29,6 +29,7 @@ class Product(BaseModel):
             'images': [image.url for image in self.images],
             'category': self.category.name if self.category else None,
             'collection': self.collection.name if self.collection else None,
+            'base_sku': self.base_sku,
         }
         if include_variants:
             data['variants'] = [v.to_dict() for v in self.variants]
@@ -41,7 +42,7 @@ class Product(BaseModel):
         data = self.to_public_dict(include_variants=True, include_reviews=True)
         data.update({
             'is_active': self.is_active,
-            'sku': self.sku,
+            'base_sku': self.base_sku,
             'inventory': self.inventory.quantity if self.inventory else 0,
         })
         return data
@@ -58,6 +59,41 @@ class Product(BaseModel):
         if view == 'b2b':
             return self.to_b2b_dict()
         return self.to_public_dict(**kwargs)
+
+class ProductVariant(db.Model):
+    """
+    Represents a specific, purchasable version of a Product.
+    This model holds the unique SKU, price, and inventory for each variation.
+    """
+    __tablename__ = 'product_variants'
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    
+    # The full, unique SKU for this specific variant (e.g., 'TR-OIL-100ML')
+    sku = db.Column(db.String(150), nullable=False, unique=True)
+    price = db.Column(db.Numeric(10, 2), nullable=False)
+    
+    # Attributes that define this variant (e.g., {"size": "100ml", "color": "black"})
+    attributes = db.Column(db.JSON, nullable=False)
+
+    # Each variant has its own inventory record
+    inventory = db.relationship('Inventory', backref='variant', uselist=False, cascade="all, delete-orphan")
+
+    # The parent product
+    product = db.relationship('Product', back_populates='variants')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'sku': self.sku,
+            'price': str(self.price), # Return as string for consistency
+            'attributes': self.attributes,
+            'available_stock': self.inventory.available_quantity if self.inventory else 0
+        }
+
+    def __repr__(self):
+        return f'<ProductVariant {self.sku}>'
 
 class Category(BaseModel):
     __tablename__ = 'categories'
