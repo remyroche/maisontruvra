@@ -1,5 +1,6 @@
 <template>
     <div class="max-w-4xl mx-auto">
+        <!-- Login View -->
         <div v-if="currentView === 'login'">
             <div class="max-w-md mx-auto">
                 <h1 class="text-3xl font-serif text-center mb-2">Espace Professionnel</h1>
@@ -14,10 +15,13 @@
                             <label for="password" class="block text-sm font-medium text-gray-700">Mot de passe</label>
                             <input type="password" v-model="loginForm.password" class="w-full mt-1 p-2 border border-gray-300 rounded-md shadow-sm" required>
                         </div>
-                        <button type="submit" class="btn-primary w-full rounded-md py-2">Se Connecter</button>
+                        <button type="submit" :disabled="loading" class="btn-primary w-full rounded-md py-2 disabled:opacity-50">
+                            <span v-if="!loading">Se Connecter</span>
+                            <span v-else>Connexion...</span>
+                        </button>
                     </form>
                     <div class="text-center text-sm mt-6">
-                        <a @click.prevent="currentView = 'forgotPassword'" href="#" class="font-medium text-brand-burgundy hover:underline">Mot de passe oublié ?</a>
+                        <a @click.prevent="currentView = 'forgotPassword'" href="#" class="font-medium text-indigo-600 hover:text-indigo-500">Mot de passe oublié ?</a>
                     </div>
                 </div>
 
@@ -36,16 +40,20 @@
                                 <input v-model="registerForm.email" type="email" placeholder="Adresse e-mail" class="p-2 border rounded-md" required>
                                 <input v-model="registerForm.password" type="password" placeholder="Mot de passe" class="p-2 border rounded-md" required>
                             </div>
-                            <button type="submit" class="btn-primary w-full rounded-md py-2 mt-4">Soumettre la demande</button>
+                            <button type="submit" :disabled="loading" class="btn-primary w-full rounded-md py-2 mt-4 disabled:opacity-50">
+                                <span v-if="!loading">Soumettre la demande</span>
+                                <span v-else>Envoi...</span>
+                            </button>
                         </form>
                     </div>
                 </div>
                  <p class="text-center text-sm text-gray-600 mt-6">
-                    Besoin d'aide ? Consultez notre <a @click.prevent="currentView = 'faq'" href="#" class="font-medium text-brand-burgundy hover:underline">FAQ pour les professionnels</a>.
+                    Besoin d'aide ? Consultez notre <a @click.prevent="currentView = 'faq'" href="#" class="font-medium text-indigo-600 hover:text-indigo-500">FAQ pour les professionnels</a>.
                 </p>
             </div>
         </div>
 
+        <!-- Forgot Password View -->
         <div v-if="currentView === 'forgotPassword'">
             <div class="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md">
                 <h1 class="text-3xl font-serif text-center mb-6">Réinitialiser le mot de passe</h1>
@@ -55,18 +63,22 @@
                         <label for="email-forgot" class="block text-sm font-medium text-gray-700">Email</label>
                         <input type="email" id="email-forgot" v-model="forgotPasswordForm.email" class="w-full mt-1 p-2 border border-gray-300 rounded-md shadow-sm" required>
                     </div>
-                    <button type="submit" class="btn-primary w-full rounded-md py-2">Envoyer le lien</button>
+                    <button type="submit" :disabled="loading" class="btn-primary w-full rounded-md py-2 disabled:opacity-50">
+                         <span v-if="!loading">Envoyer le lien</span>
+                         <span v-else>Envoi...</span>
+                    </button>
                 </form>
                 <p class="text-center text-sm mt-6">
-                    <a @click.prevent="currentView = 'login'" href="#" class="font-medium text-brand-burgundy hover:underline">Retour à la connexion</a>
+                    <a @click.prevent="currentView = 'login'" href="#" class="font-medium text-indigo-600 hover:text-indigo-500">Retour à la connexion</a>
                 </p>
             </div>
         </div>
         
+        <!-- FAQ View -->
         <div v-if="currentView === 'faq'">
             <h1 class="text-4xl font-serif text-center mb-4">Foire Aux Questions</h1>
             <p class="text-center text-gray-600 mb-12">Vous trouverez ici les réponses aux questions les plus fréquentes.</p>
-            <div class="space-y-4">
+            <div class="space-y-4 max-w-2xl mx-auto">
                 <div v-for="(item, index) in faqItems" :key="index" class="accordion-item bg-white rounded-lg shadow-sm">
                     <button @click="toggleFaq(index)" class="accordion-header w-full flex justify-between items-center text-left px-6 py-4 font-semibold text-gray-800 focus:outline-none">
                         <span>{{ item.question }}</span>
@@ -78,22 +90,31 @@
                 </div>
             </div>
              <p class="text-center text-sm mt-8">
-                <a @click.prevent="currentView = 'login'" href="#" class="font-medium text-brand-burgundy hover:underline">Retour à la page de connexion</a>
+                <a @click.prevent="currentView = 'login'" href="#" class="font-medium text-indigo-600 hover:text-indigo-500">Retour à la page de connexion</a>
             </p>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, reactive } from 'vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '../../js/stores/auth';
+import { useNotificationStore } from '../../js/stores/notification';
+import apiClient from '../../js/api-client';
+
+const router = useRouter();
+const authStore = useAuthStore();
+const notificationStore = useNotificationStore();
 
 const currentView = ref('login'); // 'login', 'forgotPassword', 'faq'
 const showRegister = ref(false);
 const openFaqIndex = ref(null);
+const loading = ref(false);
 
-const loginForm = ref({ email: '', password: '' });
-const registerForm = ref({ companyName: '', siret: '', contactName: '', email: '', password: '' });
-const forgotPasswordForm = ref({ email: '' });
+const loginForm = reactive({ email: '', password: '' });
+const registerForm = reactive({ companyName: '', siret: '', contactName: '', email: '', password: '' });
+const forgotPasswordForm = reactive({ email: '' });
 
 const faqItems = ref([
     { question: "Comment créer un compte professionnel ?", answer: "Cliquez sur \"Créez-en un\" sur la page de connexion et remplissez le formulaire. Vous devrez fournir les informations de votre société, y compris votre numéro SIRET." },
@@ -107,25 +128,43 @@ function toggleFaq(index) {
 }
 
 async function handleLogin() {
-    console.log("Attempting login with:", loginForm.value);
-    // TODO: Remplacer par un appel à l'API via apiClient.post('/api/b2b/login', loginForm.value);
-    // En cas de succès, rediriger vers le portail : window.location.href = '/pro/interactive_vue.html';
-    alert('Connexion en cours...');
+    loading.value = true;
+    try {
+        await authStore.loginB2B(loginForm);
+        router.push('/pro/dashboard');
+        notificationStore.showNotification('Connexion réussie !', 'success');
+    } catch (error) {
+        notificationStore.showNotification(error.data?.error || 'Email ou mot de passe incorrect.', 'error');
+    } finally {
+        loading.value = false;
+    }
 }
 
 async function handleRegister() {
-    console.log("Submitting registration:", registerForm.value);
-    // TODO: Remplacer par un appel à l'API via apiClient.post('/api/b2b/register', registerForm.value);
-    // En cas de succès, afficher un message de remerciement.
-    alert('Votre demande d\'inscription a été envoyée. Vous recevrez une confirmation par e-mail.');
-    showRegister.value = false;
+    loading.value = true;
+    try {
+        await apiClient.b2bRegister(registerForm);
+        notificationStore.showNotification('Votre demande d\'inscription a été envoyée. Vous recevrez une confirmation par e-mail.', 'success');
+        showRegister.value = false;
+        // Reset form
+        Object.keys(registerForm).forEach(key => registerForm[key] = '');
+    } catch (error) {
+        notificationStore.showNotification(error.data?.error || 'Une erreur est survenue lors de l\'inscription.', 'error');
+    } finally {
+        loading.value = false;
+    }
 }
 
 async function handleForgotPassword() {
-    console.log("Requesting password reset for:", forgotPasswordForm.value.email);
-    // TODO: Remplacer par un appel à l'API via apiClient.post('/api/b2b/forgot-password', forgotPasswordForm.value);
-    alert('Si votre e-mail est dans notre système, vous recevrez un lien de réinitialisation.');
-    currentView.value = 'login';
+    loading.value = true;
+    try {
+        const response = await apiClient.b2bRequestPasswordReset(forgotPasswordForm.email);
+        notificationStore.showNotification(response.message, 'success');
+        currentView.value = 'login';
+    } catch (error) {
+        notificationStore.showNotification('Une erreur est survenue.', 'error');
+    } finally {
+        loading.value = false;
+    }
 }
-
 </script>
