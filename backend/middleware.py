@@ -16,7 +16,7 @@ import ipaddress # For IP whitelisting
 
 # Assuming these utilities exist from previous implementations
 from backend.utils.csrf_protection import CSRFProtection
-from backend.utils.sanitization import InputSanitizer # Renamed from sanitize_input to match your example usage
+from backend.utils.sanitization import sanitize_input # Renamed from sanitize_input to match your example usage
 from backend.models.user_models import User
 # Assuming RBACService is defined elsewhere and imported, or defined below for self-containment
 # from backend.services.rbac_service import RBACService
@@ -25,89 +25,6 @@ from backend.models.user_models import User
 # It's good practice to get loggers this way.
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
-
-
-# --- Placeholders for RBACService, CSRFProtection, User Model & RBAC Decorators ---
-# These are included here to make the immersive self-contained and runnable.
-# In your actual project, these would be imported from their respective paths.
-
-# Minimal RBACService for demonstration
-class RBACService:
-    def __init__(self):
-        self._user_roles = {}
-        self._role_permissions = {}
-    def user_has_role(self, user_id, role_name):
-        return role_name in self._user_roles.get(user_id, set())
-    def user_has_permissions(self, user_id, *perms):
-        # Simplified: assume has all if user has any of their roles providing it
-        user_perms = set()
-        for role in self._user_roles.get(user_id, set()):
-            user_perms.update(self._role_permissions.get(role, set()))
-        return all(p in user_perms for p in perms)
-    def user_is_staff(self, user_id):
-        return self.user_has_role(user_id, 'Staff')
-    def assign_role(self, user_id, role_name):
-        self._user_roles.setdefault(user_id, set()).add(role_name)
-        security_logger.debug(f"Assigned role {role_name} to {user_id}")
-    def get_user_roles(self, user_id):
-        return list(self._user_roles.get(user_id, set()))
-
-# Minimal CSRFProtection for demonstration
-class CSRFProtection:
-    @staticmethod
-    def validate_csrf_token():
-        # In a real app, this would check headers/cookies for a valid token
-        # For this demo, let's allow if a specific header is present.
-        if request.headers.get('X-CSRF-TOKEN') != 'valid-csrf-token':
-            raise Exception("Invalid CSRF token")
-        security_logger.debug("CSRF token validated successfully.")
-
-# Minimal User model for demonstration
-class User:
-    _users_db = {}
-    class Role:
-        def __init__(self, value):
-            self.value = value
-    def __init__(self, id, email, role, is_active=True):
-        self.id = id
-        self.email = email
-        self.role = self.Role(role)
-        self.is_active = is_active
-        User._users_db[id] = self
-    @staticmethod
-    def query_get(user_id):
-        return User._users_db.get(user_id)
-
-# Minimal InputSanitizer for demonstration
-class InputSanitizer:
-    @staticmethod
-    def sanitize_string(s):
-        if isinstance(s, str):
-            return s.replace('<', '&lt;').replace('>', '&gt;').replace('&', '&amp;')
-        return s
-    @staticmethod
-    def sanitize_input(data):
-        if isinstance(data, dict):
-            return {k: InputSanitizer.sanitize_input(v) for k, v in data.items()}
-        elif isinstance(data, list):
-            return [InputSanitizer.sanitize_input(item) for item in data]
-        return InputSanitizer.sanitize_string(data)
-
-
-# Populate some test users for demonstration
-User("user123", "user1@example.com", "Viewer")
-User("admin456", "admin@example.com", "Admin")
-User("staff789", "staff@example.com", "Staff")
-User("b2buser", "b2b@example.com", "B2B")
-User("inactive_user", "inactive@example.com", "Viewer", is_active=False)
-
-# Instantiate RBACService and populate roles for demo users
-RBACService = RBACService()
-RBACService.assign_role("user123", "Viewer")
-RBACService.assign_role("admin456", "Admin")
-RBACService.assign_role("staff789", "Staff")
-RBACService.assign_role("b2buser", "B2B")
-RBACService.assign_role("inactive_user", "Viewer")
 
 
 # --- Global Flask Extensions Initialization ---
