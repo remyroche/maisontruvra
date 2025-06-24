@@ -1,26 +1,32 @@
 {% extends "general_base_template.html" %}
 
-{% block title %}De retour en stock !{% endblock %}
-
 {% block content %}
-  <h1 style="font-size: 24px; font-weight: bold; color: #333;">Bonne nouvelle !</h1>
-  <p style="font-size: 16px; color: #555;">
-    Bonjour {{ user_name }},
-  </p>
-  <p style="font-size: 16px; color: #555;">
-    L'article que vous attendiez, <strong>{{ product_name }}</strong>, est de nouveau disponible sur notre boutique.
-  </p>
-  <p style="font-size: 16px; color: #555;">
-    Ne le laissez pas vous échapper une seconde fois. Vous pouvez le retrouver directement en cliquant sur le bouton ci-dessous :
-  </p>
-  
-  <div style="text-align: center; margin: 30px 0;">
-    <a href="{{ product_url }}" style="background-color: #4f46e5; color: white; padding: 15px 25px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold;">
-        Voir le produit
-    </a>
-  </div>
-
-  <p style="font-size: 16px; color: #555;">
-    Merci de votre patience et de votre intérêt pour Maison Truv-ra.
-  </p>
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+        <td style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 16px; line-height: 24px;">
+            <h1 style="font-family: 'Playfair Display', Georgia, serif; color: #4A2E2A; font-size: 28px; margin: 0 0 20px 0;">Une création attendue est de retour</h1>
+            <p style="margin: 0 0 20px 0;">Cher(e) {{ user.first_name }},</p>
+            <p style="margin: 0 0 30px 0;">Vous aviez manifesté votre intérêt pour l'une de nos créations. Nous avons le plaisir de vous annoncer que le produit <strong>{{ product.name }}</strong> est de nouveau disponible à la commande.</p>
+            <p style="margin: 0 0 30px 0;">Ne laissez pas passer cette occasion de succomber à la tentation.</p>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="padding: 10px 0 30px 0;">
+            <!-- Button -->
+            <table border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                    <td class="button" align="center" style="background-color: #4A2E2A; border-radius: 5px;">
+                        <a href="{{ product_url }}" target="_blank" style="font-size: 16px; font-family: 'Lato', Arial, sans-serif; font-weight: bold; color: #FFFFFF; text-decoration: none; border-radius: 5px; padding: 15px 25px; border: 1px solid #4A2E2A; display: inline-block;">Découvrir {{ product.name }}</a>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+     <tr>
+        <td style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 16px; line-height: 24px;">
+            <p style="margin: 0;">Avec nos salutations gourmandes,</p>
+            <p style="margin: 10px 0 0 0; font-family: 'Playfair Display', serif; color: #4A2E2A;">L'équipe de la Maison Truvrā</p>
+        </td>
+    </tr>
+</table>
 {% endblock %}
