@@ -4,6 +4,38 @@ from flask import render_template
 import weasyprint
 import datetime
 
+celery = Celery(__name__)
+
+def init_celery(app):
+    """
+    Initializes and configures the Celery instance with the Flask app's settings.
+    Also, it wraps tasks to ensure they run within a Flask application context.
+    
+    Args:
+        app: The configured Flask application instance.
+    """
+    # Update the Celery configuration from the Flask app config.
+    # It will automatically look for keys starting with 'CELERY_'.
+    celery.config_from_object(app.config, namespace='CELERY')
+
+    class ContextTask(celery.Task):
+        """
+        A custom Celery Task class that ensures every task is executed
+        within a Flask application context. This is crucial for accessing
+        the database, configuration, and other Flask extensions within tasks.
+        """
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return self.run(*args, **kwargs)
+
+    # Set the custom ContextTask as the default Task class for this Celery instance.
+    celery.Task = ContextTask
+    
+    # This line is important for Celery's auto-discovery of tasks.
+    celery.autodiscover_tasks(['backend.tasks'])
+
+    return celery
+
 # Assume 'queue' is a configured task queue instance (e.g., Celery app)
 # Assume 'db', 'logger', and 'storage_service' (for S3) are configured.
 
