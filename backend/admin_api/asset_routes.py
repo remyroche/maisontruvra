@@ -2,11 +2,13 @@ from flask import request, jsonify
 from . import admin_api_bp # Assuming this is your admin blueprint
 from ..services.asset_service import AssetService
 from ..services.exceptions import ServiceError, NotFoundException
-from ..utils.decorators import admin_required
+from ..utils.decorators import admin_required, staff_required, roles_required
+from ..utils.decorators import log_admin_action
 
 @admin_api_bp.route('/assets/upload', methods=['POST'])
-@admin_required
-def upload_asset():
+@log_admin_action
+@roles_required ('Admin')
+@admin_requireddef upload_asset():
     if 'file' not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
     
@@ -20,14 +22,16 @@ def upload_asset():
         return jsonify({"error": e.message}), e.status_code
 
 @admin_api_bp.route('/assets', methods=['GET'])
-@admin_required
-def get_assets():
+@log_admin_action
+@roles_required ('Admin')
+@admin_requireddef get_assets():
     assets = AssetService.get_all_assets()
     return jsonify([asset.to_dict() for asset in assets])
 
 @admin_api_bp.route('/assets/<int:asset_id>', methods=['DELETE'])
-@admin_required
-def delete_asset(asset_id):
+@log_admin_action
+@roles_required ('Admin')
+@admin_requireddef delete_asset(asset_id):
     try:
         AssetService.delete_asset(asset_id)
         return '', 204
