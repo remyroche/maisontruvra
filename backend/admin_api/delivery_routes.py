@@ -9,7 +9,7 @@ delivery_admin_bp = Blueprint('delivery_admin_bp', __name__, url_prefix='/admin/
 @delivery_admin_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
-@roles_required ('Admin')
+@roles_required ('Admin', 'Manager')
 @admin_required
 def get_delivery_methods():
     """Admin endpoint to get all delivery methods."""
@@ -19,7 +19,7 @@ def get_delivery_methods():
 @delivery_admin_bp.route('/tiers', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
-@roles_required ('Admin')
+@roles_required ('Admin', 'Manager')
 @admin_required
 def get_all_tiers():
     """Helper endpoint to get all loyalty tiers for the form."""
@@ -29,7 +29,7 @@ def get_all_tiers():
 @delivery_admin_bp.route('/', methods=['POST'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
-@roles_required ('Admin')
+@roles_required ('Admin', 'Manager')
 @admin_required
 def create_delivery_method():
     """Admin endpoint to create a new delivery method."""
@@ -47,7 +47,7 @@ def create_delivery_method():
 @delivery_admin_bp.route('/<int:method_id>', methods=['PUT'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
-@roles_required ('Admin')
+@roles_required ('Admin', 'Manager')
 @admin_required
 def update_delivery_method(method_id):
     """Admin endpoint to update a delivery method."""
@@ -61,7 +61,7 @@ def update_delivery_method(method_id):
 @delivery_admin_bp.route('/<int:method_id>', methods=['DELETE'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
-@roles_required ('Admin')
+@roles_required ('Admin', 'Manager')
 @admin_required
 def delete_delivery_method(method_id):
     """Admin endpoint to delete a delivery method."""
