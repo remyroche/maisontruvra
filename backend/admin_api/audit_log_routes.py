@@ -8,7 +8,7 @@ audit_log_service = AuditLogService()
 
 @admin_audit_log_bp.route('/', methods=['GET'])
 @log_admin_action
-@roles_required ('Admin', 'Dev')
+@roles_required ('Admin', 'Dev', 'Manager')
 @admin_requireddef get_audit_logs():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
