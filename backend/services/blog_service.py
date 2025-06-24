@@ -91,8 +91,7 @@ class BlogService:
             return new_post
         except Exception as e:
             db.session.rollback()
-            # In a real app, you'd log this error.
-            print(f"Error creating blog post: {e}")
+            current_app.logger.error(f"Database error creating blog post: {e}", exc_info=True)
             raise ServiceError("Could not create blog post.")
         return new_article
 
