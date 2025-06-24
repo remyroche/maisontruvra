@@ -168,30 +168,3 @@ def verify_mfa():
     except Exception as e:
         # Log the error e
         return jsonify(status="error", message="An internal error occurred during MFA verification."), 500
-
-# Disable MFA
-@admin_auth_bp.route('/mfa/disable', methods=['POST'])
-@jwt_required()
-def disable_mfa():
-    """
-    Disables MFA for the currently logged-in user.
-    Requires the current password for security.
-    """
-    user_id = get_jwt_identity()
-    data = request.get_json()
-    if not data or 'password' not in data:
-        return jsonify(status="error", message="Password is required to disable MFA"), 400
-
-    password = data['password'] # Do not sanitize password, it's needed for verification
-    
-    try:
-        # The MfaService should verify the user's password before disabling MFA.
-        if MfaService.disable_mfa(user_id, password):
-            return jsonify(status="success", message="MFA has been disabled."), 200
-        else:
-            # The service should return False if the password is wrong
-            return jsonify(status="error", message="Incorrect password."), 403
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message=f"An error occurred while disabling MFA: {e}"), 500
-
