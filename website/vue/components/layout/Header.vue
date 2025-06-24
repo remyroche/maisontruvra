@@ -1,50 +1,65 @@
 <template>
-  <header id="header" class="bg-white sticky top-0 z-50 shadow-md">
-    <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
-      <div class="flex items-center">
-        <router-link :to="{ name: 'home' }">
-          <img src="/img/logo.svg" alt="Maison Trüvra Logo" class="h-8">
-        </router-link>
+  <header class="bg-white shadow-sm sticky top-0 z-40">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex-shrink-0">
+          <a href="/" aria-label="Page d'accueil">
+            <img class="h-8 w-auto" src="/assets/logo.svg" alt="Maison Truv-ra Logo" />
+          </a>
+        </div>
+
+        <!-- Desktop Navigation -->
+        <nav class="hidden md:flex md:space-x-8">
+          <a href="/products.html" class="text-base font-medium text-gray-500 hover:text-gray-900">Boutique</a>
+          <a href="/notre-maison.html" class="text-base font-medium text-gray-500 hover:text-gray-900">Notre Maison</a>
+          <a href="/le-journal.html" class="text-base font-medium text-gray-500 hover:text-gray-900">Le Journal</a>
+          <a href="/professionnels.html" class="text-base font-medium text-gray-500 hover:text-gray-900">Espace Pro</a>
+        </nav>
+
+        <div class="flex items-center space-x-4">
+           <a href="/account/profile.html" class="text-gray-500 hover:text-gray-700" aria-label="Mon compte">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </a>
+          
+          <!-- Mini Cart will be loaded here -->
+          <div id="mini-cart-container"></div>
+          
+          <!-- Mobile menu button -->
+          <div class="md:hidden">
+            <button @click="isMobileMenuOpen = !isMobileMenuOpen" type="button" class="bg-white p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500" aria-expanded="false">
+              <span class="sr-only">Ouvrir le menu principal</span>
+              <svg v-if="!isMobileMenuOpen" class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              <svg v-else class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
-      <div class="hidden lg:flex items-center space-x-6">
-        <a href="/notre-maison.html" class="text-gray-700 hover:text-black transition-colors duration-300">Notre Maison</a>
-        <router-link :to="{ name: 'catalogue' }" class="text-gray-700 hover:text-black transition-colors duration-300">Nos Produits</router-link>
-        <a href="/le-journal.html" class="text-gray-700 hover:text-black transition-colors duration-300">Le Journal</a>
-        <span class="text-gray-300">|</span>
-        <router-link :to="{ name: 'pro-login' }" class="text-sm text-gray-600 hover:text-black transition-colors duration-300">Espace Professionnels</router-link>
-      </div>
-      <div class="flex items-center space-x-4">
-        <button id="search-button" aria-label="Search">
-          <svg class="h-6 w-6 text-gray-700 hover:text-black transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-        </button>
-        <router-link :to="{ name: 'profile' }" aria-label="Mon Compte">
-          <svg class="h-6 w-6 text-gray-700 hover:text-black transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-        </router-link>
-        <router-link :to="{ name: 'cart' }" class="relative" aria-label="Shopping Cart">
-          <svg class="h-6 w-6 text-gray-700 hover:text-black transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-          <span id="cart-item-count" class="absolute -top-2 -right-2 bg-red-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">0</span>
-        </router-link>
-        <button @click="isMobileMenuOpen = !isMobileMenuOpen" class="lg:hidden" aria-label="Open navigation menu">
-          <svg class="h-6 w-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-        </button>
-      </div>
-    </nav>
-    <div v-show="isMobileMenuOpen" class="lg:hidden">
+    </div>
+
+    <!-- Mobile menu, show/hide based on menu state. -->
+    <div v-show="isMobileMenuOpen" class="md:hidden" id="mobile-menu">
       <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-          <a href="/notre-maison.html" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-black hover:bg-gray-50 transition-colors duration-300">Notre Maison</a>
-          <router-link :to="{ name: 'catalogue' }" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-black hover:bg-gray-50 transition-colors duration-300">Nos Produits</router-link>
-          <a href="/le-journal.html" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-black hover:bg-gray-50 transition-colors duration-300">Le Journal</a>
-          <router-link :to="{ name: 'pro-login' }" class="block px-3 py-2 rounded-md text-base font-medium text-gray-600 hover:text-black hover:bg-gray-50 transition-colors duration-300">Espace Professionnels</router-link>
+        <a href="/products.html" class="text-gray-500 hover:text-gray-900 hover:bg-gray-50 block px-3 py-2 rounded-md text-base font-medium">Boutique</a>
+        <a href="/notre-maison.html" class="text-gray-500 hover:text-gray-900 hover:bg-gray-50 block px-3 py-2 rounded-md text-base font-medium">Notre Maison</a>
+        <a href="/le-journal.html" class="text-gray-500 hover:text-gray-900 hover:bg-gray-50 block px-3 py-2 rounded-md text-base font-medium">Le Journal</a>
+        <a href="/professionnels.html" class="text-gray-500 hover:text-gray-900 hover:bg-gray-50 block px-3 py-2 rounded-md text-base font-medium">Espace Pro</a>
       </div>
-      <button @click="isMobileMenuOpen = false" class="absolute top-4 right-4" aria-label="Close navigation menu">
-           <svg class="h-6 w-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-      </button>
     </div>
   </header>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+// This script loads the MiniCart Vue component into the #mini-cart-container div.
+// It's a way to integrate Vue components into specific parts of a non-SPA page.
+import '../../../js/vue/mini-cart-loader.js';
 
 const isMobileMenuOpen = ref(false);
 </script>
+
