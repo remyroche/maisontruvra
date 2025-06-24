@@ -16,6 +16,9 @@
 
     <!-- B2C Footer -->
     <Footer />
+    
+    <!-- Search Function -->
+    <SearchOverlay />
   </div>
 </template>
 
@@ -24,6 +27,8 @@ import Header from './components/layout/Header.vue';
 import Footer from './components/layout/Footer.vue';
 import Notification from './components/ui/Notification.vue';
 import CookieBanner from './components/layout/CookieBanner.vue';
+import SearchOverlay from './components/search/SearchOverlay.vue';
+
 
 // The script block is minimal as the layout is primarily structural.
 // Page-specific logic resides within the components loaded by the router.
