@@ -11,6 +11,9 @@
     </main>
 
     <B2BFooter />
+
+    <!-- The Cookie Banner will be displayed here for B2B users if needed -->
+    <CookieBanner />
   </div>
 </template>
 
@@ -18,6 +21,7 @@
 import { defineAsyncComponent } from 'vue';
 import B2BHeader from './layout/B2BHeader.vue';
 import B2BFooter from './layout/B2BFooter.vue';
+import CookieBanner from './layout/CookieBanner.vue';
 
 // Asynchronously load child components for better performance
 const DashboardStats = defineAsyncComponent(() => 
@@ -34,3 +38,4 @@ const InvoicesTable = defineAsyncComponent(() =>
 <style scoped>
 /* Scoped styles for the B2B portal layout can be added here */
 </style>
+
