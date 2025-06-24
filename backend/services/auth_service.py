@@ -126,27 +126,44 @@ class AuthService:
     @staticmethod
     def login(email, password, is_b2b=False, is_admin=False):
         """
-        Handles the first step of logging in for any user type.
+        Handles the first step of logging in for any user type, with enhanced
+        security checks and logging.
         """
+        # Sanitize email input
+        email = email.strip().lower()
+        
         user = User.query.filter_by(email=email).first()
 
-        # Verify password and user type (admin, b2b, etc.)
-        if user and user.check_password(password) and (is_b2b == user.is_b2b) and (is_admin == user.is_admin):
-            # If MFA is not enabled for this user, log them in completely.
-            if not user.mfa_enabled:
-                login_user(user)
-                session['mfa_authenticated'] = True # Mark session as fully authenticated
-                return {'mfa_required': False, 'user': user.to_dict()}
-
-            # --- MFA is required: Create a partial session ---
-            # Store the user's ID and mark the session as pending MFA verification.
-            session['mfa_pending_user_id'] = user.id
-            session['mfa_authenticated'] = False
+        # Check for user existence and correct password
+        if not user or not user.check_password(password):
+            current_app.logger.warning(f"Failed login attempt for email: {email}")
+            raise ServiceError("Invalid email or password.", 401)
             
-            # Do NOT call login_user() here. The user is not fully logged in.
-            return {'mfa_required': True}
+        # Check if the user's account is active
+        if not user.is_active:
+            current_app.logger.warning(f"Login attempt for deactivated account: {email}")
+            raise ServiceError("This account has been deactivated.", 403)
 
-        raise ServiceError("Invalid credentials.", 401)
+        # Verify the user has the correct role for the login portal (admin, b2b, etc.)
+        if (is_b2b != user.is_b2b) or (is_admin != user.is_admin):
+            current_app.logger.warning(f"Role mismatch during login attempt for email: {email}")
+            raise ServiceError("Invalid credentials for this portal.", 401)
+
+        # If MFA is not enabled for this user, log them in completely.
+        if not user.mfa_enabled:
+            login_user(user)
+            session['mfa_authenticated'] = True  # Mark session as fully authenticated
+            current_app.logger.info(f"User {email} logged in successfully (MFA not enabled).")
+            return {'mfa_required': False, 'user': user.to_dict()}
+
+        # --- MFA is required: Create a partial session ---
+        # Store the user's ID and mark the session as pending MFA verification.
+        session['mfa_pending_user_id'] = user.id
+        session['mfa_authenticated'] = False
+        
+        # Do NOT call login_user() here. The user is not fully logged in.
+        current_app.logger.info(f"MFA is required for user {email}. Awaiting verification.")
+        return {'mfa_required': True}
 
     @staticmethod
     def verify_and_complete_login(mfa_token):
@@ -174,27 +191,7 @@ class AuthService:
         # If verification fails
         raise ServiceError("Invalid MFA token.", 401)
     
-    @staticmethod
-    def login_user(email, password):
-        """Authenticate user login."""
-        email = email.strip().lower()
-        
-        user = User.query.filter_by(email=email).first()
-        if not user or not user.check_password(password):
-            security_logger.warning(f"Failed login attempt for email: {email}")
-            raise UnauthorizedException("Invalid email or password")
-            
-        if not user.is_active:
-            raise UnauthorizedException("Account is deactivated")
-            
-        security_logger.info(f"User logged in: {email} (ID: {user.id})")
-        
-        # Check if MFA is enabled
-        if user.totp_secret:
-            return {"requires_mfa": True, "user_id": user.id}
-        else:
-            tokens = generate_tokens(user.id)
-            return {"requires_mfa": False, **tokens}
+
             
     @staticmethod
     def verify_mfa_login(user_id, mfa_token):
