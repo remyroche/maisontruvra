@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from backend.services.b2b_service import B2BService  # Assumed service
 from backend.utils.sanitization import sanitize_input
-from ..utils.decorators import admin_required, staff_required, roles_required, permissions_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 from utils.sanitization import sanitize_input
 from services.user_service import UserService
