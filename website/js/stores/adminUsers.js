@@ -67,3 +67,67 @@ export const useAdminUserStore = defineStore('adminUsers', () => {
       isLoading.value = false;
     }
   }
+
+                                               /**
+   * Updates a user's data.
+   * @param {number} userId - The ID of the user to update.
+   * @param {object} userData - The user data to update.
+   */
+  async function updateUser(userId, userData) {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await adminApiClient.put(`/user-management/users/${userId}`, userData);
+      const index = users.value.findIndex(u => u.id === userId);
+      if (index !== -1) {
+        users.value[index] = response.data.user;
+      }
+      
+      // --- LOGGING ---
+      // The backend PUT /user-management/users/{userId} endpoint should call AuditLogService
+      // to record 'user_update' with details of the changes.
+      return true;
+    } catch (err) {
+      console.error(`Failed to update user ${userId}:`, err);
+      error.value = `Failed to update user: ${err.response?.data?.message || 'Server error'}`;
+      return false;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /**
+   * Deletes a user.
+   * @param {number} userId - The ID of the user to delete.
+   */
+  async function deleteUser(userId) {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      await adminApiClient.delete(`/user-management/users/${userId}`);
+      // Remove the user from the local state
+      users.value = users.value.filter(u => u.id !== userId);
+
+      // --- LOGGING ---
+      // The backend DELETE /user-management/users/{userId} endpoint should call
+      // AuditLogService to record this 'user_delete' event.
+      return true;
+    } catch (err) {
+      console.error(`Failed to delete user ${userId}:`, err);
+      error.value = `Failed to delete user: ${err.response?.data?.message || 'Server error'}`;
+      return false;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  return {
+    users,
+    isLoading,
+    error,
+    fetchUsers,
+    createUser,
+    updateUser,
+    deleteUser,
+  };
+});
