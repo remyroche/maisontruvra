@@ -36,6 +36,7 @@ def create_passport():
 @passport_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_PASSPORTS')
 @staff_required
+@admin_required
 def get_passports():
     try:
         page = request.args.get('page', 1, type=int)
@@ -56,6 +57,7 @@ def get_passports():
 @passport_management_bp.route('/<int:passport_id>', methods=['GET'])
 @permissions_required('MANAGE_PASSPORTS')
 @staff_required
+@admin_required
 def get_passport(passport_id):
     passport = PassportService.get_passport_by_id(passport_id)
     if not passport:
