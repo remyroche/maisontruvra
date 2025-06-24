@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 from backend.services.passport_service import PassportService # Assumed service
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import permissions_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 
 passport_management_bp = Blueprint('passport_management_bp', __name__, url_prefix='/admin/passports')
 
