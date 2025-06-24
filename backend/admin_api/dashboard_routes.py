@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from ..utils.decorators import admin_required, staff_required, roles_required, permissions_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 # Import the new, fully implemented service
 from backend.services.admin_dashboard_service import AdminDashboardService
