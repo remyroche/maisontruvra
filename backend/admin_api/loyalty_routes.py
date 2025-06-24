@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from backend.services.loyalty_service import LoyaltyService
 from backend.utils.sanitization import sanitize_input
-from ..utils.decorators import admin_required, staff_required, roles_required, permissions_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 
 loyalty_management_bp = Blueprint('loyalty_management_bp', __name__, url_prefix='/admin/loyalty')
