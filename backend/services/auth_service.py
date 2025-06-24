@@ -124,6 +124,57 @@ class AuthService:
         return user
         
     @staticmethod
+    def login(email, password, is_b2b=False, is_admin=False):
+        """
+        Handles the first step of logging in for any user type.
+        """
+        user = User.query.filter_by(email=email).first()
+
+        # Verify password and user type (admin, b2b, etc.)
+        if user and user.check_password(password) and (is_b2b == user.is_b2b) and (is_admin == user.is_admin):
+            # If MFA is not enabled for this user, log them in completely.
+            if not user.mfa_enabled:
+                login_user(user)
+                session['mfa_authenticated'] = True # Mark session as fully authenticated
+                return {'mfa_required': False, 'user': user.to_dict()}
+
+            # --- MFA is required: Create a partial session ---
+            # Store the user's ID and mark the session as pending MFA verification.
+            session['mfa_pending_user_id'] = user.id
+            session['mfa_authenticated'] = False
+            
+            # Do NOT call login_user() here. The user is not fully logged in.
+            return {'mfa_required': True}
+
+        raise ServiceError("Invalid credentials.", 401)
+
+    @staticmethod
+    def verify_and_complete_login(mfa_token):
+        """
+        Verifies the MFA token for a user with a pending session.
+        If successful, it "upgrades" the session to be fully authenticated.
+        """
+        user_id = session.get('mfa_pending_user_id')
+        if not user_id:
+            raise ServiceError("No MFA login attempt is pending.", 401)
+
+        user = User.query.get(user_id)
+        if not user:
+            raise ServiceError("User not found.", 401)
+        
+        # Verify the token against the user's secret
+        if MfaService.verify_token(user.mfa_secret, mfa_token):
+            # Success! Now we can fully log the user in.
+            login_user(user)
+            session['mfa_authenticated'] = True
+            session.pop('mfa_pending_user_id', None) # Clean up the pending key
+            current_app.logger.info(f"MFA successful for user {user.email}")
+            return user
+
+        # If verification fails
+        raise ServiceError("Invalid MFA token.", 401)
+    
+    @staticmethod
     def login_user(email, password):
         """Authenticate user login."""
         email = email.strip().lower()
