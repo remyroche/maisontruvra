@@ -14,7 +14,19 @@ class Config:
         'sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'app.db')
     FRONTEND_URL = os.environ.get('FRONTEND_URL') or 'http://localhost:5173'
 
-    
+    # --- Celery Configuration ---
+    # The broker URL specifies the connection to your message broker instance (Redis).
+    # Celery uses this to send and receive messages for background tasks.
+    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL') or 'redis://localhost:6379/0'
+    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND') or 'redis://localhost:6379/0'
+
+    # --- File Upload Configuration ---
+    UPLOAD_FOLDER = os.path.join(basedir, 'uploads')
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB
+
+    # --- Other configurations ---
+    LOG_TO_STDOUT = os.environ.get('LOG_TO_STDOUT')
+
     # --- Security Settings ---
     # In production, these should be True to ensure secure transmission of cookies.
     SESSION_COOKIE_SECURE = os.environ.get('FLASK_ENV') == 'production'
