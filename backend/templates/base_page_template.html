@@ -5,29 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Maison Truv-ra{% endblock %}</title>
 
-    <!-- Link to your compiled CSS file -->
     <link href="{{ url_for('static', filename='css/main.css') }}" rel="stylesheet">
-
-    <!-- Extra head elements can be added here -->
     {% block head_extra %}{% endblock %}
 </head>
 <body class="h-full bg-white">
 
-    <!-- Vue Header component will be mounted here -->
     <div id="header-placeholder"></div>
 
     <main class="isolate">
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Vue Footer component will be mounted here -->
     <div id="footer-placeholder"></div>
     
     <!-- Container for Vue notifications -->
     <div id="notification-container" class="fixed top-5 right-5 z-50"></div>
+    
+    <!-- Container for the Cookie Banner -->
+    <div id="cookie-banner-container"></div>
 
-    <!-- This block will contain the specific script for each page -->
     {% block page_script %}{% endblock %}
+    <!-- Load the cookie banner on all pages that use this template -->
+    <script src="{{ url_for('static', filename='js/cookie-banner-loader.js') }}" type="module" defer></script>
 </body>
 </html>
-
