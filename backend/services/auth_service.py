@@ -47,6 +47,37 @@ class AuthService:
         # Note: We don't confirm if the email exists to prevent user enumeration.
 
     @staticmethod
+    def request_b2b_password_reset(email):
+        """
+        Handles a password reset request specifically for a B2B user.
+        """
+        user = User.query.filter_by(email=email).first()
+        # CRITICAL: Verify the user is a B2B user
+        if user and user.is_b2b:
+            ts = AuthService.get_token_serializer(salt='b2b-password-reset-salt')
+            token = ts.dumps(user.email)
+            
+            # This URL points to the Vue B2B portal reset page
+            reset_url = f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/pro/reset-password/{token}"
+            
+            # You might want a specific B2B email template here
+            EmailService.send_password_reset_email(user, reset_url)
+
+    @staticmethod
+    def reset_user_password(user, new_password):
+        """Sets a new password for a user."""
+        if not user or not new_password:
+            raise ServiceError("User and new password are required.")
+        try:
+            user.set_password(new_password)
+            db.session.commit()
+            current_app.logger.info(f"Password reset successfully for user {user.email}")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to reset password for user {user.email}: {e}", exc_info=True)
+            raise ServiceError("Could not update password.")
+            
+    @staticmethod
     def verify_password_reset_token(token, salt='password-reset-salt'):
         ts = AuthService.get_token_serializer(salt=salt)
         try:
