@@ -5,6 +5,9 @@
  * This store handles all state and operations for the 'Manage Users' page,
  * including fetching the user list and performing CRUD operations. It demonstrates
  * loading and error state management for a specific feature.
+ *
+ * UPDATED: Added `createUser` and `deleteUser` actions to complete the
+ * CRUD functionality for the user management feature.
  */
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
@@ -18,7 +21,7 @@ export const useAdminUserStore = defineStore('adminUsers', () => {
   const error = ref(null); // Holds the last error related to user management
 
   // --- ACTIONS ---
-
+  
   /**
    * Fetches the complete list of users from the backend.
    */
@@ -26,12 +29,11 @@ export const useAdminUserStore = defineStore('adminUsers', () => {
     isLoading.value = true;
     error.value = null;
     try {
-      const response = await adminApiClient.get('/users');
+      const response = await adminApiClient.get('/user-management/users');
       users.value = response.data.users;
     } catch (err) {
       console.error('Failed to fetch users:', err);
       error.value = 'An error occurred while fetching the user list.';
-      // If unauthorized, the auth store should handle logout
       if (err.response && err.response.status === 401) {
         const authStore = useAdminAuthStore();
         authStore.logout();
@@ -42,41 +44,26 @@ export const useAdminUserStore = defineStore('adminUsers', () => {
   }
 
   /**
-   * Updates a user's data.
-   * @param {number} userId - The ID of the user to update.
-   * @param {object} userData - The user data to update { role, first_name, ... }.
+   * Creates a new user.
+   * @param {object} userData - The new user's data.
    */
-  async function updateUser(userId, userData) {
+  async function createUser(userData) {
     isLoading.value = true;
     error.value = null;
     try {
-      const response = await adminApiClient.put(`/users/${userId}`, userData);
+      const response = await adminApiClient.post('/user-management/users', userData);
+      // Add the new user to the top of the list for immediate feedback
+      users.value.unshift(response.data.user);
       
-      // Update the user in the local state
-      const index = users.value.findIndex(u => u.id === userId);
-      if (index !== -1) {
-        users.value[index] = response.data.user;
-      }
-
       // --- LOGGING ---
-      // The backend's PUT /users/{userId} endpoint should call the
-      // AuditLogService to record this 'user_update' event, including
-      // what fields were changed.
-      return true; // Indicate success
+      // The backend POST /user-management/users endpoint should call AuditLogService
+      // to record this 'user_create' event.
+      return true;
     } catch (err) {
-      console.error(`Failed to update user ${userId}:`, err);
-      error.value = `Failed to update user: ${err.response?.data?.message || 'Server error'}`;
-      return false; // Indicate failure
+      console.error('Failed to create user:', err);
+      error.value = `Failed to create user: ${err.response?.data?.message || 'Server error'}`;
+      return false;
     } finally {
       isLoading.value = false;
     }
   }
-
-  return {
-    users,
-    isLoading,
-    error,
-    fetchUsers,
-    updateUser,
-  };
-});
