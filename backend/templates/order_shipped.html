@@ -1,11 +1,33 @@
-<!-- File: backend/templates/emails/order_shipped.html -->
-{% extends "emails/general_base_template.html" %}
+{% extends "general_base_template.html" %}
+
 {% block content %}
-    <h2 style="font-size: 24px; color: #374151; font-family: 'Teko', serif;">Votre commande n°{{ order.id }} a été expédiée !</h2>
-    <p>Bonjour {{ user.first_name }},</p>
-    <p>Bonne nouvelle ! Votre commande est en route. Vous pouvez suivre sa progression grâce au numéro de suivi ci-dessous.</p>
-    <p style="text-align: center; margin: 30px 0;">
-        <a href="{{ tracking_url }}" class="button">Suivre mon colis : {{ tracking_number }}</a>
-    </p>
-    <p>Merci encore pour votre confiance.</p>
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+        <td style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 16px; line-height: 24px;">
+            <h1 style="font-family: 'Playfair Display', Georgia, serif; color: #4A2E2A; font-size: 28px; margin: 0 0 20px 0;">Votre voyage gustatif a commencé</h1>
+            <p style="margin: 0 0 20px 0;">Cher(e) {{ order.user.first_name }},</p>
+            <p style="margin: 0 0 30px 0;">Une excellente nouvelle : votre commande n°{{ order.id }} a été confiée à notre transporteur et est en route vers vous. L'attente touche à sa fin, et l'expérience Maison Truvrā est sur le point de commencer.</p>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="padding: 10px 0 30px 0;">
+            <!-- Button -->
+            <table border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                    <td class="button" align="center" style="background-color: #4A2E2A; border-radius: 5px;">
+                        <a href="{{ tracking_link }}" target="_blank" style="font-size: 16px; font-family: 'Lato', Arial, sans-serif; font-weight: bold; color: #FFFFFF; text-decoration: none; border-radius: 5px; padding: 15px 25px; border: 1px solid #4A2E2A; display: inline-block;">Suivre ma livraison</a>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+     <tr>
+        <td style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 16px; line-height: 24px;">
+            <p style="margin: 0 0 20px 0;">Votre numéro de suivi : <strong>{{ tracking_number }}</strong></p>
+            <p style="margin: 0;">Nous espérons que ces créations sauront enchanter votre palais.</p>
+            <p style="margin: 20px 0 0 0;">Avec nos salutations gourmandes,</p>
+            <p style="margin: 10px 0 0 0; font-family: 'Playfair Display', serif; color: #4A2E2A;">L'équipe de la Maison Truvrā</p>
+        </td>
+    </tr>
+</table>
 {% endblock %}
