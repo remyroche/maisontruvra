@@ -131,7 +131,7 @@ class User:
         self.email = email
         self.role = self.Role(role)
         self.is_active = is_active
-        self.two_factor_enabled = two_factor_enabled # Added two_factor_enabled for demonstration
+        self.two_factor_enabled = two_factor_enabled
         User._users_db[id] = self
 
     @staticmethod
@@ -251,23 +251,34 @@ def _apply_base_security_checks(fn):
             '/admin/login',     # Re-login page if session expired or MFA is pending
         ]
 
-        # Check if MFA is enabled for the user's account AND the current JWT session is NOT MFA verified
-        if user_info.get('two_factor_enabled', False): # Ensure two_factor_enabled exists and is True
+        # Determine if the user is a privileged user (Admin or Staff)
+        is_privileged_user = user_info.get('role') in ['Admin', 'Staff']
+
+        # If the user is privileged, enforce MFA compliance
+        if is_privileged_user:
             claims = get_jwt() # Get current JWT claims
             
-            if not claims.get("mfa_verified", False): # If 'mfa_verified' claim is False or missing
+            # MFA is *not* compliant if:
+            # 1. user_info.get('two_factor_enabled', False) is False (MFA not enabled on account)
+            # OR
+            # 2. claims.get("mfa_verified", False) is False (MFA enabled but not verified in current session)
+            mfa_is_not_compliant = not user_info.get('two_factor_enabled', False) or \
+                                   not claims.get("mfa_verified", False)
+
+            if mfa_is_not_compliant:
                 # If the current request path is NOT one of the MFA exempt paths, then deny access
                 if current_path not in MFA_EXEMPT_PATHS:
                     security_logger.warning({
-                        'message': 'MFA required but not verified for access to protected endpoint',
+                        'message': 'Privileged user access denied: MFA not enabled or not verified.',
                         'userId': user_info['id'],
                         'endpoint': current_path,
+                        'reason': 'MFA not compliant',
                         'ip': request.remote_addr,
                         'request_id': getattr(g, 'request_id', 'unknown')
                     })
-                    return jsonify(status="error", message="Multi-Factor Authentication is required to access this resource. Please complete MFA setup or re-login."), 403
+                    return jsonify(status="error", message="Multi-Factor Authentication is mandatory for privileged access. Please set up and verify MFA."), 403
                 # Else (it is an exempt path), allow the request to proceed
-                security_logger.info(f"User {user_info['id']} (MFA pending) allowed access to MFA exempt path: {current_path}")
+                security_logger.info(f"User {user_info['id']} (MFA not compliant) allowed access to MFA exempt path: {current_path}")
         # --- End of MFA Access Control Logic ---
 
         # If all common security checks pass, execute the original function
