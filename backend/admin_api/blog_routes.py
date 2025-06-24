@@ -16,7 +16,7 @@ blog_category_schema = BlogCategorySchema()
 @admin_blog_bp.route("/articles", methods=["POST"])
 @jwt_required()
 @log_admin_action
-@roles_required ('Admin', 'Editor')
+@roles_required ('Admin', 'Editor', 'Manager')
 @admin_required
 def create_article():
     """Admin endpoint to create a new blog article."""
@@ -35,7 +35,7 @@ def create_article():
 @admin_blog_bp.route("/articles", methods=["GET"])
 @jwt_required()
 @log_admin_action
-@roles_required ('Admin', 'Editor')
+@roles_required ('Admin', 'Editor', 'Manager')
 @admin_required
 def get_articles():
     """Admin endpoint to get all blog articles."""
@@ -45,7 +45,7 @@ def get_articles():
 @admin_blog_bp.route("/articles/<int:article_id>", methods=["GET"])
 @jwt_required()
 @log_admin_action
-@roles_required ('Admin', 'Editor')
+@roles_required ('Admin', 'Editor', 'Manager')
 @admin_required
 def get_article(article_id):
     """Admin endpoint to get a single blog article by ID."""
@@ -58,7 +58,7 @@ def get_article(article_id):
 @admin_blog_bp.route("/articles/<int:article_id>", methods=["PUT"])
 @jwt_required()
 @log_admin_action
-@roles_required ('Admin', 'Editor')
+@roles_required ('Admin', 'Editor', 'Manager')
 @admin_required
 def update_article(article_id):
     """Admin endpoint to update a blog article."""
@@ -79,7 +79,7 @@ def update_article(article_id):
 @admin_blog_bp.route("/articles/<int:article_id>", methods=["DELETE"])
 @jwt_required()
 @log_admin_action
-@roles_required ('Admin', 'Editor')
+@roles_required ('Admin', 'Editor', 'Manager')
 @admin_required
 def delete_article(article_id):
     """Admin endpoint to delete a blog article."""
@@ -92,7 +92,7 @@ def delete_article(article_id):
 @admin_blog_bp.route("/categories", methods=["POST"])
 @jwt_required()
 @log_admin_action
-@roles_required ('Admin', 'Editor')
+@roles_required ('Admin', 'Editor', 'Manager')
 @admin_required
 def create_category():
     """Admin endpoint to create a new blog category."""
@@ -108,7 +108,7 @@ def create_category():
 @admin_blog_bp.route("/categories", methods=["GET"])
 @jwt_required()
 @log_admin_action
-@roles_required ('Admin', 'Editor')
+@roles_required ('Admin', 'Editor', 'Manager')
 @admin_required
 def get_categories():
     """Admin endpoint to get all blog categories."""
@@ -118,7 +118,7 @@ def get_categories():
 @admin_blog_bp.route("/categories/<int:category_id>", methods=["PUT"])
 @jwt_required()
 @log_admin_action
-@roles_required ('Admin', 'Editor')
+@roles_required ('Admin', 'Editor', 'Manager')
 @admin_required
 def update_category(category_id):
     """Admin endpoint to update a blog category."""
@@ -136,7 +136,7 @@ def update_category(category_id):
 @admin_blog_bp.route("/categories/<int:category_id>", methods=["DELETE"])
 @jwt_required()
 @log_admin_action
-@roles_required ('Admin', 'Editor')
+@roles_required ('Admin', 'Editor', 'Manager')
 @admin_required
 def delete_category(category_id):
     """Admin endpoint to delete a blog category."""
