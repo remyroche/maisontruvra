@@ -1,67 +1,68 @@
-import qrcode
+import os
 import uuid
-from io import BytesIO
-import base64
-from flask import current_app, render_template
-
-from backend.models.passport_models import ProductPassport
-from backend.database import db
+from flask import render_template, current_app
+from ..models import db, ProductPassport, Product
+from .exceptions import ServiceError, NotFoundException
 
 class PassportService:
     @staticmethod
-    def create_for_product(product):
+    def create_and_render_passport(product_id: int):
         """
-        Creates a new ProductPassport for a given product instance.
-        Generates a unique ID and a QR code for the passport URL.
+        Creates a new ProductPassport entry in the database, then renders its
+        corresponding HTML page from a template and saves it.
+
+        Args:
+            product_id: The ID of the product for which to create a passport.
+
+        Returns:
+            The created ProductPassport object.
         """
-        if not product or not product.id:
-            raise ValueError("A valid product is required to create a passport.")
+        product = Product.query.get(product_id)
+        if not product:
+            raise NotFoundException(f"Cannot create passport: Product with ID {product_id} not found.")
 
-        # 1. Generate a unique identifier for the passport
-        passport_uid = str(uuid.uuid4())
-        
-        # 2. Construct the URL for the passport
-        base_url = current_app.config.get('BASE_URL')
-        passport_url = f"{base_url}/passeport/{passport_uid}"
+        try:
+            # 1. Create the database record for the new passport
+            # The unique_identifier is generated automatically by the model's default.
+            new_passport = ProductPassport(product_id=product.id)
+            db.session.add(new_passport)
+            
+            # We need the ID and unique_identifier, so we flush the session to get them
+            # without committing the full transaction yet.
+            db.session.flush()
 
-        # 3. Generate the QR Code
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
-        )
-        qr.add_data(passport_url)
-        qr.make(fit=True)
+            # 2. Prepare data for the template
+            passport_data = {
+                'passport_id': new_passport.unique_identifier,
+                'product_name': product.name,
+                'sku': product.sku,
+                'creation_date': new_passport.creation_date.strftime("%d %B %Y"),
+                'material': product.material, # Assuming these fields exist on the Product model
+                'origin': product.origin,
+            }
 
-        img = qr.make_image(fill_color="black", back_color="white")
-        
-        # Save QR code to a buffer and encode as base64
-        buffered = BytesIO()
-        img.save(buffered, format="PNG")
-        qr_code_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        qr_code_data_uri = f"data:image/png;base64,{qr_code_base64}"
+            # 3. Render the HTML from the Jinja2 template
+            rendered_html = render_template('non-email/product_passport.html', **passport_data)
 
-        # 4. Create and save the passport instance
-        new_passport = ProductPassport(
-            uid=passport_uid,
-            product_id=product.id,
-            qr_code_url=qr_code_data_uri,
-            # We can pre-generate the static HTML here or render it on-the-fly
-        )
-        
-        db.session.add(new_passport)
-        db.session.commit()
-        
-        return new_passport
+            # 4. Save the rendered HTML to a file
+            # The filename is based on the passport's unique ID to prevent collisions.
+            passport_filename = f"{new_passport.unique_identifier}.html"
+            # Ensure the directory exists
+            passports_dir = current_app.config.get('PASSPORTS_STORAGE_PATH', 'instance/passports')
+            os.makedirs(passports_dir, exist_ok=True)
+            
+            file_path = os.path.join(passports_dir, passport_filename)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(rendered_html)
 
-    @staticmethod
-    def get_passport_page_by_uid(uid: str) -> str:
-        """
-        Retrieves passport data and renders the HTML page.
-        """
-        passport = ProductPassport.query.filter_by(uid=uid).first_or_404()
-        product = passport.product # Assumes relationship is set up
-        
-        # Render the HTML template with the product and passport data
-        return render_template('product-passport.html', product=product, passport=passport)
+            # 5. Store the relative path to the HTML file in the database record (optional but good practice)
+            # new_passport.html_path = file_path 
+
+            current_app.logger.info(f"Generated passport {new_passport.unique_identifier} for product {product.id}")
+            
+            return new_passport
+
+        except Exception as e:
+            # The calling function should handle the rollback.
+            current_app.logger.error(f"Failed to create and render passport for product {product_id}: {e}", exc_info=True)
+            raise ServiceError("Passport creation failed.")
