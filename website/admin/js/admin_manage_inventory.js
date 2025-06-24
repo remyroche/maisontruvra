@@ -1,7 +1,15 @@
 import { DataTableFactory } from './components/DataTableFactory.js';
-import { adminAPI } from './admin_common.js'; // Assuming adminAPI helper exists
+import { adminAPI } from './admin_common.js';
 
 document.addEventListener('DOMContentLoaded', function () {
+    let editStockModal;
+
+    // Initialize the Bootstrap Modal once the DOM is ready
+    const modalElement = document.getElementById('editStockModal');
+    if (modalElement) {
+        editStockModal = new bootstrap.Modal(modalElement);
+    }
+
     const columns = [
         { data: 'product.name', title: 'Produit' },
         { data: 'product.sku', title: 'SKU' },
@@ -9,62 +17,104 @@ document.addEventListener('DOMContentLoaded', function () {
             data: 'quantity', 
             title: 'Quantité Totale',
             render: function(data, type, row) {
-                // Render as an input field for editing
-                return `<input type="number" class="form-control form-control-sm" value="${data}" style="width: 80px;">`;
+                // Display the quantity with an edit button
+                return `${data} <button class="btn btn-sm btn-outline-warning ms-2 btn-edit-total" data-id="${row.id}" data-name="${row.product.name}" data-quantity="${data}">Modifier</button>`;
             }
         },
-        { 
-            data: 'available_quantity',
-            title: 'Disponible',
-            render: function(data, type, row) {
-                // Display-only, calculated on the backend
-                return `<span class="badge bg-secondary">${data}</span>`;
-            }
-        },
+        { data: 'available_quantity', title: 'Disponible' },
         {
             data: 'id',
-            title: 'Actions',
+            title: 'Ajouter du Stock (Génère Passeports)',
+            orderable: false,
             render: function(data, type, row) {
-                // The 'data' here is the inventory ID
-                return `<button class="btn btn-primary btn-sm btn-save" data-id="${data}">Enregistrer</button>`;
+                return `
+                    <div class="input-group input-group-sm" style="width: 150px;">
+                        <input type="number" class="form-control" placeholder="Qté" aria-label="Quantity to add">
+                        <button class="btn btn-success btn-add-stock" data-id="${data}" type="button">Ajouter</button>
+                    </div>
+                `;
             }
         }
     ];
 
     const inventoryTable = DataTableFactory.create('inventory-table', '/api/admin/inventory', columns);
 
-    // Add event listener for the save button
-    $('#inventory-table tbody').on('click', '.btn-save', async function () {
+    // --- Event Handler for ADDING stock (generates passports) ---
+    $('#inventory-table tbody').on('click', '.btn-add-stock', async function () {
         const button = $(this);
         const inventoryId = button.data('id');
-        const row = button.closest('tr');
-        const quantityInput = row.find('input[type="number"]');
-        const newQuantity = quantityInput.val();
+        const input = button.closest('.input-group').find('input');
+        const quantityToAdd = input.val();
 
-        if (newQuantity === '' || isNaN(newQuantity) || parseInt(newQuantity) < 0) {
-            alert('Veuillez entrer une quantité valide.');
+        if (!quantityToAdd || isNaN(quantityToAdd) || parseInt(quantityToAdd) <= 0) {
+            Toastify({ text: 'Veuillez entrer une quantité positive à ajouter.', backgroundColor: 'orange' }).showToast();
             return;
         }
 
-        button.prop('disabled', true).text('Sauvegarde...');
+        button.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
 
         try {
-            // This is the key API call that triggers the back-in-stock logic
-            const response = await adminAPI.put(`/inventory/${inventoryId}`, {
-                quantity: parseInt(newQuantity)
+            const response = await adminAPI.post(`/inventory/${inventoryId}/add_stock`, {
+                quantity: parseInt(quantityToAdd)
             });
-
-            // On success, show a confirmation and refresh the table data
-            // to show updated "Available Quantity"
             Toastify({ text: response.message, backgroundColor: 'green' }).showToast();
-            inventoryTable.ajax.reload(null, false); // false = keep paging
-
+            inventoryTable.ajax.reload(null, false);
         } catch (error) {
-            console.error('Failed to update inventory:', error);
             const errorMessage = error.responseJSON?.error || 'Une erreur est survenue.';
             Toastify({ text: errorMessage, backgroundColor: 'red' }).showToast();
         } finally {
-            button.prop('disabled', false).text('Enregistrer');
+            button.prop('disabled', false).text('Ajouter');
+            input.val('');
+        }
+    });
+
+    // --- Event Handlers for EDITING total stock (with warning) ---
+    // 1. Open the warning modal when "Modifier" is clicked
+    $('#inventory-table tbody').on('click', '.btn-edit-total', function () {
+        const button = $(this);
+        const inventoryId = button.data('id');
+        const productName = button.data('name');
+        const currentQuantity = button.data('quantity');
+        
+        // Populate and show the modal
+        $('#modalInventoryId').val(inventoryId);
+        $('#modalProductName').val(productName);
+        $('#newTotalQuantity').val(currentQuantity);
+        
+        if(editStockModal) {
+            editStockModal.show();
+        }
+    });
+
+    // 2. Handle the final confirmation from within the modal
+    $('#confirmStockUpdate').on('click', async function() {
+        const button = $(this);
+        const inventoryId = $('#modalInventoryId').val();
+        const newQuantity = $('#newTotalQuantity').val();
+
+        if (newQuantity === '' || isNaN(newQuantity) || parseInt(newQuantity) < 0) {
+            alert('Veuillez entrer une quantité totale valide.');
+            return;
+        }
+
+        button.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
+
+        try {
+            // This endpoint just sets the total quantity and does NOT create passports.
+            const response = await adminAPI.put(`/inventory/${inventoryId}`, {
+                quantity: parseInt(newQuantity)
+            });
+            Toastify({ text: response.message, backgroundColor: 'green' }).showToast();
+            inventoryTable.ajax.reload(null, false);
+            if(editStockModal) {
+                editStockModal.hide();
+            }
+        } catch (error) {
+            const errorMessage = error.responseJSON?.error || 'Une erreur est survenue.';
+            Toastify({ text: errorMessage, backgroundColor: 'red' }).showToast();
+        } finally {
+            button.prop('disabled', false).text('Confirmer la modification');
         }
     });
 });
+
