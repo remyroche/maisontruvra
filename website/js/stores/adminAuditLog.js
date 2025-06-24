@@ -1,6 +1,7 @@
 /*
  * FILENAME: website/js/stores/adminAuditLog.js
  * DESCRIPTION: Pinia store for viewing the admin audit log.
+ * UPDATED: Fully implemented with a fetch action.
  */
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
