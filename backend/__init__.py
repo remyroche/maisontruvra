@@ -10,8 +10,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 from argon2 import PasswordHasher
-
-from .middleware import RequestLoggingMiddleware
+from .middleware import setup_middleware, RequestLoggingMiddleware
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -274,4 +273,6 @@ def create_app(config_class=Config):
     from .admin_api.session_routes import admin_session_bp
     app.register_blueprint(admin_session_bp, url_prefix='/api/admin/sessions')
 
+    setup_middleware(app)
+    
     return app
