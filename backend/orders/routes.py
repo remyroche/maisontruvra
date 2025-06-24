@@ -37,6 +37,7 @@ def create_authenticated_order():
     data = request.get_json()
     try:
         order = OrderService.create_authenticated_order(current_user.id, data)
+        EmailService.send_order_confirmation_email(order)
         return jsonify(OrderSchema().dump(order)), 201
     except ServiceError as e:
         return jsonify({"error": e.message}), e.status_code
