@@ -2,9 +2,7 @@
  * FILENAME: website/js/admin/components/AdminLayout.vue
  * DESCRIPTION: The main layout component for the Admin Portal.
  *
- * This component provides a consistent structure for all admin pages.
- * It includes a sidebar for navigation and a main content area where the
- * router will render the current view.
+ * UPDATED: Added a navigation link to the 'Manage Products' page in the sidebar.
 -->
 <template>
   <div class="flex h-screen bg-gray-100 font-sans">
@@ -28,7 +26,15 @@
           <svg class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197M15 11a4 4 0 110-8 4 4 0 010 8z" /></svg>
           Manage Users
         </router-link>
-        <!-- Add other navigation links here -->
+        <!-- --- New Nav Link --- -->
+        <router-link
+          to="/admin/products"
+          class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white"
+          active-class="bg-gray-900 text-white"
+        >
+          <svg class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+          Manage Products
+        </router-link>
       </nav>
     </aside>
 
@@ -37,14 +43,12 @@
       <header class="bg-white shadow-md p-4 flex justify-between items-center">
         <h1 class="text-xl font-semibold text-gray-800">{{ $route.name }}</h1>
         <div>
-          <!-- User profile / logout button can go here -->
           <button @click="logout" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
             Logout
           </button>
         </div>
       </header>
       <div class="flex-1 p-6 overflow-y-auto">
-        <!-- The content of the current route will be rendered here -->
         <router-view></router-view>
       </div>
     </main>
@@ -60,15 +64,13 @@ const authStore = useAdminAuthStore();
 
 async function logout() {
   await authStore.logout();
-  // Redirect to login page after successful logout
   window.location.href = '/admin/login';
 }
 </script>
 
 <style scoped>
-/* Scoped styles for the layout */
 .router-link-exact-active {
-  background-color: #1a202c; /* Equivalent to bg-gray-900 */
+  background-color: #1a202c;
   color: white;
 }
 </style>
