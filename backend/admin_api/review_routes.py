@@ -1,13 +1,17 @@
 from flask import Blueprint, request, jsonify
 from backend.services.review_service import ReviewService # Assumed service
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import permissions_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 
 review_management_bp = Blueprint('review_management_bp', __name__, url_prefix='/admin/reviews')
 
 # READ all reviews (with pagination and filtering)
 @review_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_REVIEWS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def get_all_reviews():
     """
     Get all reviews with pagination and filtering.
@@ -24,6 +28,9 @@ def get_all_reviews():
 
 @review_management_bp.route('/<int:review_id>/status', methods=['PUT'])
 @permissions_required('MANAGE_REVIEWS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def update_review_status(review_id):
     """
     Update review status (approve/reject).
@@ -45,6 +52,9 @@ def update_review_status(review_id):
 
 @review_management_bp.route('/<int:review_id>', methods=['DELETE'])
 @permissions_required('MANAGE_REVIEWS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def delete_review(review_id):
     """
     Delete a review.
@@ -56,6 +66,12 @@ def delete_review(review_id):
         return jsonify(status="success", message="Review deleted"), 200
     except Exception as e:
         return jsonify(status="error", message="Failed to delete review"), 500
+        
+@review_management_bp.route('/', methods=['GET'])
+@permissions_required('MANAGE_REVIEWS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def get_reviews():
     """
     Get a paginated and filterable list of all product reviews.
@@ -93,6 +109,9 @@ def get_reviews():
 # READ a single review by ID
 @review_management_bp.route('/<int:review_id>', methods=['GET'])
 @permissions_required('MANAGE_REVIEWS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def get_review(review_id):
     """
     Get a single review by its ID.
@@ -105,6 +124,9 @@ def get_review(review_id):
 # UPDATE an existing review
 @review_management_bp.route('/<int:review_id>', methods=['PUT'])
 @permissions_required('MANAGE_REVIEWS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def update_review(review_id):
     """
     Update a review's content or status.
@@ -131,6 +153,9 @@ def update_review(review_id):
 # DELETE a review
 @review_management_bp.route('/<int:review_id>', methods=['DELETE'])
 @permissions_required('MANAGE_REVIEWS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def delete_review(review_id):
     """
     Delete a review.
