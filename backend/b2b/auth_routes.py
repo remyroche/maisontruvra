@@ -1,9 +1,45 @@
 from flask import Blueprint, request, jsonify
 from backend.services.b2b_service import B2BService # Assumed to handle B2B auth
 from backend.utils.sanitization import sanitize_input
+from ..services.auth_service import AuthService
+from ..services.exceptions import ServiceError
+from ..models import db, User
 
 b2b_auth_bp = Blueprint('b2b_auth_bp', __name__, url_prefix='/api/b2b/auth')
 
+@b2b_auth_bp.route('/forgot-password', methods=['POST'])
+def b2b_forgot_password():
+    """Endpoint for B2B users to request a password reset email."""
+    data = request.get_json()
+    if not data or 'email' not in data:
+        return jsonify({"error": "Email is required"}), 400
+    
+    AuthService.request_b2b_password_reset(data['email'])
+    # Always return a success message to prevent user enumeration
+    return jsonify({"message": "If a B2B account with that email exists, a password reset link has been sent."}), 200
+
+@b2b_auth_bp.route('/reset-password', methods=['POST'])
+def b2b_reset_password():
+    """Endpoint for B2B users to set a new password using a valid token."""
+    data = request.get_json()
+    token = data.get('token')
+    new_password = data.get('password')
+
+    if not token or not new_password:
+        return jsonify({"error": "Token and new password are required."}), 400
+
+    # Verify using the specific B2B salt
+    user = AuthService.verify_password_reset_token(token, salt='b2b-password-reset-salt')
+
+    if not user or not user.is_b2b:
+        return jsonify({"error": "Invalid or expired token."}), 401
+
+    try:
+        AuthService.reset_user_password(user, new_password)
+        return jsonify({"message": "Password has been reset successfully."}), 200
+    except ServiceError as e:
+        return jsonify({"error": e.message}), e.status_code
+        
 # B2B User Registration Request
 @b2b_auth_bp.route('/register', methods=['POST'])
 def b2b_register():
