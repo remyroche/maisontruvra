@@ -1,17 +1,55 @@
-<!-- File: backend/templates/emails/b2c_order_confirmation.html -->
-{% extends "emails/b2c_base_template.html" %}
-{% block content %}
-    <h2 style="font-size: 24px; color: #374151; font-family: 'Teko', serif;">Merci pour votre commande ! (n°{{ order.id }})</h2>
-    <p>Bonjour {{ user.first_name }},</p>
-    <p>Votre commande a bien été reçue et est en cours de préparation. Vous trouverez ci-joint votre reçu au format PDF.</p>
-    <p><strong>Résumé de votre achat :</strong></p>
-    <ul>
-        {% for item in order.items %}
-        <li>{{ item.quantity }} x {{ item.product.name }}</li>
-        {% endfor %}
-    </ul>
-     <p style="font-weight: bold; margin-top: 20px;">Total : {{ order.total }}€</p>
-    <p>Nous vous enverrons un autre e-mail dès que votre commande sera expédiée.</p>
-    <p>À bientôt,<br>L'équipe Maison Trüvra</p>
-{% endblock %}
+{% extends "general_base_template.html" %}
 
+{% block content %}
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+        <td style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 16px; line-height: 24px;">
+            <h1 style="font-family: 'Playfair Display', Georgia, serif; color: #4A2E2A; font-size: 28px; margin: 0 0 20px 0;">Votre sélection est en préparation</h1>
+            <p style="margin: 0 0 20px 0;">Cher(e) {{ order.user.first_name }},</p>
+            <p style="margin: 0 0 30px 0;">Nous vous remercions pour votre confiance. Nos artisans préparent avec le plus grand soin votre commande n°{{ order.id }}. Chaque création est une promesse de plaisir, et nous sommes ravis que vous ayez choisi de la découvrir.</p>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <h2 style="font-size: 22px; margin: 0 0 20px 0; border-bottom: 1px solid #E0D6CC; padding-bottom: 10px;">Récapitulatif de votre commande</h2>
+            
+            {% for item in order.items %}
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 15px;">
+                <tr>
+                    <td width="80" valign="top">
+                        <img src="{{ item.product.image_url }}" alt="{{ item.product.name }}" width="70" style="border-radius: 4px;">
+                    </td>
+                    <td valign="top" style="padding-left: 15px; font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 15px;">
+                        <p style="margin: 0 0 5px 0; font-weight: bold;">{{ item.product.name }}</p>
+                        <p style="margin: 0;">Quantité : {{ item.quantity }}</p>
+                    </td>
+                    <td valign="top" align="right" style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 15px; font-weight: bold;">
+                        {{ "%.2f"|format(item.price * item.quantity) }} €
+                    </td>
+                </tr>
+            </table>
+            {% endfor %}
+
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 20px; border-top: 1px solid #E0D6CC; padding-top: 20px;">
+                <tr>
+                    <td style="font-family: 'Lato', Arial, sans-serif; font-size: 15px;">Sous-total</td>
+                    <td align="right" style="font-family: 'Lato', Arial, sans-serif; font-size: 15px;">{{ "%.2f"|format(order.subtotal) }} €</td>
+                </tr>
+                <tr>
+                    <td style="padding-top: 5px; font-family: 'Lato', Arial, sans-serif; font-size: 15px;">Livraison</td>
+                    <td align="right" style="padding-top: 5px; font-family: 'Lato', Arial, sans-serif; font-size: 15px;">{{ "%.2f"|format(order.shipping_cost) }} €</td>
+                </tr>
+                 <tr>
+                    <td style="padding-top: 15px; font-family: 'Lato', Arial, sans-serif; font-size: 16px; font-weight: bold;">Total</td>
+                    <td align="right" style="padding-top: 15px; font-family: 'Lato', Arial, sans-serif; font-size: 16px; font-weight: bold; color: #4A2E2A;">{{ "%.2f"|format(order.total) }} €</td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr>
+        <td style="padding: 40px 0 20px 0;">
+            <p style="margin: 0; font-family: 'Lato', Arial, sans-serif; font-size: 16px;">Nous vous notifierons dès que votre commande quittera nos ateliers. D'ici là, nous vous invitons à rêver à la dégustation qui vous attend.</p>
+        </td>
+    </tr>
+</table>
+{% endblock %}
