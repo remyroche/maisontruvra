@@ -103,7 +103,79 @@ class OrderService:
         
         return query.paginate(page=page, per_page=per_page, error_out=False)
         
+    @staticmethod
+    def create_guest_order(data):
+        """
+        Handles the logic for creating an order from a guest.
+        """
+        # Basic validation
+        if not all(k in data for k in ['guest_details', 'shipping_address', 'cart_items', 'payment_token']):
+            raise ServiceError("Missing required data for guest order.", 400)
 
+        session = db.session()
+        try:
+            # 1. Create a non-persistent address for the guest
+            address_data = data['shipping_address']
+            # AddressService would need a method to create an address without a user_id
+            # or we create it here directly.
+            guest_address = Address(
+                street=address_data['street'],
+                city=address_data['city'],
+                postal_code=address_data['postal_code'],
+                country=address_data['country'],
+                # user_id is null for guest addresses
+            )
+            session.add(guest_address)
+            
+            # 2. Create the Order object
+            new_order = Order(
+                guest_email=data['guest_details']['email'],
+                guest_phone=data['guest_details'].get('phone'),
+                shipping_address=guest_address,
+                status='PENDING', # Or a similar initial status
+                # Price calculation logic would go here
+                total_price=OrderService._calculate_total(data['cart_items']) 
+            )
+            session.add(new_order)
+            
+            # 3. Create OrderItems from cart_items
+            for item_data in data['cart_items']:
+                product = Product.query.get(item_data['product_id'])
+                if not product:
+                    raise ServiceError(f"Product with ID {item_data['product_id']} not found.", 404)
+                
+                order_item = OrderItem(
+                    order=new_order,
+                    product_id=product.id,
+                    quantity=item_data['quantity'],
+                    price_at_purchase=product.price
+                )
+                session.add(order_item)
+
+            # 4. Process Payment (pseudo-code)
+            # payment_success = PaymentGateway.charge(data['payment_token'], new_order.total_price)
+            # if not payment_success:
+            #    raise ServiceError("Payment failed.", 402)
+            
+            new_order.status = 'PROCESSING'
+            
+            session.commit()
+            return new_order
+        except Exception as e:
+            session.rollback()
+            # In a real app, log the exception e
+            raise ServiceError("Could not process the guest order.")
+
+    @staticmethod
+    def _calculate_total(cart_items):
+        # Implement price calculation based on products in DB
+        total = 0
+        for item in cart_items:
+            product = Product.query.get(item['product_id'])
+            if product:
+                total += product.price * item['quantity']
+        return total
+        
     @staticmethod
     def create_order(user_id, order_data):
         """Create a new order."""
