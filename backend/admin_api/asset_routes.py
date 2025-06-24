@@ -2,7 +2,7 @@ from flask import request, jsonify
 from . import admin_api_bp # Assuming this is your admin blueprint
 from ..services.asset_service import AssetService
 from ..services.exceptions import ServiceError, NotFoundException
-from ..utils.decorators import admin_required, staff_required, roles_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 
 @admin_api_bp.route('/assets/upload', methods=['POST'])
