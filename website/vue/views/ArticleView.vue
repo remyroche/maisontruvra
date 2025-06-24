@@ -16,24 +16,30 @@
           Publié le {{ formatDate(post.published_at) }}
         </figcaption>
       </figure>
-      <div class="mt-10 prose lg:prose-xl max-w-none" v-html="post.content"></div>
+      <!-- This div now renders the sanitized HTML content -->
+      <div class="mt-10 prose lg:prose-xl max-w-none" v-html="sanitizedContent"></div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import apiClient from '../../js/api-client';
-import DOMPurify from 'dompurify';
-  
+import DOMPurify from 'dompurify'; // Import DOMPurify
+
 const route = useRoute();
 const post = ref(null);
 const loading = ref(true);
 const error = ref(null);
 
+// Create a computed property to hold the sanitized HTML
 const sanitizedContent = computed(() => {
+  if (post.value && post.value.content) {
+    // Sanitize the content before rendering
     return DOMPurify.sanitize(post.value.content);
+  }
+  return '';
 });
 
 const fetchPost = async (slug) => {
@@ -41,7 +47,6 @@ const fetchPost = async (slug) => {
   error.value = null;
   post.value = null;
   try {
-    // We need to add a getBlogPostBySlug method to our apiClient
     post.value = await apiClient.getBlogPostBySlug(slug);
   } catch (err) {
     console.error('Failed to fetch post:', err);
