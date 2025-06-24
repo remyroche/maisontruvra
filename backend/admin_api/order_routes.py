@@ -1,13 +1,17 @@
 from flask import Blueprint, request, jsonify
 from backend.services.order_service import OrderService
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import permissions_required
+from ..utils.decorators import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 
 order_management_bp = Blueprint('order_management_bp', __name__, url_prefix='/admin/orders')
 
 # READ all orders (with pagination)
 @order_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def get_orders():
     """
     Get a paginated list of all orders.
@@ -34,6 +38,9 @@ def get_orders():
 # READ a single order by ID
 @order_management_bp.route('/<int:order_id>', methods=['GET'])
 @permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def get_order(order_id):
     """
     Get a single order by its ID.
@@ -46,6 +53,9 @@ def get_order(order_id):
 # UPDATE an existing order's status
 @order_management_bp.route('/<int:order_id>/status', methods=['PUT'])
 @permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def update_order_status(order_id):
     """
     Update an existing order's status.
@@ -72,6 +82,9 @@ def update_order_status(order_id):
 # DELETE an order
 @order_management_bp.route('/<int:order_id>', methods=['DELETE'])
 @permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def delete_order(order_id):
     """
     Delete an order. This should be used with caution.
