@@ -3,11 +3,45 @@ from .. import db
 from .exceptions import ServiceError
 from flask import session, current_app
 from datetime import datetime, timedelta
+from .passport_service import PassportService
 
 # Updated reservation lifetime to 1 hour (60 minutes)
 RESERVATION_LIFETIME_MINUTES = 60
 
 class InventoryService:
+
+    @staticmethod
+    def add_stock(inventory_id: int, quantity_to_add: int):
+        """
+        Adds a specific quantity of stock to an inventory item and generates
+        a new product passport for each individual item added.
+        This entire process is a single atomic transaction.
+        """
+        if quantity_to_add <= 0:
+            raise ServiceError("Quantity to add must be positive.", 400)
+
+        inventory_item = Inventory.query.with_for_update().get(inventory_id)
+        if not inventory_item:
+            raise NotFoundException("Inventory item not found.")
+            
+        try:
+            # 1. Update the total stock quantity
+            inventory_item.quantity += quantity_to_add
+
+            # 2. Loop to create a passport for each new item
+            for _ in range(quantity_to_add):
+                PassportService.create_and_render_passport(inventory_item.product_id)
+
+            # 3. Commit the entire transaction
+            db.session.commit()
+            current_app.logger.info(f"Added {quantity_to_add} units to inventory for product {inventory_item.product_id}. {quantity_to_add} passports created.")
+
+        except Exception as e:
+            # If any part fails (e.g., file write error), roll back everything.
+            # No quantity will be updated, and no passports will be saved.
+            db.session.rollback()
+            current_app.logger.error(f"Failed to add stock for inventory {inventory_id}: {e}", exc_info=True)
+            raise ServiceError("Failed to add stock and create passports.")
 
     @staticmethod
     def reserve_stock(product_id: int, quantity_to_reserve: int, user_id: int = None):
