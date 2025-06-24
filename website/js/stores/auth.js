@@ -1,37 +1,23 @@
 /**
  * @file /js/stores/auth.js
  * @description Pinia store for managing authentication state and user profile.
- * This store is the single source of truth for the user's session and data.
+ * This is the single source of truth for the user's session and data.
+ * It relies on the browser's secure HttpOnly cookie for session management.
  */
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import apiClient from '../api-client';
 import { useRouter } from 'vue-router';
+import apiClient from '../api-client';
 
 export const useAuthStore = defineStore('auth', () => {
   // STATE
   const user = ref(null);
+  const returnUrl = ref(null);
   const router = useRouter();
 
   // GETTERS
-  /**
-   * Checks if a user is currently authenticated by checking for the user object.
-   * @returns {boolean}
-   */
   const isAuthenticated = computed(() => !!user.value);
-
-  /**
-   * Checks if the authenticated user has a B2B role.
-   * @returns {boolean}
-   */
-  const isB2BAuthenticated = computed(() => {
-    return isAuthenticated.value && user.value.is_b2b;
-  });
-  
-  /**
-   * Returns the status of the B2B account (e.g., 'approved', 'pending').
-   * @returns {string|null}
-   */
+  const isB2BAuthenticated = computed(() => isAuthenticated.value && user.value.is_b2b);
   const b2bStatus = computed(() => {
     if (isB2BAuthenticated.value && user.value.b2b_account) {
       return user.value.b2b_account.status;
@@ -41,15 +27,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   // ACTIONS
   /**
-   * Checks the backend for an active session on application startup.
+   * Sets a URL to redirect to after a successful login.
+   * To be called by a navigation guard before redirecting to a login page.
+   * @param {string} url The URL to redirect to.
    */
-  async function checkSession() {
-    try {
-      const sessionUser = await apiClient.checkSession();
-      user.value = sessionUser;
-    } catch (error) {
-      user.value = null;
-    }
+  function setReturnUrl(url) {
+    returnUrl.value = url;
   }
 
   /**
@@ -58,8 +41,9 @@ export const useAuthStore = defineStore('auth', () => {
    * @param {string} password
    */
   async function login(email, password) {
-    const loggedInUser = await apiClient.login(email, password);
-    user.value = loggedInUser;
+    user.value = await apiClient.login(email, password);
+    router.push(returnUrl.value || '/account');
+    returnUrl.value = null;
   }
   
   /**
@@ -67,30 +51,38 @@ export const useAuthStore = defineStore('auth', () => {
    * @param {object} credentials
    */
   async function loginB2B(credentials) {
-    const loggedInUser = await apiClient.b2bLogin(credentials);
-    user.value = loggedInUser;
+    user.value = await apiClient.b2bLogin(credentials);
+    router.push(returnUrl.value || '/pro/dashboard');
+    returnUrl.value = null;
   }
 
   /**
-   * Logs out any type of user, clears local state, and redirects.
+   * Logs out the current user, clears state, and redirects.
    */
   async function logout() {
+    const wasB2B = isB2BAuthenticated.value;
     try {
-        if(isB2BAuthenticated.value) {
-            await apiClient.b2bLogout();
-        } else {
-            await apiClient.logout();
-        }
+      if (wasB2B) {
+        await apiClient.b2bLogout();
+      } else {
+        await apiClient.logout();
+      }
     } catch (error) {
-        console.error("Logout notification to server failed, but logging out client-side anyway.", error);
+      console.error("Logout notification to server failed, but logging out client-side anyway.", error);
     } finally {
-        user.value = null;
-        // Redirect to the appropriate home/login page
-        if(isB2BAuthenticated) {
-             router.push('/professionnels');
-        } else {
-             router.push('/');
-        }
+      user.value = null;
+      router.push(wasB2B ? '/professionnels' : '/');
+    }
+  }
+
+  /**
+   * Checks the backend for an active session to initialize the store.
+   */
+  async function checkSession() {
+    try {
+      user.value = await apiClient.checkSession();
+    } catch (error) {
+      user.value = null;
     }
   }
 
@@ -99,9 +91,11 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated, 
     isB2BAuthenticated,
     b2bStatus,
+    setReturnUrl,
     checkSession, 
     login,
     loginB2B,
     logout,
   };
 });
+
