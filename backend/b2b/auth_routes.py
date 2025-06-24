@@ -13,7 +13,18 @@ def b2b_forgot_password():
     data = request.get_json()
     if not data or 'email' not in data:
         return jsonify({"error": "Email is required"}), 400
+
+    data = request.get_json()
+    email = data.get('email')
     
+    # Assuming B2BAuthService returns the user and a reset token
+    user, token = B2BAuthService.issue_password_reset_token(email)
+    
+    if user and token:
+        # --- Send B2B Password Reset Email ---
+        EmailService.send_password_reset_email(user, token, is_b2b=True)
+        
+
     AuthService.request_b2b_password_reset(data['email'])
     # Always return a success message to prevent user enumeration
     return jsonify({"message": "If a B2B account with that email exists, a password reset link has been sent."}), 200
@@ -60,6 +71,9 @@ def b2b_register():
     if not all(field in sanitized_data for field in required_fields):
         missing = [f for f in required_fields if f not in sanitized_data]
         return jsonify(status="error", message=f"Missing required fields: {', '.join(missing)}"), 400
+
+    new_user = B2BAuthService.create_pending_b2b_account(data)
+    EmailService.send_b2b_account_pending_email(new_user)
 
     try:
         # This service creates a B2B account with a 'pending' status
