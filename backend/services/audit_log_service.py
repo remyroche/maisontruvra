@@ -2,8 +2,38 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity
 from backend.database import db
 from backend.models.audit_models import AuditLog
+from .. import celery # Assuming celery is initialized in __init__.py
 
 class AuditLogService:
+    def log(admin_user_id, action, target_type=None, target_id=None, details=None):
+        """
+        Logs an admin action. This is now a Celery task to ensure
+        that logging does not slow down the user's request.
+        
+        Args:
+            admin_user_id (int): The ID of the admin performing the action.
+            action (str): A description of the action.
+            target_type (str, optional): The model name of the object being affected.
+            target_id (int, optional): The ID of the object being affected.
+            details (dict, optional): A JSON-serializable dict with extra info.
+        """
+        try:
+            log_entry = AdminAuditLog(
+                admin_user_id=admin_user_id,
+                action=action,
+                target_type=target_type,
+                target_id=target_id,
+                details=details,
+                ip_address=request.remote_addr
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+        except Exception as e:
+            # If logging fails, we don't want to crash the main application.
+            # We would log this failure to a separate, more robust logging system.
+            print(f"CRITICAL: Audit logging failed: {e}")
+
+    
     @staticmethod
     def log_action(action: str, target_id: int = None, details: dict = None):
         """
