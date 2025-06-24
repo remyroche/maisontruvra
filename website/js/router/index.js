@@ -12,6 +12,13 @@ const routes = [
     component: () => import('../vue/views/NotreMaisonView.vue'),
   },
   {
+    path: '/search',
+    name: 'Search',
+    component: () => import('../vue/views/SearchView.vue'),
+    // Props are passed from the URL query string
+    props: route => ({ query: route.query.q })
+  },
+  {
     path: '/charte-qualite',
     name: 'CharteQualite',
     component: () => import('../vue/views/CharteQualiteView.vue'),
