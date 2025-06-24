@@ -17,15 +17,13 @@ export default defineConfig({
     emptyOutDir: true, // Clear the output directory on each build
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'website/index.html'),
-        // Automatically include other HTML files as entry points
-        ...Object.fromEntries(
-          allEntryPoints.map(file => [
-            // Generate a name for the entry point
-            resolve(file).replace(resolve(__dirname, 'website') + '/', '').replace('.html', ''),
-            file
-          ])
-        )
+        // Main B2C Shop App
+        main: resolve(__dirname, 'index.html'),
+        // Admin Portal App
+        admin: resolve(__dirname, 'admin/index.html'),
+        // B2B Portal App
+        b2b: resolve(__dirname, 'pro/index.html'),
+      },
       },
     },
     manifest: true, // Generate a manifest.json file for backend integration
