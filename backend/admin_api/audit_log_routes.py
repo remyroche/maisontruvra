@@ -1,14 +1,15 @@
 from flask import Blueprint, request, jsonify
 from services.audit_log_service import AuditLogService
-from utils.auth_helpers import admin_required
-from utils.sanitization import sanitize_input
+from ..utils.decorators import admin_required, staff_required, roles_required
+from ..utils.decorators import log_admin_actionfrom utils.sanitization import sanitize_input
 
 admin_audit_log_bp = Blueprint('admin_audit_log_bp', __name__)
 audit_log_service = AuditLogService()
 
 @admin_audit_log_bp.route('/', methods=['GET'])
-@admin_required
-def get_audit_logs():
+@log_admin_action
+@roles_required ('Admin', 'Dev')
+@admin_requireddef get_audit_logs():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     user_id = sanitize_input(request.args.get('user_id'))
