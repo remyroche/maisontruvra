@@ -1,140 +1,107 @@
 /**
- * @file /stores/auth.js
- * @description Pinia store for managing authentication state.
- * This store is the single source of truth for the user's authentication token
- * and profile. It replaces the insecure use of localStorage.
+ * @file /js/stores/auth.js
+ * @description Pinia store for managing authentication state and user profile.
+ * This store is the single source of truth for the user's session and data.
  */
 import { defineStore } from 'pinia';
-import { apiClient } from '@/js/api-client.js';
+import { ref, computed } from 'vue';
+import apiClient from '../api-client';
+import { useRouter } from 'vue-router';
 
-// Helper to get initial token from a secure cookie if it exists (ideal setup)
-// Or returns null if not present. For this example, we start fresh.
-const getInitialToken = () => {
-  // In a truly secure setup with HttpOnly cookies, you wouldn't need this.
-  // The token would be managed by the browser and backend.
-  // This store would primarily hold user info and login status.
-  return null;
-};
+export const useAuthStore = defineStore('auth', () => {
+  // STATE
+  const user = ref(null);
+  const router = useRouter();
 
-export const useAuthStore = defineStore('auth', {
-  // STATE: The core data of the store.
-  state: () => ({
-    accessToken: getInitialToken(),
-    user: null,
-    isAuthenticated: !!getInitialToken(),
-    returnUrl: null, // To store the URL to redirect to after login
-  }),
+  // GETTERS
+  /**
+   * Checks if a user is currently authenticated by checking for the user object.
+   * @returns {boolean}
+   */
+  const isAuthenticated = computed(() => !!user.value);
 
-  // GETTERS: Computed properties derived from state.
-  getters: {
-    /**
-     * Provides the current access token.
-     * @returns {string | null}
-     */
-    getToken: (state) => state.accessToken,
+  /**
+   * Checks if the authenticated user has a B2B role.
+   * @returns {boolean}
+   */
+  const isB2BAuthenticated = computed(() => {
+    return isAuthenticated.value && user.value.is_b2b;
+  });
+  
+  /**
+   * Returns the status of the B2B account (e.g., 'approved', 'pending').
+   * @returns {string|null}
+   */
+  const b2bStatus = computed(() => {
+    if (isB2BAuthenticated.value && user.value.b2b_account) {
+      return user.value.b2b_account.status;
+    }
+    return null;
+  });
 
-    /**
-     * Provides the current user's data.
-     * @returns {object | null}
-     */
-    getUser: (state) => state.user,
+  // ACTIONS
+  /**
+   * Checks the backend for an active session on application startup.
+   */
+  async function checkSession() {
+    try {
+      const sessionUser = await apiClient.checkSession();
+      user.value = sessionUser;
+    } catch (error) {
+      user.value = null;
+    }
+  }
 
-    /**
-     * Checks if the user is authenticated.
-     * @returns {boolean}
-     */
-    isLoggedIn: (state) => !!state.accessToken,
-  },
+  /**
+   * Handles the B2C user login flow.
+   * @param {string} email
+   * @param {string} password
+   */
+  async function login(email, password) {
+    const loggedInUser = await apiClient.login(email, password);
+    user.value = loggedInUser;
+  }
+  
+  /**
+   * Handles the B2B user login flow.
+   * @param {object} credentials
+   */
+  async function loginB2B(credentials) {
+    const loggedInUser = await apiClient.b2bLogin(credentials);
+    user.value = loggedInUser;
+  }
 
-  // ACTIONS: Methods that can mutate the state.
-  actions: {
-    /**
-     * Sets the authentication token in the store.
-     * @param {string} token The JWT access token.
-     */
-    setToken(token) {
-      this.accessToken = token;
-      this.isAuthenticated = true;
-    },
-
-    /**
-     * Clears the authentication token and user data from the store.
-     */
-    clearToken() {
-      this.accessToken = null;
-      this.user = null;
-      this.isAuthenticated = false;
-    },
-
-    /**
-     * Sets the user profile data.
-     * @param {object} userData The user's profile information.
-     */
-    setUser(userData) {
-      this.user = userData;
-    },
-    
-    /**
-     * Handles the complete login flow.
-     * @param {string} email
-     * @param {string} password
-     * @returns {Promise<boolean>} True if login is successful.
-     */
-    async login(email, password) {
-      try {
-        const response = await apiClient.post('/auth/login', { email, password });
-        if (response && response.access_token) {
-          this.setToken(response.access_token);
-          // Optionally fetch user profile after login
-          await this.fetchProfile();
-          // Redirect to the stored return URL or a default page
-          window.location.href = this.returnUrl || '/compte.html';
-          return true;
+  /**
+   * Logs out any type of user, clears local state, and redirects.
+   */
+  async function logout() {
+    try {
+        if(isB2BAuthenticated.value) {
+            await apiClient.b2bLogout();
+        } else {
+            await apiClient.logout();
         }
-        // If login is unsuccessful, clear any previous state
-        this.logout();
-        return false;
-      } catch (error) {
-        console.error("Login failed:", error);
-        this.logout();
-        return false;
-      }
-    },
-
-    /**
-     * Handles the complete logout flow.
-     */
-    async logout() {
-      // It's good practice to notify the backend of logout,
-      // which allows for server-side token invalidation.
-      try {
-        await apiClient.post('/auth/logout', {});
-      } catch (error) {
+    } catch (error) {
         console.error("Logout notification to server failed, but logging out client-side anyway.", error);
-      } finally {
-        this.clearToken();
-        // Redirect to homepage after logout
-        window.location.href = '/';
-      }
-    },
-    
-    /**
-     * Fetches the user's profile from the API and stores it.
-     */
-    async fetchProfile() {
-        if (!this.isLoggedIn) return;
-        try {
-            const profileData = await apiClient.get('/account/profile');
-            if (profileData) {
-                this.setUser(profileData.data);
-            }
-        } catch (error) {
-            console.error("Failed to fetch user profile:", error);
-            // If the token is invalid (e.g., expired), log the user out
-            if (error.response && error.response.status === 401) {
-              this.logout();
-            }
+    } finally {
+        user.value = null;
+        // Redirect to the appropriate home/login page
+        if(isB2BAuthenticated) {
+             router.push('/professionnels');
+        } else {
+             router.push('/');
         }
-    },
-  },
+    }
+  }
+
+  return { 
+    user, 
+    isAuthenticated, 
+    isB2BAuthenticated,
+    b2bStatus,
+    checkSession, 
+    login,
+    loginB2B,
+    logout,
+  };
 });
