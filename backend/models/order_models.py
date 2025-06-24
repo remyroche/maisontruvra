@@ -5,10 +5,13 @@ from .enums import OrderStatus
 class Order(BaseModel):
     __tablename__ = 'orders'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
+    guest_email = db.Column(db.String(120), nullable=True)
+    guest_phone = db.Column(db.String(20), nullable=True)
+
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
-    shipping_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'))
+    shipping_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'), nullable=True)
     
     user = db.relationship('User', back_populates='orders')
     items = db.relationship('OrderItem', back_populates='order', cascade="all, delete-orphan")
