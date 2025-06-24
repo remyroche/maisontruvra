@@ -173,6 +173,8 @@ def create_app(config_class=Config):
     from .b2b.b2b_quick_order import b2b_quick_order_bp
     app.register_blueprint(b2b_quick_order_bp, url_prefix='/api/b2b/quick-order')
 
+    from .main_routes import main_bp
+    app.register_blueprint(main_bp)
 
     # Admin API Blueprints
     from .admin_api.auth_routes import admin_auth_bp
