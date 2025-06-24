@@ -3,9 +3,9 @@
 -->
 <template>
   <AdminLayout>
-    <div class="bg-white p-8 rounded-lg shadow-md">
-      <h1 class="text-3xl font-bold text-gray-800">Manage Assets</h1>
-      <!-- ... UI for asset uploads and management ... -->
+    <div class="space-y-6">
+      <header><h1 class="text-3xl font-bold text-gray-800">Manage Assets</h1></header>
+      <p class="text-gray-600">This page will provide an interface for uploading and managing images and other site assets.</p>
     </div>
   </AdminLayout>
 </template>
