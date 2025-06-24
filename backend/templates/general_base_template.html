@@ -1,40 +1,66 @@
-<!-- File: backend/templates/emails/general_base_template.html -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;700&family=Teko:wght@400;600&display=swap" rel="stylesheet">
-    <style>
-        body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; background-color: #F3F4F6; }
-        .container { width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-spacing: 0; }
-        .header { background-color: #374151; padding: 20px; text-align: center; }
-        .header h1 { font-family: 'Teko', serif; color: #ffffff; font-size: 36px; margin: 0; font-weight: 600; }
-        .content { padding: 30px; line-height: 1.6; color: #374151; font-family: 'Raleway', sans-serif; }
-        .content h2 { font-family: 'Teko', serif; color: #374151; font-size: 28px; margin-top: 0; margin-bottom: 16px; font-weight: 600;}
-        .footer { background-color: #F3F4F6; padding: 20px; text-align: center; font-size: 12px; color: #6b7280; }
-        .button { display: inline-block; background-color: #374151; color: #ffffff !important; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; font-family: 'Raleway', sans-serif; }
-        a { color: #5C2C35; text-decoration: underline; }
+    <title>{{ subject }}</title>
+    <!--[if !mso]><!-->
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <!--<![endif]-->
+    <style type="text/css">
+        body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        .ExternalClass { width: 100%; }
+        .ExternalClass, .ExternalClass p, .ExternalClass span, .ExternalClass font, .ExternalClass td, .ExternalClass div { line-height: 100%; }
+        #backgroundTable { margin: 0; padding: 0; width: 100% !important; line-height: 100% !important; }
+        img { outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
+        a img { border: none; }
+        .image_fix { display: block; }
+        p { margin: 1em 0; }
+        h1, h2, h3, h4, h5, h6 { color: #4A2E2A !important; font-family: 'Playfair Display', Georgia, serif; }
+        h1 { font-size: 28px; line-height: 34px; }
+        h2 { font-size: 24px; line-height: 30px; }
+        h3 { font-size: 20px; line-height: 26px; }
+        a { color: #B8860B; text-decoration: underline; }
+        .button a { color: #FFFFFF; text-decoration: none; }
+        
+        @media only screen and (max-width: 640px) {
+            .container { width: 100% !important; }
+            .content { padding: 20px !important; }
+            .header { padding: 20px 0 !important; }
+            .footer { padding: 20px !important; }
+        }
     </style>
 </head>
-<body>
-    <table role="presentation" class="container" border="0" cellpadding="0" cellspacing="0">
+<body style="margin: 0; padding: 0; background-color: #F9F6F2;">
+    <table id="backgroundTable" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F9F6F2;">
         <tr>
-            <td class="header">
-                <h1>Maison Trüvra</h1>
-            </td>
-        </tr>
-        <tr>
-            <td class="content">
-                {% block content %}{% endblock %}
-            </td>
-        </tr>
-        <tr>
-            <td class="footer">
-                <p>&copy; 2025 Maison Trüvra. Tous droits réservés.</p>
-                <p>14 rue de la Libération, 93330 Neuilly-sur-Marne</p>
+            <td align="center" valign="top">
+                <table class="container" border="0" cellpadding="0" cellspacing="0" width="600" style="width: 600px;">
+                    <!-- Header -->
+                    <tr>
+                        <td class="header" align="center" style="padding: 40px 0;">
+                            <a href="{{ url_for('main.index', _external=True) }}">
+                                <img src="{{ logo_url or url_for('static', filename='images/logo_email.png', _external=True) }}" alt="Maison Truvrā" width="180" style="display: block;">
+                            </a>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td class="content" align="left" bgcolor="#FFFFFF" style="padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                            {% block content %}{% endblock %}
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td class="footer" align="center" style="padding: 30px 10px; font-family: 'Lato', Arial, sans-serif; font-size: 12px; color: #999999;">
+                            <p style="margin: 0 0 10px 0;">Maison Truvrā &copy; {{ now.year }}. Tous droits réservés.</p>
+                            <p style="margin: 0 0 10px 0;">123 Rue du Chocolat, 75001 Paris, France</p>
+                            {% if unsubscribe_url %}
+                                <p style="margin: 0;"><a href="{{ unsubscribe_url }}" style="color: #999999; text-decoration: underline;">Se désinscrire</a></p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
             </td>
         </tr>
     </table>
