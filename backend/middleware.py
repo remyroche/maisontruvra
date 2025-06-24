@@ -197,19 +197,82 @@ def setup_middleware(app: Flask):
 
     # 6. Global JSON Input Sanitization (before request)
     @app.before_request
+    @staticmethod
+    def sanitize_string(text):
+        """
+        Sanitizes a string to prevent Cross-Site Scripting (XSS) attacks.
+        Uses the 'bleach' library to strip HTML tags and escape dangerous characters.
+        """
+        if not isinstance(text, str):
+            return text
+        
+        # Configure allowed HTML tags and attributes.
+        # For general user-generated content in a JSON API, it's often safest
+        # to allow no HTML tags and just escape all HTML-like characters.
+        # If you need to allow specific formatting (e.g., bold, italics),
+        # you would define them in allowed_tags and allowed_attributes.
+        allowed_tags = []  # No HTML tags are allowed by default
+        allowed_attributes = {} # No attributes allowed if no tags are allowed
+
+        # Clean the string:
+        # - strip=True removes any disallowed tags entirely.
+        # - tags=allowed_tags specifies which HTML tags are allowed.
+        # - attributes=allowed_attributes specifies which attributes are allowed on allowed tags.
+        # - filters ensures that certain characters are always escaped.
+        #   By default, bleach escapes <, >, ", ', and &.
+        sanitized_text = bleach.clean(
+            text,
+            tags=allowed_tags,
+            attributes=allowed_attributes,
+            strip=True # Removes tags that are not in allowed_tags
+        )
+        
+        return sanitized_text
+
+
+    logger = logging.getLogger(__name__)
+    security_logger = logging.getLogger('security') # Use the dedicated security logger
+    
+    def recursive_sanitize(data):
+        """
+        Recursively sanitizes string values within dictionaries and lists.
+        """
+        if isinstance(data, dict):
+            return {key: recursive_sanitize(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [recursive_sanitize(element) for element in data]
+        elif isinstance(data, str):
+            return InputSanitizer.sanitize_string(data)
+        else:
+            return data
+    
+    @wraps(recursive_sanitize) # Use functools.wraps for decorators
     def sanitize_json_request_data():
+        """
+        Global JSON input sanitization middleware.
+        Sanitizes string values in JSON request bodies, including nested structures.
+        Overwrites Flask's internal cached JSON data with the sanitized version.
+        """
         if request.method in ['POST', 'PUT', 'PATCH']:
             if request.is_json and request.json:
-                g.sanitized_json = {}
-                for key, value in request.json.items():
-                    if isinstance(value, str):
-                        g.sanitized_json[key] = InputSanitizer.sanitize_string(value)
-                    else:
-                        g.sanitized_json[key] = value
-                # Overwrite Flask's cached json with the sanitized version
-                request._cached_json = (g.sanitized_json, request._cached_json[1])
-
-    # 7. MFA Check Middleware (before request) - Your existing middleware
+                try:
+                    # Sanitize the entire JSON payload recursively
+                    sanitized_data = recursive_sanitize(request.json)
+    
+                    # Store sanitized data in g for explicit access if needed, but the primary goal is to overwrite request.json
+                    g.sanitized_json = sanitized_data
+    
+                    # Overwrite Flask's cached json with the sanitized version request._cached_json is a tuple (parsed_json, mimetype_params)
+                    # We retain the mimetype_params to avoid breaking Flask's internal checks.
+                    request._cached_json = (sanitized_data, request._cached_json[1])
+                    security_logger.debug("Request JSON data sanitized and overwritten.")
+    
+                except Exception as e:
+                    # Log the error. This shouldn't happen often if recursive_sanitize is robust.
+                    security_logger.error(f"Error during global JSON sanitization: {e}", exc_info=True)
+                    # Depending on your error handling policy, you might want to abort the request or return a bad request error here.
+                    # For global middleware, often it's better to let the route handler deal with potentially malformed but sanitized data, or rely on validation schemas.
+                    pass # Continue processing, but log the error    # 7. MFA Check Middleware (before request) - Your existing middleware
     mfa_check_middleware(app)
 
     # 8. Global Security Headers (after request)
