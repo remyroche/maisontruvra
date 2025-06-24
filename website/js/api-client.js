@@ -81,6 +81,7 @@ const apiClient = {
     // They will now automatically use the new robust fetchAPI handler.
     getProducts: (params) => fetchAPI('/api/products/', { params }),
     searchProducts: (query) => fetchAPI(`/api/products/search`, { params: { q: query } }),
+    searchB2BProducts: (query) => fetchAPI(`/api/b2b/products/search`, { params: { q: query } }),
     getProduct: (id) => fetchAPI(`/api/products/${id}`),
     getProductReviews: (id) => fetchAPI(`/api/products/${id}/reviews`),
     submitReview: (id, reviewData) => fetchAPI(`/api/products/${id}/reviews`, { method: 'POST', body: reviewData }),
