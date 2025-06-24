@@ -17,6 +17,10 @@
 
     <!-- B2B Footer -->
     <B2BFooter />
+
+    <!-- B2B Search -->
+    <B2BSearchOverlay />
+
   </div>
 </template>
 
