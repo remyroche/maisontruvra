@@ -1,13 +1,18 @@
 from flask import Blueprint, request, jsonify
 from backend.services.product_service import ProductService
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import permissions_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
+
 
 product_management_bp = Blueprint('product_management_bp', __name__, url_prefix='/admin/products')
 
 # CREATE a new product
 @product_management_bp.route('/', methods=['POST'])
 @permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
 def create_product():
     """
     Create a new product.
@@ -33,6 +38,8 @@ def create_product():
         return jsonify(status="error", message="An internal error occurred while creating the product."), 500
 
 @admin_api_bp.route('/inventory/<int:inventory_id>', methods=['PUT'])
+@log_admin_action
+@roles_required ('Admin', 'Manager')
 @admin_required
 def update_inventory(inventory_id):
     """
@@ -74,6 +81,9 @@ def update_inventory(inventory_id):
 # READ all products (with pagination)
 @product_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def get_products():
     """
     Get a paginated list of all products.
@@ -96,6 +106,9 @@ def get_products():
 # READ a single product by ID
 @product_management_bp.route('/<int:product_id>', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def get_product(product_id):
     """
     Get a single product by their ID.
@@ -108,6 +121,9 @@ def get_product(product_id):
 # UPDATE an existing product
 @product_management_bp.route('/<int:product_id>', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
 def update_product(product_id):
     """
     Update an existing product's information.
@@ -133,6 +149,9 @@ def update_product(product_id):
 # DELETE a product
 @product_management_bp.route('/<int:product_id>', methods=['DELETE'])
 @permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
 def delete_product(product_id):
     """
     Delete a product.
