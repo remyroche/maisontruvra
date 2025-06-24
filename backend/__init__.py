@@ -12,7 +12,7 @@ import os
 from argon2 import PasswordHasher
 from .middleware import setup_middleware, RequestLoggingMiddleware
 from .inputsanitizer import InputSanitizer
-from .logger_and_error_handler import Loggin
+from .logger_and_error_handler import logging_and_error_handling
 from flask_login import user_logged_in, user_login_failed
 from flask import request
 
@@ -202,6 +202,7 @@ def create_app(config_class=Config):
     from .admin_api.session_routes import admin_session_bp
     app.register_blueprint(admin_session_bp, url_prefix='/api/admin/sessions')
 
+    # Security at middleware level: CSRF, sanitization, HTTPS, ...
     setup_middleware(app)
     init_app_middleware(app)
     
