@@ -11,6 +11,73 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ProductService:
+
+    @staticmethod
+    def _generate_sku(base_sku, attributes):
+        """
+        Generates a unique SKU for a variant based on its attributes.
+        Example: base='SHIRT', attrs={'color': 'Blue', 'size': 'L'} -> 'SHIRT-BLUE-L'
+        """
+        parts = [base_sku]
+        # Sort keys to ensure consistent SKU generation (e.g., color always before size)
+        for key in sorted(attributes.keys()):
+            # Sanitize attribute value for SKU (uppercase, no spaces)
+            value = str(attributes[key]).upper().replace(' ', '-')
+            parts.append(value)
+        return '-'.join(parts)
+
+    @staticmethod
+    def create_product_with_variants(data):
+        """
+        Creates a new parent product and all its specified variants in a single transaction.
+        """
+        base_sku = data.get('base_sku')
+        variants_data = data.get('variants', [])
+
+        if not base_sku or not data.get('name') or not variants_data:
+            raise ServiceError("Name, base_sku, and at least one variant are required.", 400)
+
+        # Start a transaction
+        try:
+            new_product = Product(
+                name=data['name'],
+                description=data.get('description', ''),
+                base_sku=base_sku,
+                category_id=data['category_id']
+            )
+            db.session.add(new_product)
+
+            for variant_data in variants_data:
+                attributes = variant_data.get('attributes')
+                if not attributes:
+                    raise ServiceError("Each variant must have attributes.", 400)
+                
+                generated_sku = ProductService._generate_sku(base_sku, attributes)
+
+                new_variant = ProductVariant(
+                    product=new_product,
+                    sku=generated_sku,
+                    price=variant_data['price'],
+                    attributes=attributes
+                )
+                
+                # Create an inventory record for the new variant
+                initial_stock = int(variant_data.get('stock', 0))
+                inventory = Inventory(variant=new_variant, quantity=initial_stock)
+                db.session.add(inventory)
+                
+                new_product.variants.append(new_variant)
+
+            db.session.commit()
+            current_app.logger.info(f"Created new product '{new_product.name}' with {len(new_product.variants)} variants.")
+            return new_product
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to create product with variants: {e}", exc_info=True)
+            raise ServiceError("Product creation failed due to a database error.")
+
+    
     @staticmethod
     def get_product_by_id(product_id: int, context: str = 'public'):
         """Get product by ID with different serialization contexts."""
