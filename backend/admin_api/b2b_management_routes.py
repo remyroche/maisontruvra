@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 from backend.services.b2b_service import B2BService  # Assumed service
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import permissions_required, admin_required
+from ..utils.decorators import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 from utils.sanitization import sanitize_input
 from services.user_service import UserService
 from ..utils.decorators import log_admin_action
@@ -12,6 +13,9 @@ user_service = UserService()
 # READ all B2B accounts (paginated with filtering)
 @b2b_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_B2B_ACCOUNTS')
+@log_admin_action
+@roles_required ('Admin')
+@admin_required
 def get_b2b_accounts():
     """
     Get a paginated list of B2B accounts.
@@ -46,7 +50,8 @@ def get_b2b_accounts():
 @admin_b2b_bp.route('/approve/<int:account_id>', methods=['POST'])
 @jwt_required()
 @log_admin_action
-@staff_required
+@roles_required ('Admin')
+@admin_required
 def approve_b2b_account(account_id):
     # Assuming this service returns the primary user of the approved account
     approved_user = B2BAuthService.approve_account(account_id)
@@ -60,6 +65,9 @@ def approve_b2b_account(account_id):
 # READ a single B2B account
 @b2b_management_bp.route('/<int:account_id>', methods=['GET'])
 @permissions_required('MANAGE_B2B_ACCOUNTS')
+@log_admin_action
+@roles_required ('Admin')
+@admin_required
 def get_b2b_account(account_id):
     """
     Get details for a single B2B account.
@@ -72,6 +80,9 @@ def get_b2b_account(account_id):
 # UPDATE a B2B account (e.g., approve, reject, update details)
 @b2b_management_bp.route('/<int:account_id>', methods=['PUT'])
 @permissions_required('MANAGE_B2B_ACCOUNTS')
+@log_admin_action
+@roles_required ('Admin')
+@admin_required
 def update_b2b_account(account_id):
     """
     Update a B2B account's status or other details.
@@ -97,6 +108,9 @@ def update_b2b_account(account_id):
 # DELETE a B2B account
 @b2b_management_bp.route('/<int:account_id>', methods=['DELETE'])
 @permissions_required('MANAGE_B2B_ACCOUNTS')
+@log_admin_action
+@roles_required ('Admin')
+@admin_required
 def delete_b2b_account(account_id):
     """
     Delete a B2B account.
