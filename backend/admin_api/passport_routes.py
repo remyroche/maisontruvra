@@ -8,6 +8,9 @@ passport_management_bp = Blueprint('passport_management_bp', __name__, url_prefi
 # CREATE a new product passport
 @passport_management_bp.route('/', methods=['POST'])
 @permissions_required('MANAGE_PASSPORTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Farmer')
+@admin_required
 def create_passport():
     data = request.get_json()
     if not data:
@@ -32,6 +35,7 @@ def create_passport():
 # READ all product passports (paginated)
 @passport_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_PASSPORTS')
+@staff_required
 def get_passports():
     try:
         page = request.args.get('page', 1, type=int)
@@ -51,6 +55,7 @@ def get_passports():
 # READ a single product passport
 @passport_management_bp.route('/<int:passport_id>', methods=['GET'])
 @permissions_required('MANAGE_PASSPORTS')
+@staff_required
 def get_passport(passport_id):
     passport = PassportService.get_passport_by_id(passport_id)
     if not passport:
