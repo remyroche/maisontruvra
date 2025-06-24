@@ -93,8 +93,9 @@ const apiClient = {
     getOrder: (orderId) => fetchAPI(`/api/orders/${orderId}`),
     listOrders: () => fetchAPI('/api/orders/'),
 
-    // Newsletter
+    // Newsletter APIs
     subscribeB2C: (email) => fetchAPI('/api/newsletter/subscribe/b2c', { method: 'POST', body: { email } }),
+    subscribeB2B: (email) => fetchAPI('/api/newsletter/subscribe/b2b', { method: 'POST', body: { email } }),
 
     // B2B APIs
     b2bLogin: (credentials) => fetchAPI('/api/b2b/auth/login', { method: 'POST', body: credentials }),
