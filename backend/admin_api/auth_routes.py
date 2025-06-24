@@ -5,7 +5,8 @@ from backend.utils.sanitization import sanitize_inputfrom flask import Blueprint
 from services.user_service import UserService
 from services.mfa_service import MFAService
 from flask_login import login_user, logout_user, current_user, login_required
-from utils.auth_helpers import staff_or_admin_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 from utils.sanitization import sanitize_input
 from ..services.auth_service import AuthService
 from ..services.exceptions import ServiceError
@@ -104,7 +105,7 @@ def verify_2fa_login():
 
 
 @admin_auth_bp.route('/logout', methods=['POST'])
-@staff_or_admin_required
+@staff_required
 def alogout():
     logout_user()
     return jsonify({'message': 'Admin or Staff logout successful'})
