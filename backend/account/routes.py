@@ -131,7 +131,8 @@ def update_password():
         else:
             return jsonify(status="error", message="Invalid current password or failed to update."), 400
     
-    EmailService.send_security_alert(user, "Votre mot de passe a été modifié")
+    EmailService.send_password_change_confirmation(user)
+
 
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400
