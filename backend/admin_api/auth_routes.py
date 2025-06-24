@@ -4,15 +4,66 @@ from backend.auth.mfa import MfaService # Assumed service
 from backend.utils.sanitization import sanitize_inputfrom flask import Blueprint, request, jsonify, session
 from services.user_service import UserService
 from services.mfa_service import MFAService
-from flask_login import login_user, logout_user, current_user
+from flask_login import login_user, logout_user, current_user, login_required
 from utils.auth_helpers import staff_or_admin_required
 from utils.sanitization import sanitize_input
+from ..services.auth_service import AuthService
+from ..services.exceptions import ServiceError
 import logging
 
 admin_auth_bp = Blueprint('admin_auth_bp', __name__)
 user_service = UserService()
 mfa_service = MFAService()
 security_logger = logging.getLogger('security')
+
+
+@admin_auth_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """
+    Endpoint for admins to request a password reset email.
+    """
+    data = request.get_json()
+    if not data or 'email' not in data:
+        return jsonify({"error": "Email is required"}), 400
+    
+    try:
+        # This will only succeed and send an email if the user is a valid admin
+        AuthService.request_admin_password_reset(data['email'])
+        # Always return a success message to prevent user enumeration.
+        return jsonify({"message": "If an admin account with that email exists, a password reset link has been sent."}), 200
+    except Exception as e:
+        # Log the error, but don't expose details to the client
+        current_app.logger.error(f"Admin password reset request failed: {e}", exc_info=True)
+        # Still return a generic success message
+        return jsonify({"message": "If an admin account with that email exists, a password reset link has been sent."}), 200
+
+
+@admin_auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    """
+    Endpoint for admins to set a new password using a valid token.
+    """
+    data = request.get_json()
+    token = data.get('token')
+    new_password = data.get('password')
+
+    if not token or not new_password:
+        return jsonify({"error": "Token and new password are required."}), 400
+
+    # Verify the token using the specific admin salt
+    user = AuthService.verify_password_reset_token(token, salt='admin-password-reset-salt')
+
+    if not user:
+        return jsonify({"error": "Invalid or expired token."}), 401
+
+    try:
+        # A new service method would be needed for this
+        # AuthService.reset_user_password(user, new_password)
+        user.set_password(new_password) # Assuming User model has this method
+        db.session.commit()
+        return jsonify({"message": "Password has been reset successfully."}), 200
+    except ServiceError as e:
+        return jsonify({"error": e.message}), e.status_code
 
 @admin_auth_bp.route('/login', methods=['POST'])
 def login():
