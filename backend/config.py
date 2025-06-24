@@ -27,6 +27,16 @@ class Config:
     # --- Other configurations ---
     LOG_TO_STDOUT = os.environ.get('LOG_TO_STDOUT')
 
+    # Flask-Security-Too configuration
+    SECURITY_PASSWORD_SALT = os.environ.get("SECURITY_PASSWORD_SALT", "a-very-secure-salt")
+    SECURITY_REGISTERABLE = True
+    SECURITY_SEND_REGISTER_EMAIL = True
+    SECURITY_RECOVERABLE = True
+    SECURITY_CHANGEABLE = True
+    SECURITY_TRACKABLE = True
+    SECURITY_TWO_FACTOR_ENABLED_METHODS = ['email', 'authenticator']
+    SECURITY_TOTP_ISSUER = 'Maison Truvrā'
+
     # --- Security Settings ---
     # In production, these should be True to ensure secure transmission of cookies.
     SESSION_COOKIE_SECURE = os.environ.get('FLASK_ENV') == 'production'
