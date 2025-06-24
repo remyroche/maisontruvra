@@ -1,55 +1,70 @@
-import { AdminAPI } from './admin_api.js';
-import { showToast } from './admin_ui.js';
+import { DataTableFactory } from './components/DataTableFactory.js';
+import { adminAPI } from './admin_common.js'; // Assuming adminAPI helper exists
 
-document.addEventListener('DOMContentLoaded', () => {
-    const tableBody = document.getElementById('inventory-table-body');
-    if(!tableBody) return;
-
-    const loadInventory = async () => {
-        try {
-            const inventoryItems = await AdminAPI.getInventory();
-            tableBody.innerHTML = '';
-            inventoryItems.forEach(item => {
-                const row = document.createElement('tr');
-                row.className = 'border-b';
-                row.innerHTML = `
-                    <td class="p-2">${item.product_name}</td>
-                    <td class="p-2">${item.sku}</td>
-                    <td class="p-2">${item.stock}</td>
-                    <td class="p-2 flex items-center">
-                        <input type="number" class="w-24 p-1 border rounded-md" placeholder="New Stock">
-                        <button class="ml-2 bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600" data-id="${item.id}">Update</button>
-                    </td>
-                `;
-                tableBody.appendChild(row);
-            });
-        } catch (error) {
-            showToast('Failed to load inventory', 'error');
+document.addEventListener('DOMContentLoaded', function () {
+    const columns = [
+        { data: 'product.name', title: 'Produit' },
+        { data: 'product.sku', title: 'SKU' },
+        { 
+            data: 'quantity', 
+            title: 'Quantité Totale',
+            render: function(data, type, row) {
+                // Render as an input field for editing
+                return `<input type="number" class="form-control form-control-sm" value="${data}" style="width: 80px;">`;
+            }
+        },
+        { 
+            data: 'available_quantity',
+            title: 'Disponible',
+            render: function(data, type, row) {
+                // Display-only, calculated on the backend
+                return `<span class="badge bg-secondary">${data}</span>`;
+            }
+        },
+        {
+            data: 'id',
+            title: 'Actions',
+            render: function(data, type, row) {
+                // The 'data' here is the inventory ID
+                return `<button class="btn btn-primary btn-sm btn-save" data-id="${data}">Enregistrer</button>`;
+            }
         }
-    };
+    ];
 
-    tableBody.addEventListener('click', async (e) => {
-        if(e.target.tagName !== 'BUTTON') return;
+    const inventoryTable = DataTableFactory.create('inventory-table', '/api/admin/inventory', columns);
 
-        const button = e.target;
+    // Add event listener for the save button
+    $('#inventory-table tbody').on('click', '.btn-save', async function () {
+        const button = $(this);
+        const inventoryId = button.data('id');
         const row = button.closest('tr');
-        const input = row.querySelector('input[type="number"]');
-        const newStock = input.value;
-        const inventoryId = button.dataset.id;
+        const quantityInput = row.find('input[type="number"]');
+        const newQuantity = quantityInput.val();
 
-        if (newStock === '' || isNaN(newStock)) {
-            showToast('Please enter a valid stock number.', 'error');
+        if (newQuantity === '' || isNaN(newQuantity) || parseInt(newQuantity) < 0) {
+            alert('Veuillez entrer une quantité valide.');
             return;
         }
 
+        button.prop('disabled', true).text('Sauvegarde...');
+
         try {
-            await AdminAPI.updateInventory(inventoryId, { stock: parseInt(newStock) });
-            showToast('Stock updated successfully.', 'success');
-            loadInventory(); // Refresh the list
+            // This is the key API call that triggers the back-in-stock logic
+            const response = await adminAPI.put(`/inventory/${inventoryId}`, {
+                quantity: parseInt(newQuantity)
+            });
+
+            // On success, show a confirmation and refresh the table data
+            // to show updated "Available Quantity"
+            Toastify({ text: response.message, backgroundColor: 'green' }).showToast();
+            inventoryTable.ajax.reload(null, false); // false = keep paging
+
         } catch (error) {
-            showToast('Failed to update stock.', 'error');
+            console.error('Failed to update inventory:', error);
+            const errorMessage = error.responseJSON?.error || 'Une erreur est survenue.';
+            Toastify({ text: errorMessage, backgroundColor: 'red' }).showToast();
+        } finally {
+            button.prop('disabled', false).text('Enregistrer');
         }
     });
-
-    loadInventory();
 });
