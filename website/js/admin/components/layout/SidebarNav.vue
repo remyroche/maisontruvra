@@ -35,13 +35,14 @@ const navStructure = [
     { title: 'Main', links: [ 
         { name: 'Dashboard', path: '/admin', icon: HomeIcon },
         { name: 'Point of Sale', path: '/admin/pos', icon: QrcodeIcon } 
+        { name: 'My Profile', path: '/admin/profile', icon: UserCircleIcon },
     ] },
     { title: 'E-commerce', links: [
         { name: 'Orders', path: '/admin/orders', icon: ClipboardListIcon },
         { name: 'Invoices', path: '/admin/invoices', icon: DocumentDownloadIcon },
         { name: 'Quotes', path: '/admin/quotes', icon: DocumentDownloadIcon },
-        { name: 'Products', path: '/admin/products', icon: ShoppingBagIcon },
         { name: 'Inventory', path: '/admin/inventory', icon: ArchiveIcon },
+        { name: 'Products', path: '/admin/products', icon: ShoppingBagIcon },
         { name: 'Categories', path: '/admin/categories', icon: TagIcon },
         { name: 'Collections', path: '/admin/collections', icon: CollectionIcon },
         { name: 'Reviews', path: '/admin/reviews', icon: StarIcon },
@@ -52,13 +53,12 @@ const navStructure = [
         { name: 'Newsletter', path: '/admin/newsletter', icon: MailIcon },
         { name: 'Loyalty', path: '/admin/loyalty', icon: GiftIcon },
     ]},
-    { title: 'Customers', links: [
-        { name: 'Users', path: '/admin/users', icon: UsersIcon },
-        { name: 'B2B Accounts', path: '/admin/b2b', icon: OfficeBuildingIcon },
-        { name: 'Roles', path: '/admin/roles', icon: ShieldCheckIcon },
+    { title: 'Accounts', links: [
+        { name: 'B2C Users', path: '/admin/users', icon: UsersIcon },
+        { name: 'B2B Users', path: '/admin/b2b', icon: OfficeBuildingIcon },
     ]},
     { title: 'System', links: [
-        { name: 'My Profile', path: '/admin/profile', icon: UserCircleIcon },
+        { name: 'Roles', path: '/admin/roles', icon: ShieldCheckIcon },
         { name: 'Setup MFA', path: '/admin/setup-mfa', icon: LockClosedIcon },
         { name: 'Active Sessions', path: '/admin/sessions', icon: TerminalIcon },
         { name: 'Assets', path: '/admin/assets', icon: PhotographIcon },
