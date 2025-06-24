@@ -5,6 +5,8 @@
  * This component now includes modals for adding and editing users. It manages the
  * state for which modal is open and which user is being edited. It uses the new
  * Modal and UserForm components to provide a seamless admin experience.
+ *
+ * UPDATED: Connected the form submission and delete buttons to the Pinia store actions.
 -->
 <template>
   <AdminLayout>
@@ -111,10 +113,7 @@ const closeModal = () => {
 const handleFormSubmit = async (userData) => {
   let success = false;
   if (modalMode.value === 'add') {
-    // We need to implement `createUser` in the store
-    // success = await userStore.createUser(userData); 
-    alert("Create functionality to be implemented in Pinia store.");
-    success = true; // Assume success for now
+    success = await userStore.createUser(userData); 
   } else {
     success = await userStore.updateUser(userData.id, userData);
   }
@@ -126,9 +125,7 @@ const handleFormSubmit = async (userData) => {
 
 const handleDeleteUser = async (user) => {
   if (confirm(`Are you sure you want to delete user ${user.email}? This cannot be undone.`)) {
-    // We need to implement `deleteUser` in the store
-    // await userStore.deleteUser(user.id);
-    alert("Delete functionality to be implemented in Pinia store.");
+    await userStore.deleteUser(user.id);
   }
 };
 </script>
