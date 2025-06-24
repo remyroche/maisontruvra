@@ -1,13 +1,17 @@
 from flask import Blueprint, request, jsonify
 from backend.services.quote_service import QuoteService
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import permissions_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 
 quote_management_bp = Blueprint('quote_management_bp', __name__, url_prefix='/admin/quotes')
 
 # READ all quotes (paginated and filterable)
 @quote_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_QUOTES')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def get_quotes():
     """
     Get a paginated list of all B2B quotes.
@@ -34,6 +38,9 @@ def get_quotes():
 # READ a single quote
 @quote_management_bp.route('/<int:quote_id>', methods=['GET'])
 @permissions_required('MANAGE_QUOTES')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def get_quote(quote_id):
     quote = QuoteService.get_quote_by_id(quote_id)
     if not quote:
@@ -43,6 +50,9 @@ def get_quote(quote_id):
 # UPDATE a quote
 @quote_management_bp.route('/<int:quote_id>', methods=['PUT'])
 @permissions_required('MANAGE_QUOTES')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def update_quote(quote_id):
     """
     Update a quote's details or status (e.g., from 'pending' to 'approved').
@@ -67,6 +77,9 @@ def update_quote(quote_id):
 # DELETE a quote
 @quote_management_bp.route('/<int:quote_id>', methods=['DELETE'])
 @permissions_required('MANAGE_QUOTES')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
 def delete_quote(quote_id):
     if not QuoteService.get_quote_by_id(quote_id):
         return jsonify(status="error", message="Quote not found"), 404
