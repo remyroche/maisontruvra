@@ -1,45 +1,48 @@
-<!-- website/source/le-journal.html -->
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Le Journal - Maison Trüvra</title>
-    <link rel="stylesheet" href="/css/public.css">
-</head>
-<body class="bg-white">
+{% extends "base_page_template.html" %}
 
-    <div id="header-placeholder"></div>
+{% block title %}Le Journal - Maison Truv-ra{% endblock %}
 
-    <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <header class="text-center my-16">
-            <h1 class="font-serif text-5xl md:text-6xl text-brand-dark-brown">Le Journal</h1>
-            <p class="text-lg text-brand-dark-gray mt-4">Histoires et découvertes depuis notre Maison.</p>
-        </header>
+{% block content %}
+<!-- Content extracted from the original le-journal.html -->
+<div class="bg-white py-24 sm:py-32">
+  <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="mx-auto max-w-2xl text-center">
+      <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Le Journal</h2>
+      <p class="mt-2 text-lg leading-8 text-gray-600">Découvrez nos articles sur l'upcycling, la décoration durable et nos coups de coeur.</p>
+    </div>
+    <div class="mx-auto mt-16 grid max-w-2xl auto-rows-fr grid-cols-1 gap-8 sm:mt-20 lg:mx-0 lg:max-w-none lg:grid-cols-3">
+      
+      <article class="relative isolate flex flex-col justify-end overflow-hidden rounded-2xl bg-gray-900 px-8 pb-8 pt-80 sm:pt-48 lg:pt-80">
+        <img src="https://images.unsplash.com/photo-1496128858413-b36217c2ce36?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=3603&q=80" alt="" class="absolute inset-0 -z-10 h-full w-full object-cover">
+        <div class="absolute inset-0 -z-10 bg-gradient-to-t from-gray-900 via-gray-900/40"></div>
+        <div class="absolute inset-0 -z-10 rounded-2xl ring-1 ring-inset ring-gray-900/10"></div>
 
-        <!-- Dynamic Category Filter Navigation -->
-        <nav id="journal-categories-nav" class="flex flex-wrap justify-center items-center space-x-4 md:space-x-6 border-b-2 border-brand-light-gray pb-4 mb-16">
-            <a href="#" class="font-sans text-md text-brand-burgundy font-semibold hover:text-brand-gold transition-colors pb-1 border-b-2 border-brand-burgundy" data-slug="all">Tous les articles</a>
-            <!-- Dynamic categories will be populated by JavaScript -->
-            <div id="categories-container" class="contents"></div>
-        </nav>
-
-        <!-- Article Grid Placeholder -->
-        <section id="article-grid" class="min-h-[50vh] flex items-center justify-center">
-            <div class="text-center">
-                <h2 class="text-2xl font-serif text-brand-dark-brown">Les Histoires Arrivent Bientôt.</h2>
-                <p class="mt-2 text-brand-dark-gray">Nos journaux de laboratoire et nos collaborations culinaires seront partagés ici.</p>
+        <div class="flex flex-wrap items-center gap-y-1 overflow-hidden text-sm leading-6 text-gray-300">
+          <time datetime="2023-03-16" class="mr-8">Mar 16, 2023</time>
+          <div class="-ml-4 flex items-center gap-x-4">
+            <svg viewBox="0 0 2 2" class="-ml-0.5 h-0.5 w-0.5 flex-none fill-white/50">
+              <circle cx="1" cy="1" r="1" />
+            </svg>
+            <div class="flex gap-x-2.5">
+               Inspiration
             </div>
-        </section>
+          </div>
+        </div>
+        <h3 class="mt-3 text-lg font-semibold leading-6 text-white">
+          <a href="#">
+            <span class="absolute inset-0"></span>
+            L'art de la table seconde main
+          </a>
+        </h3>
+      </article>
 
-    </main>
+      <!-- Add more articles here following the same structure -->
 
-    <div id="footer-placeholder"></div>
-    <script src="/js/config.js"></script>
-    <script src="/js/api.js"></script>
-    <script src="/js/i18n.js"></script>
-    <script src="/js/ui.js"></script>
-    <script src="/js/pages/le-journal.js"></script>
-</body>
-</html>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_script %}
+    <script src="{{ url_for('static', filename='js/pages/le-journal.js') }}" type="module" defer></script>
+{% endblock %}
