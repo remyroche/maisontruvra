@@ -24,8 +24,6 @@ const routes = [
   
   // User Management
   { path: '/admin/users', name: 'AdminManageUsers', component: ManageUsersView, meta: { requiresAuth: true, requiredPermission: 'manage_users' } },
-  { path: '/admin/roles', name: 'AdminManageRoles', component: ManageRolesView, meta: { requiresAuth: true, requiredPermission: 'manage_roles' } },
-  { path: '/admin/sessions', name: 'AdminManageSessions', component: ManageSessionsView, meta: { requiresAuth: true, requiredPermission: 'manage_sessions' } },
 
   // Product Management
   { path: '/admin/products', name: 'AdminManageProducts', component: ManageProductsView, meta: { requiresAuth: true, requiredPermission: 'manage_products' } },
@@ -50,10 +48,35 @@ const routes = [
 
   // Site & System
   { path: '/admin/assets', name: 'AdminManageAssets', component: ManageAssetsView, meta: { requiresAuth: true, requiredPermission: 'manage_assets' } },
-  { path: '/admin/settings', name: 'AdminSiteSettings', component: SiteSettingsView, meta: { requiresAuth: true, requiredPermission: 'manage_site_settings' } },
-  { path: '/admin/audit-log', name: 'AdminAuditLog', component: AuditLogView, meta: { requiresAuth: true, requiredPermission: 'view_audit_log' } },
   { path: '/admin/pos', name: 'AdminPOS', component: ManagePosView, meta: { requiresAuth: true, requiredPermission: 'use_pos' } },
 
+
+  // Critical pages with role restrictions
+  { 
+    path: '/audit-log', 
+    name: 'AuditLog', 
+    component: AuditLogView, 
+    meta: { requiredRoles: ['Admin', 'Manager', 'Dev'] } 
+  },
+  { 
+    path: '/site-settings', 
+    name: 'SiteSettings', 
+    component: SiteSettingsView, 
+    meta: { requiredRoles: ['Admin', 'Manager', 'Dev'] } 
+  },
+  { 
+    path: '/manage-sessions', 
+    name: 'ManageSessions', 
+    component: ManageSessionsView, 
+    meta: { requiredRoles: ['Admin', 'Manager', 'Dev'] } 
+  },
+  { 
+    path: '/manage-roles', 
+    name: 'ManageRoles', 
+    component: ManageRolesView, 
+    meta: { requiredRoles: ['Admin', 'Manager', 'Dev'] } 
+  },
+  
   // Catch-all
   { path: '/admin/:pathMatch(.*)*', redirect: '/admin' }
 ];
@@ -63,19 +86,33 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach(async (to, from, next) => {
-  const authStore = useAdminAuthStore();
-  if (authStore.adminUser === null && !authStore.isLoading) { await authStore.checkAuthStatus(); }
-  
-  const isAuthenticated = authStore.isAuthenticated;
-  const userPermissions = authStore.permissions || [];
+router.beforeEach((to, from, next) => {
+  const adminAuthStore = useAdminAuthStore();
+  const requiresRoles = to.meta.requiredRoles;
 
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    window.location.href = '/admin/login';
-  } else if (to.meta.requiredPermission && !userPermissions.includes(to.meta.requiredPermission)) {
-    console.warn(`Access denied to ${to.path}. Missing permission: ${to.meta.requiredPermission}`);
-    next({ name: 'AdminDashboard' });
+  // If the route has requiredRoles meta field
+  if (requiresRoles) {
+    // Check if the user is authenticated
+    if (!adminAuthStore.isAuthenticated) {
+      // If not authenticated, redirect to admin login page
+      console.log('Redirecting to login: Not authenticated for roles-protected route.');
+      next({ path: '/admin/login' });
+    } else {
+      // If authenticated, check if the user's role is authorized
+      const userRole = adminAuthStore.user?.role; // Assuming user.role is a string like 'Admin', 'Manager', 'Staff'
+      
+      if (userRole && requiresRoles.includes(userRole)) {
+        // Role is authorized, proceed to the route
+        next();
+      } else {
+        // Role is not authorized, redirect to admin dashboard
+        console.warn(`Unauthorized access attempt for ${to.path}. User role: ${userRole}. Required roles: ${requiresRoles.join(', ')}`);
+        // You might want to show a more specific "access denied" page or message
+        next({ path: '/admin' }); 
+      }
+    }
   } else {
+    // No specific roles required, proceed to the route
     next();
   }
 });
