@@ -56,6 +56,23 @@ async function fetchAPI(endpoint, options = {}) {
     }
 }
 
+const apiClient = {
+    // ... (product, cart, auth, etc. APIs)
+    
+    // Newsletter APIs
+    subscribeB2C: (email) => fetchAPI('/api/newsletter/subscribe/b2c', { method: 'POST', body: { email } }),
+    subscribeB2B: (email) => fetchAPI('/api/newsletter/subscribe/b2b', { method: 'POST', body: { email } }),
+
+    // Blog APIs
+    getBlogPosts: () => fetchAPI('/api/blog/posts'),
+    getBlogPostBySlug: (slug) => fetchAPI(`/api/blog/posts/${slug}`),
+
+    // ... (B2B APIs)
+};
+
+export default apiClient;
+
+
 
 const apiClient = {
     // Product APIs
