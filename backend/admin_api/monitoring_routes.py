@@ -1,10 +1,13 @@
 from flask import Blueprint, jsonify
-from backend.auth.permissions import admin_required
+from ..utils.decorators import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 from backend.services.monitoring_service import MonitoringService
 
 monitoring_bp = Blueprint('monitoring_bp', __name__, url_prefix='/admin/monitoring')
 
 @monitoring_bp.route('/health', methods=['GET'])
+@log_admin_action
+@roles_required ('Admin', 'Dev', 'Manager')
 @admin_required
 def get_system_health():
     """
@@ -23,6 +26,8 @@ def get_system_health():
         return jsonify(status="error", message="An error occurred while checking system health."), 500
 
 @monitoring_bp.route('/latest-errors', methods=['GET'])
+@log_admin_action
+@roles_required ('Admin', 'Dev', 'Manager')
 @admin_required
 def get_latest_errors():
     """
@@ -38,6 +43,8 @@ def get_latest_errors():
         return jsonify(status="error", message="An internal error occurred while fetching error logs."), 500
 
 @monitoring_bp.route('/error-logs', methods=['GET'])
+@log_admin_action
+@roles_required ('Admin', 'Dev', 'Manager')
 @admin_required
 def get_error_logs():
     """
@@ -63,12 +70,16 @@ def get_error_logs():
 
 
 @monitoring_routes.route('/monitoring/celery-status', methods=['GET'])
+@log_admin_action
+@roles_required ('Admin', 'Dev', 'Manager')
 @admin_required
 def get_celery_status():
     celery_status = MonitoringService.get_celery_worker_status()
     return jsonify(celery_status)
 
 @monitoring_routes.route('/monitoring/recent-errors', methods=['GET'])
+@log_admin_action
+@roles_required ('Admin', 'Dev', 'Manager')
 @admin_required
 def get_recent_errors():
     # This is a simplified example. A real implementation would involve a proper logging setup (e.g., ELK stack)
