@@ -3,7 +3,7 @@
 from flask import Blueprint, request, jsonify
 from backend.schemas import BlogPostSchema, BlogCategorySchema
 from flask_jwt_extended import jwt_required
-from ..utils.decorators import admin_required, staff_required, roles_required, permissions_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 from backend.services.blog_service import BlogService
 from backend.services.exceptions import NotFoundException, ValidationException
