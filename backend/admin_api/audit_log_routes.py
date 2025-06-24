@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 from services.audit_log_service import AuditLogService
-from ..utils.decorators import admin_required, staff_required, roles_required
-from ..utils.decorators import log_admin_actionfrom utils.sanitization import sanitize_input
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
+from utils.sanitization import sanitize_input
 
 admin_audit_log_bp = Blueprint('admin_audit_log_bp', __name__)
 audit_log_service = AuditLogService()
