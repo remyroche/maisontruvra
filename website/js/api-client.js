@@ -1,118 +1,113 @@
-/**
- * @file /js/api-client.js
- * @description Centralized client for making API requests.
- * This version integrates with the Pinia auth store to automatically attach
- * the JWT Bearer token to requests. It also continues to handle CSRF tokens.
- */
-import { useAuthStore } from './stores/auth.js';
-import { useNotificationStore } from './stores/notification.js';
+import { handleAPIError } from './common/api_helper.js';
+import { getCSRFToken } from './utils.js';
+import { API_BASE_URL } from './config.js';
 
-class ApiClient {
-    constructor() {
-        this.baseUrl = '/api'; // Assumes API is on the same origin
+/**
+ * A wrapper for the native fetch API to simplify making API calls.
+ * It automatically includes CSRF tokens for mutating requests.
+ *
+ * @param {string} endpoint The API endpoint to call.
+ * @param {object} [options={}] Optional fetch options (method, body, headers, etc.).
+ * @returns {Promise<any>} A promise that resolves with the JSON response.
+ */
+async function fetchAPI(endpoint, options = {}) {
+    let url = `${API_BASE_URL}${endpoint}`;
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers,
+    };
+
+    const method = options.method || 'GET';
+
+    if (method !== 'GET' && method !== 'HEAD') {
+        const csrfToken = await getCSRFToken();
+        if (csrfToken) {
+            headers['X-CSRF-TOKEN'] = csrfToken;
+        }
     }
 
-    /**
-     * A helper function to get the current auth token from the Pinia store.
-     * @returns {string|null} The access token or null if not available.
-     */
-    _getAuthToken() {
-        // We must use the store within a function call, as it might not be
-        // initialized when this class is first instantiated.
-        try {
-            const authStore = useAuthStore();
-            return authStore.getToken;
-        } catch (error) {
-            // Pinia store might not be available yet if this is called outside a component setup context.
-            // This is a failsafe.
+    const config = {
+        ...options,
+        method,
+        headers,
+        body: options.body ? JSON.stringify(options.body) : null,
+    };
+    
+    // For GET requests, append params to URL if any
+    if ((method === 'GET' || method === 'HEAD') && options.params) {
+        const params = new URLSearchParams(options.params);
+        url += `?${params.toString()}`;
+    }
+
+
+    try {
+        const response = await fetch(url, config);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'An unknown error occurred' }));
+            throw { status: response.status, data: errorData };
+        }
+        if (response.status === 204) { // No Content
             return null;
         }
-    }
-
-    /**
-     * A helper function to read a cookie value by name.
-     * This is useful for retrieving the CSRF token if it's set in a cookie.
-     * @param {string} name The name of the cookie.
-     * @returns {string|null} The value of the cookie or null.
-     */
-    _getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return null;
-    }
-
-    async request(endpoint, options = {}) {
-        const url = `${this.baseUrl}${endpoint}`;
-        const notificationStore = useNotificationStore();
-
-        const headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            ...options.headers,
-        };
-
-        // --- JWT Bearer Token Handling (Security Fix) ---
-        // Get the token from our secure in-memory store (Pinia).
-        const token = this._getAuthToken();
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        // --- CSRF Token Handling (Best Practice) ---
-        // Automatically reads the CSRF token from a standard cookie (e.g., 'XSRF-TOKEN')
-        // and sends it back in the 'X-CSRF-Token' header. This is a robust pattern for SPAs.
-        const csrfToken = this._getCookie('XSRF-TOKEN');
-        if (csrfToken) {
-            headers['X-CSRF-Token'] = csrfToken;
-        }
-
-        try {
-            const response = await fetch(url, { ...options, headers });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ 
-                    message: `Une erreur de réseau est survenue: ${response.statusText}` 
-                }));
-
-                notificationStore.showNotification(errorData.message || `Erreur: ${response.statusText}`, 'error');
-                
-                // Add the response to the error object so it can be inspected by the caller.
-                const error = new Error(errorData.message);
-                error.response = response;
-                throw error;
-            }
-
-            // Handle successful but empty responses (e.g., HTTP 204 No Content).
-            if (response.status === 204) {
-                return null;
-            }
-
-            return await response.json();
-        } catch (error) {
-            // Re-throw the error so that the calling function knows the request failed
-            // and can stop its execution (e.g., stop a loading spinner).
-            throw error;
-        }
-    }
-
-    // --- Standard HTTP Method Helpers ---
-    get(endpoint, options = {}) {
-        return this.request(endpoint, { ...options, method: 'GET' });
-    }
-
-    post(endpoint, body, options = {}) {
-        return this.request(endpoint, { ...options, method: 'POST', body: JSON.stringify(body) });
-    }
-
-    put(endpoint, body, options = {}) {
-        return this.request(endpoint, { ...options, method: 'PUT', body: JSON.stringify(body) });
-    }
-
-    delete(endpoint, options = {}) {
-        return this.request(endpoint, { ...options, method: 'DELETE' });
+        return await response.json();
+    } catch (error) {
+        handleAPIError(error);
+        throw error;
     }
 }
 
-export const apiClient = new ApiClient();
 
+const apiClient = {
+    // Product APIs
+    getProducts: (params) => fetchAPI('/api/products/', { params }),
+    getProduct: (id) => fetchAPI(`/api/products/${id}`),
+    getProductReviews: (id) => fetchAPI(`/api/products/${id}/reviews`),
+    submitReview: (id, reviewData) => fetchAPI(`/api/products/${id}/reviews`, { method: 'POST', body: reviewData }),
+
+    // Cart APIs
+    getCart: () => fetchAPI('/api/cart/'),
+    addToCart: (productId, quantity) => fetchAPI('/api/cart/add', { method: 'POST', body: { product_id: productId, quantity } }),
+    updateCartItem: (productId, quantity) => fetchAPI('/api/cart/update', { method: 'PUT', body: { product_id: productId, quantity } }),
+    removeFromCart: (productId) => fetchAPI('/api/cart/remove', { method: 'POST', body: { product_id: productId } }),
+    applyVoucher: (voucherCode) => fetchAPI('/api/cart/voucher/apply', {method: 'POST', body: {voucher_code: voucherCode}}),
+
+    // Auth APIs
+    login: (email, password) => fetchAPI('/api/auth/login', { method: 'POST', body: { email, password } }),
+    register: (userData) => fetchAPI('/api/auth/register', { method: 'POST', body: userData }),
+    logout: () => fetchAPI('/api/auth/logout', { method: 'POST' }),
+    checkSession: () => fetchAPI('/api/auth/session'),
+    requestPasswordReset: (email) => fetchAPI('/api/auth/forgot-password', { method: 'POST', body: { email } }),
+    resetPassword: (token, newPassword) => fetchAPI('/api/auth/reset-password', { method: 'POST', body: { token, new_password: newPassword } }),
+
+    // User account APIs
+    getAccountDetails: () => fetchAPI('/api/account/profile'),
+    updateAccountDetails: (profileData) => fetchAPI('/api/account/profile', { method: 'PUT', body: profileData }),
+    changePassword: (passwords) => fetchAPI('/api/account/password', { method: 'PUT', body: passwords }),
+    getAddresses: () => fetchAPI('/api/account/addresses'),
+    addAddress: (addressData) => fetchAPI('/api/account/addresses', { method: 'POST', body: addressData }),
+    updateAddress: (addressId, addressData) => fetchAPI(`/api/account/addresses/${addressId}`, { method: 'PUT', body: addressData }),
+    deleteAddress: (addressId) => fetchAPI(`/api/account/addresses/${addressId}`, { method: 'DELETE' }),
+
+    // Order APIs
+    createOrder: (orderPayload) => fetchAPI('/api/orders/create', { method: 'POST', body: orderPayload }),
+    getOrder: (orderId) => fetchAPI(`/api/orders/${orderId}`),
+    listOrders: () => fetchAPI('/api/orders/'),
+
+    // Newsletter
+    subscribeB2C: (email) => fetchAPI('/api/newsletter/subscribe/b2c', { method: 'POST', body: { email } }),
+
+    // B2B APIs
+    b2bLogin: (credentials) => fetchAPI('/api/b2b/auth/login', { method: 'POST', body: credentials }),
+    b2bRegister: (companyInfo) => fetchAPI('/api/b2b/auth/register', { method: 'POST', body: companyInfo }),
+    b2bLogout: () => fetchAPI('/api/b2b/auth/logout', { method: 'POST' }),
+    getB2BDashboard: () => fetchAPI('/api/b2b/dashboard'),
+    getB2BProducts: (params) => fetchAPI('/api/b2b/products', { params }),
+    getB2BOrders: (params) => fetchAPI('/api/b2b/orders', { params }),
+    createB2BOrder: (orderData) => fetchAPI('/api/b2b/orders', { method: 'POST', body: orderData }),
+    getB2BInvoices: (params) => fetchAPI('/api/b2b/invoices', { params }),
+    getB2BInvoice: (invoiceId) => fetchAPI(`/api/b2b/invoices/${invoiceId}`),
+    getB2BProfile: () => fetchAPI('/api/b2b/profile'),
+    updateB2BProfile: (profileData) => fetchAPI('/api/b2b/profile', { method: 'PUT', body: profileData }),
+};
+
+export default apiClient;
