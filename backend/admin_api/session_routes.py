@@ -1,11 +1,14 @@
 from flask import Blueprint, request, jsonify
 from backend.services.session_service import SessionService
-from backend.auth.permissions import admin_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 
 session_management_bp = Blueprint('session_management_bp', __name__, url_prefix='/admin/sessions')
 
 # READ all active sessions
 @session_management_bp.route('/', methods=['GET'])
+@log_admin_action
+@roles_required ('Admin', 'Manager')
 @admin_required
 def get_sessions():
     """
@@ -31,6 +34,8 @@ def get_sessions():
 
 # DELETE a specific session (force logout)
 @session_management_bp.route('/<session_id>', methods=['DELETE'])
+@log_admin_action
+@roles_required ('Admin', 'Manager')
 @admin_required
 def terminate_session(session_id):
     """
