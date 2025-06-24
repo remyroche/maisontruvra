@@ -25,11 +25,16 @@
 import { ref, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import apiClient from '../../js/api-client';
-
+import DOMPurify from 'dompurify';
+  
 const route = useRoute();
 const post = ref(null);
 const loading = ref(true);
 const error = ref(null);
+
+const sanitizedContent = computed(() => {
+    return DOMPurify.sanitize(post.value.content);
+});
 
 const fetchPost = async (slug) => {
   loading.value = true;
