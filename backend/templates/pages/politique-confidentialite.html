@@ -1,0 +1,40 @@
+{% extends "base_page_template.html" %}
+
+{% block title %}Notre Maison - Maison Truv-ra{% endblock %}
+
+{% block content %}
+
+
+
+        <div class="container mx-auto px-6 max-w-3xl">
+            <h1 class="text-5xl font-serif font-thin text-center mb-8" data-i18n-key="privacyPolicy">Politique de Confidentialité</h1>
+            <div id="privacy-policy-content" class="text-lg text-dark-gray leading-relaxed space-y-6">
+                <!-- Content will be loaded by JS -->
+                <p data-i18n-key="lastUpdated">Dernière mise à jour : 13 juin 2025</p>
+
+                <h2 class="text-3xl font-serif font-light text-dark-brown pt-6" data-i18n-key="section1Title">Introduction</h2>
+                <p data-i18n-key="section1Text">
+                    Maison Trüvra s'engage à protéger la vie privée de ses clients et visiteurs. Cette politique de confidentialité explique quelles informations nous collectons, comment nous les utilisons, et quels sont vos droits concernant vos données personnelles.
+                </p>
+
+                <h2 class="text-3xl font-serif font-light text-dark-brown pt-6" data-i18n-key="section2Title">Collecte des informations</h2>
+                <p data-i18n-key="section2Text">
+                    Nous collectons des informations lorsque vous vous inscrivez sur notre site, passez une commande, vous abonnez à notre newsletter ou remplissez un formulaire. Les informations collectées incluent votre nom, votre adresse e-mail, votre adresse postale, et vos informations de paiement.
+                </p>
+
+                 <h2 class="text-3xl font-serif font-light text-dark-brown pt-6" data-i18n-key="section3Title">Utilisation des informations</h2>
+                <p data-i18n-key="section3Text">
+                    Toutes les informations que nous recueillons auprès de vous peuvent être utilisées pour : personnaliser votre expérience, améliorer notre site web, améliorer le service client, traiter les transactions, et vous envoyer des e-mails périodiques.
+                </p>
+                
+                <!-- More sections can be added here -->
+            </div>
+        </div>
+
+
+
+{% endblock %}
+
+{% block page_script %}
+    <script src="{{ url_for('static', filename='js/main.js') }}" type="module" defer></script>
+{% endblock %}
