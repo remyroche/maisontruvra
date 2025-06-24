@@ -1,35 +1,25 @@
-{% extends "base_page_template.html" %}
-
-{% block title %}Notre Maison - Maison Truv-ra{% endblock %}
-
-{% block content %}
-
-
-
 <!DOCTYPE html>
 <html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- The csrf-token is typically injected by a backend framework. -->
-    <!-- For static viewing, we'll leave the content empty to prevent potential JS errors. -->
-    <meta name="csrf-token" content="">
-    <title>Maison Trüvra</title>
-    <!-- The CSS will be injected by Vite during the build process -->
-</head>
-<body>
-    <!-- The entire Vue Application will be mounted here -->
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!--
+      The CSRF token is now securely injected here by the Flask backend.
+      The Vue application will read this token for all API requests.
+    -->
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    
+    <title>Maison Truv-ra</title>
+    
+    <!-- Link to the compiled CSS file from Vite -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='assets/index.css') }}">
+  </head>
+  <body>
     <div id="app"></div>
-
-    <!-- Load main application script -->
-    <script type="module" src="/js/main.js"></script>
-</body>
+    
+    <!-- Link to the compiled JS file from Vite -->
+    <script type="module" src="{{ url_for('static', filename='assets/index.js') }}"></script>
+  </body>
 </html>
-
-
-
-{% endblock %}
-
-{% block page_script %}
-    <script src="{{ url_for('static', filename='js/main.js') }}" type="module" defer></script>
-{% endblock %}
