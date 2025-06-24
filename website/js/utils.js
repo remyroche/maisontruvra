@@ -6,6 +6,16 @@
  * @param {string} currency - The currency code (e.g., 'EUR').
  * @returns {string} - The formatted currency string.
  */
+
+export function getCSRFToken() {
+  const tokenTag = document.querySelector('meta[name="csrf-token"]');
+  if (tokenTag) {
+    return tokenTag.getAttribute('content');
+  }
+  console.error('CSRF token meta tag not found.');
+  return null;
+}
+
 export function formatCurrency(amount, currency = 'EUR') {
     return new Intl.NumberFormat('fr-FR', { // Using 'fr-FR' for Euro formatting as an example
         style: 'currency',
