@@ -45,6 +45,32 @@ export const useAuthStore = defineStore('auth', () => {
     router.push(returnUrl.value || '/account');
     returnUrl.value = null;
   }
+
+    async function login(credentials) {
+        try {
+            const response = await apiClient.login(credentials); // Assumes login method in apiClient
+            if (response.mfa_required) {
+                // The user needs to complete the MFA step.
+                // Redirect to the MFA verification page.
+                router.push('/login/verify-mfa');
+            } else {
+                // MFA not needed or already passed, complete the login.
+                user.value = response.user;
+                router.push('/dashboard'); // Or desired destination
+            }
+        } catch (error) {
+            console.error("Login failed:", error);
+            // Propagate error to be handled by the component
+            throw error;
+        }
+    }
+
+    async function verifyMfa(token) {
+        // This action calls the MFA verification endpoint
+        const loggedInUser = await apiClient.verifyMfa({ token });
+        user.value = loggedInUser;
+        router.push('/dashboard');
+    }
   
   /**
    * Handles the B2B user login flow.
