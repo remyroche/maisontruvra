@@ -58,6 +58,9 @@ def create_app(config_class=Config):
     # Register CSRF routes
     from backend.auth.csrf_routes import csrf_bp
     app.register_blueprint(csrf_bp, url_prefix='/api/auth')
+
+    # Initialize Celery after the app is configured
+    init_celery(app)
     
     # --- Signal Handlers for Login Events ---
     from flask_login import user_logged_in, user_login_failed
