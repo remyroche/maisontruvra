@@ -106,25 +106,3 @@ const restorePost = (postId) => {
     blogStore.restorePost(postId);
   }
 };
-// NOTE: Modal and form logic would be added here, similar to other views.
-</script>
-```website/js/admin/router/index.js` (Add Blog route)
-```javascript
-// ... other imports
-import ManageBlogView from '@/js/admin/views/ManageBlogView.vue';
-
-const routes = [
-    // ... other routes
-    { path: '/blog', name: 'ManageBlog', component: ManageBlogView, meta: { requiresAuth: true, roles: ['Admin', 'Manager', 'Editor'] } },
-    // ...
-]
-// ...
-```website/js/admin/components/layout/SidebarNav.vue` (Add Blog link)
-```vue
-<!-- ... inside the <nav> element ... -->
-<router-link to="/admin/blog" v-if="hasRole(['Admin', 'Manager', 'Editor'])"
-    class="flex items-center px-4 py-2 text-gray-700 rounded-md hover:bg-gray-200"
-    active-class="bg-gray-200">
-    <span class="mx-4 font-medium">Blog</span>
-</router-link>
-<!-- ... -->
