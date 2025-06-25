@@ -1,13 +1,61 @@
 from flask import Blueprint, request, jsonify
 from backend.services.quote_service import QuoteService
+from backend.services.order_service import OrderService # To convert quote to order
 from backend.utils.sanitization import sanitize_input
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 
-quote_management_bp = Blueprint('quote_management_bp', __name__, url_prefix='/admin/quotes')
+quote_bp = Blueprint('admin_quote_routes', __name__, url_prefix='/api/admin/quotes')
 
-# READ all quotes (paginated and filterable)
-@quote_management_bp.route('/', methods=['GET'])
+@quote_bp.route('/', methods=['GET'])
+@permissions_required('MANAGE_QUOTES')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def get_quotes():
+    """Retrieves all quotes."""
+    quotes = QuoteService.get_all_quotes()
+    return jsonify([q.to_dict() for q in quotes])
+
+@quote_bp.route('/<int:quote_id>', methods=['GET'])
+@permissions_required('MANAGE_QUOTES')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def get_quote_details(quote_id):
+    """Retrieves details for a specific quote."""
+    quote = QuoteService.get_quote_by_id(quote_id)
+    if not quote:
+        return jsonify({"error": "Quote not found"}), 404
+    return jsonify(quote.to_dict(include_details=True))
+
+@quote_bp.route('/<int:quote_id>/convert', methods=['POST'])
+@permissions_required('MANAGE_QUOTES')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def convert_quote_to_order(quote_id):
+    """Converts a quote into a draft order."""
+    try:
+        order = OrderService.create_order_from_quote(quote_id)
+        if not order:
+            return jsonify({"error": "Failed to convert quote"}), 400
+        return jsonify(order.to_dict()), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@quote_bp.route('/<int:quote_id>', methods=['DELETE'])
+@permissions_required('MANAGE_QUOTES')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def delete_quote(quote_id):
+    """Deletes a quote."""
+    if QuoteService.delete_quote(quote_id):
+        return jsonify({"message": "Quote deleted successfully"})
+    return jsonify({"error": "Quote not found"}), 404
+
+@quote_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_QUOTES')
 @log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
@@ -47,45 +95,3 @@ def get_quote(quote_id):
         return jsonify(status="error", message="Quote not found"), 404
     return jsonify(status="success", data=quote.to_dict_full()), 200
 
-# UPDATE a quote
-@quote_management_bp.route('/<int:quote_id>', methods=['PUT'])
-@permissions_required('MANAGE_QUOTES')
-@log_admin_action
-@roles_required ('Admin', 'Manager', 'Support')
-@admin_required
-def update_quote(quote_id):
-    """
-    Update a quote's details or status (e.g., from 'pending' to 'approved').
-    """
-    data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid JSON body"), 400
-    
-    if not QuoteService.get_quote_by_id(quote_id):
-        return jsonify(status="error", message="Quote not found"), 404
-
-    sanitized_data = sanitize_input(data)
-    try:
-        updated_quote = QuoteService.update_quote(quote_id, sanitized_data)
-        return jsonify(status="success", data=updated_quote.to_dict()), 200
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="Failed to update quote."), 500
-
-# DELETE a quote
-@quote_management_bp.route('/<int:quote_id>', methods=['DELETE'])
-@permissions_required('MANAGE_QUOTES')
-@log_admin_action
-@roles_required ('Admin', 'Manager', 'Support')
-@admin_required
-def delete_quote(quote_id):
-    if not QuoteService.get_quote_by_id(quote_id):
-        return jsonify(status="error", message="Quote not found"), 404
-    try:
-        QuoteService.delete_quote(quote_id)
-        return jsonify(status="success", message="Quote deleted successfully."), 200
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="Failed to delete quote."), 500
