@@ -8,10 +8,10 @@ export const useAdminCategoriesStore = defineStore('adminCategories', {
     error: null,
   }),
   actions: {
-    async fetchCategories() {
+    async fetchCategories(params = {}) {
       this.isLoading = true;
       try {
-        const response = await apiClient.get('/product-categories');
+        const response = await apiClient.get('/product-categories', { params });
         this.categories = response.data;
       } catch (e) {
         this.error = 'Failed to fetch product categories.';
@@ -37,7 +37,7 @@ export const useAdminCategoriesStore = defineStore('adminCategories', {
             throw e;
         }
     },
-    async deleteCategory(id) {
+    async softDeleteCategory(id) {
         try {
             await apiClient.delete(`/product-categories/${id}`);
             await this.fetchCategories();
@@ -45,6 +45,21 @@ export const useAdminCategoriesStore = defineStore('adminCategories', {
             this.error = 'Failed to delete product category.';
         }
     },
+    async hardDeleteCategory(id) {
+        try {
+            await apiClient.delete(`/product-categories/${id}?hard=true`);
+            await this.fetchCategories();
+        } catch (e) {
+            this.error = 'Failed to permanently delete product category.';
+        }
+    },
+    async restoreCategory(id) {
+        try {
+            await apiClient.put(`/product-categories/${id}/restore`);
+            await this.fetchCategories();
+        } catch (e) {
+            this.error = 'Failed to restore product category.';
+        }
+    },
   },
 });
-
