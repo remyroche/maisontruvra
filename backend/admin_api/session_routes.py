@@ -1,53 +1,119 @@
 from flask import Blueprint, request, jsonify
-from backend.services.session_service import SessionService
+from backend.services.user_service import UserService
+from backend.services.auth_service import AuthService
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 
-session_management_bp = Blueprint('session_management_bp', __name__, url_prefix='/admin/sessions')
 
-# READ all active sessions
-@session_management_bp.route('/', methods=['GET'])
-@log_admin_action
-@roles_required ('Admin', 'Manager')
-@admin_required
-def get_sessions():
-    """
-    Get a paginated list of all active user sessions.
-    This is a high-privilege action and should be audited.
-    """
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 50, type=int)
-        
-        sessions_pagination = SessionService.get_all_sessions_paginated(page=page, per_page=per_page)
-        
-        return jsonify({
-            "status": "success",
-            "data": [s.to_dict() for s in sessions_pagination.items],
-            "total": sessions_pagination.total,
-            "pages": sessions_pagination.pages,
-            "current_page": sessions_pagination.page
-        }), 200
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An internal error occurred while fetching sessions."), 500
+session_routes = Blueprint('session_routes', __name__, url_prefix='/api/admin/sessions')
 
-# DELETE a specific session (force logout)
-@session_management_bp.route('/<session_id>', methods=['DELETE'])
-@log_admin_action
-@roles_required ('Admin', 'Manager')
+@session_routes.route('/', methods=['GET'])
 @admin_required
+@roles_required ('Admin', 'Manager')
+def get_all_sessions():
+    """
+    Retrieves all user sessions.
+    ---
+    tags:
+      - Sessions
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: A list of all user sessions.
+      401:
+        description: Unauthorized.
+    """
+    sessions = AuthService.get_all_user_sessions()
+    return jsonify(sessions), 200
+
+@session_routes.route('/<session_id>/terminate', methods=['POST'])
+@admin_required
+@roles_required ('Admin', 'Manager')
 def terminate_session(session_id):
     """
-    Terminate a specific user session by its ID.
-    This forces a user to log out.
+    Terminates a specific user session.
+    ---
+    tags:
+      - Sessions
+    parameters:
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+        description: The ID of the session to terminate.
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: Session terminated successfully.
+      401:
+        description: Unauthorized.
+      404:
+        description: Session not found.
     """
-    try:
-        if SessionService.terminate_session(session_id):
-            return jsonify(status="success", message="Session terminated successfully."), 200
-        else:
-            return jsonify(status="error", message="Session not found or already inactive."), 404
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An internal error occurred while terminating the session."), 500
+    if AuthService.terminate_user_session(session_id):
+        return jsonify({"message": "Session terminated successfully."}), 200
+    return jsonify({"error": "Session not found."}), 404
+
+@session_routes.route('/user/<user_id>/freeze', methods=['POST'])
+@admin_required
+@roles_required ('Admin', 'Manager')
+def freeze_user(user_id):
+    """
+    Freezes a user's account.
+    ---
+    tags:
+      - Sessions
+    parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          type: string
+        description: The ID of the user to freeze.
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: User account frozen successfully.
+      401:
+        description: Unauthorized.
+      404:
+        description: User not found.
+    """
+    if UserService.freeze_user_account(user_id):
+        return jsonify({"message": "User account frozen successfully."}), 200
+    return jsonify({"error": "User not found."}), 404
+
+@session_routes.route('/user/<user_id>/unfreeze', methods=['POST'])
+@admin_required
+@roles_required ('Admin', 'Manager')
+def unfreeze_user(user_id):
+    """
+    Unfreezes a user's account.
+    ---
+    tags:
+      - Sessions
+    parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          type: string
+        description: The ID of the user to unfreeze.
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: User account unfrozen successfully.
+      401:
+        description: Unauthorized.
+      404:
+        description: User not found.
+    """
+    if UserService.unfreeze_user_account(user_id):
+        return jsonify({"message": "User account unfrozen successfully."}), 200
+    return jsonify({"error": "User not found."}), 404
 
