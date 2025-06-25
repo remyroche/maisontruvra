@@ -1,14 +1,10 @@
-<!--
- * FILENAME: website/js/admin/views/ManagePosView.vue
--->
 <template>
-  <AdminLayout>
-    <div class="space-y-6">
-      <header><h1 class="text-3xl font-bold text-gray-800">Point of Sale (POS)</h1></header>
-       <p class="text-gray-600">This page will contain the Point of Sale interface for in-person transactions.</p>
-    </div>
-  </AdminLayout>
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Point of Sale (POS)</h1>
+    <p>This feature is currently under development. The POS system will allow for in-person sales and will integrate with the online inventory.</p>
+  </div>
 </template>
+
 <script setup>
-import AdminLayout from '../components/AdminLayout.vue';
+// No script needed for this placeholder
 </script>
