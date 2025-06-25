@@ -1,80 +1,180 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from backend.services.b2b_service import B2BService
+from backend.services.order_service import OrderService
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import b2b_user_required
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from ..utils.decorators import log_admin_action
 
-b2b_order_routes_bp = Blueprint('b2b_order_routes_bp', __name__, url_prefix='/api/b2b/orders')
+order_routes = Blueprint('admin_order_routes', __name__, url_prefix='/api/admin/orders')
 
-# GET the B2B user's order history
-@b2b_order_routes_bp.route('/', methods=['GET'])
-@b2b_user_required
-def get_b2b_order_history():
+@order_routes.route('/<int:order_id>', methods=['GET'])
+@permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def get_order_details(order_id):
     """
-    Get a paginated list of the B2B user's order history.
+    Retrieves details for a specific order.
+    ---
+    tags:
+      - Admin Orders
+    parameters:
+      - in: path
+        name: order_id
+        required: true
+        schema:
+          type: integer
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: Detailed information about the order.
+      404:
+        description: Order not found.
     """
-    user_id = get_jwt_identity()
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        
-        orders_pagination = B2BService.get_user_orders_paginated(user_id, page=page, per_page=per_page)
-        
-        return jsonify({
-            "status": "success",
-            "data": [order.to_dict_for_user() for order in orders_pagination.items],
-            "total": orders_pagination.total,
-            "pages": orders_pagination.pages,
-            "current_page": orders_pagination.page
-        }), 200
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An internal error occurred while fetching your orders."), 500
+    order = OrderService.get_order_by_id(order_id)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+    return jsonify(order.to_dict(include_details=True))
 
-# GET a single B2B order by ID
-@b2b_order_routes_bp.route('/<int:order_id>', methods=['GET'])
-@b2b_user_required
-def get_b2b_order(order_id):
-    """
-    Get a single B2B order by its ID, ensuring it belongs to the user.
-    """
-    user_id = get_jwt_identity()
-    try:
-        order = B2BService.get_order_by_id_for_user(order_id, user_id)
-        if order:
-            return jsonify(status="success", data=order.to_dict_for_user()), 200
-        return jsonify(status="error", message="Order not found or you do not have permission to view it."), 404
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An internal error occurred."), 500
 
-# CREATE a new B2B order
-@b2b_order_routes_bp.route('/', methods=['POST'])
-@b2b_user_required
-def create_b2b_order():
+@order_routes.route('/<int:order_id>/status', methods=['PUT'])
+@permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def update_order_status(order_id):
     """
-    Create a new B2B order. This might use different logic than public checkout,
-    e.g., allowing for Purchase Order numbers or different payment methods.
+    Updates the status of a specific order.
+    ---
+    tags:
+      - Admin Orders
+    parameters:
+      - in: path
+        name: order_id
+        required: true
+        schema:
+          type: integer
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              description: The new status for the order.
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: Order status updated successfully.
+      400:
+        description: Invalid status provided.
+      404:
+        description: Order not found.
     """
-    user_id = get_jwt_identity()
     data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid JSON body"), 400
-
-    sanitized_data = sanitize_input(data)
+    new_status = data.get('status')
+    if not new_status:
+        return jsonify({"error": "Status is required"}), 400
     
-    # Example fields for a B2B order
-    required_fields = ['items', 'shipping_address_id', 'purchase_order']
-    if not all(field in sanitized_data for field in required_fields):
-        missing = [f for f in required_fields if f not in sanitized_data]
-        return jsonify(status="error", message=f"Missing required fields: {', '.join(missing)}"), 400
-
     try:
-        # The service would handle creating the order from a list of items rather than a cart.
-        order = B2BService.create_b2b_order(user_id, sanitized_data)
-        return jsonify(status="success", message="B2B order created successfully.", data=order.to_dict_for_user()), 201
+        updated_order = OrderService.update_order_status(order_id, new_status)
+        if not updated_order:
+            return jsonify({"error": "Order not found"}), 404
+        return jsonify(updated_order.to_dict())
     except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+        
+@order_routes.route('/', methods=['GET'])
+@permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def get_orders():
+    """
+    Retrieves all orders with optional filtering.
+    ---
+    tags:
+      - Admin Orders
+    parameters:
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Filter orders by status.
+      - in: query
+        name: user_id
+        schema:
+          type: string
+        description: Filter orders by user ID.
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: A list of orders.
+    """
+    status = request.args.get('status')
+    user_id = request.args.get('user_id')
+    include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'
+    orders = OrderService.get_all_orders(status=status, user_id=user_id, include_deleted=include_deleted)
+    return jsonify([order.to_dict() for order in orders])
+
+
+# UPDATE an existing order's status
+@order_routes.route('/<int:order_id>/status', methods=['PUT'])
+@permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def update_order_status(order_id):
+    """
+    Update an existing order's status.
+    """
+    data = request.get_json()
+    if not data or 'status' not in data:
+        return jsonify(status="error", message="Invalid or missing 'status' in JSON body"), 400
+
+    if not OrderService.get_order_by_id(order_id):
+        return jsonify(status="error", message="Order not found"), 404
+
+    sanitized_status = sanitize_input(data['status'])
+    
+    try:
+        # Assuming the service handles the logic of status transition
+        updated_order = OrderService.update_order_status(order_id, sanitized_status)
+        return jsonify(status="success", data=updated_order.to_dict()), 200
+    except ValueError as e: # Catch specific validation errors from the service
         return jsonify(status="error", message=str(e)), 400
     except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An error occurred while creating the order."), 500
+        # In a real app, log the error e
+        return jsonify(status="error", message="An internal error occurred while updating the order status."), 500
+
+# DELETE an order
+@order_routes.route('/<int:order_id>', methods=['DELETE'])
+@permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def delete_order(order_id):
+    """
+    Delete an order. This should be used with caution.
+    """
+    hard_delete = request.args.get('hard', 'false').lower() == 'true'
+    if hard_delete:
+        if OrderService.hard_delete_order(order_id):
+            return jsonify(status="success", message="Order permanently deleted")
+    else:
+        if OrderService.soft_delete_order(order_id):
+            return jsonify(status="success", message="Order soft-deleted successfully")
+    return jsonify(status="error", message="Order not found"), 404
+
+@order_routes.route('/<int:order_id>/restore', methods=['PUT'])
+@permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def restore_order(order_id):
+    if OrderService.restore_order(order_id):
+        return jsonify(status="success", message="Order restored successfully")
+    return jsonify(status="error", message="Order not found"), 404
