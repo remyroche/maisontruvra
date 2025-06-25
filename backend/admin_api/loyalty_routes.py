@@ -8,10 +8,7 @@ loyalty_bp = Blueprint('admin_loyalty_routes', __name__, url_prefix='/api/admin/
 
 # --- Loyalty Program Settings ---
 
-loyalty_bp = Blueprint('admin_loyalty_routes', __name__, url_prefix='/api/admin/loyalty')
-
 @loyalty_bp.route('/tiers', methods=['GET'])
-
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
 @log_admin_action
 @roles_required ('Admin', 'Staff')
