@@ -1,105 +1,65 @@
-<!--
- * FILENAME: website/js/admin/views/ManageCategoriesView.vue
- * DESCRIPTION: View component for the 'Manage Categories' page.
--->
 <template>
-  <AdminLayout>
-    <div class="bg-white p-8 rounded-lg shadow-md">
-      <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-800">Manage Categories</h1>
-        <button @click="openAddModal" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
-          + Add Category
-        </button>
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Manage Product Categories</h1>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div class="md:col-span-2">
+         <BaseDataTable :headers="headers" :items="categoriesStore.categories">
+             <template #item-actions="{ item }">
+                 <button @click="openModal(item)" class="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+                 <button @click="deleteCategory(item.id)" class="text-red-600 hover:text-red-900">Delete</button>
+             </template>
+        </BaseDataTable>
       </div>
-
-      <div v-if="categoryStore.isLoading && !categoryStore.categories.length" class="text-center py-10">Loading categories...</div>
-      <div v-else-if="categoryStore.error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4" role="alert">
-        {{ categoryStore.error }}
-      </div>
-
-      <div v-else class="overflow-x-auto">
-        <table class="min-w-full bg-white">
-          <thead class="bg-gray-800 text-white">
-            <tr>
-              <th class="py-3 px-4 uppercase font-semibold text-sm text-left">ID</th>
-              <th class="py-3 px-4 uppercase font-semibold text-sm text-left">Name</th>
-              <th class="py-3 px-4 uppercase font-semibold text-sm text-left">Description</th>
-              <th class="py-3 px-4 uppercase font-semibold text-sm text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="text-gray-700">
-            <tr v-for="category in categoryStore.categories" :key="category.id" class="border-b hover:bg-gray-100">
-              <td class="py-3 px-4">{{ category.id }}</td>
-              <td class="py-3 px-4">{{ category.name }}</td>
-              <td class="py-3 px-4">{{ category.description || 'N/A' }}</td>
-              <td class="py-3 px-4 text-center">
-                <button @click="openEditModal(category)" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded text-xs mr-2">Edit</button>
-                <button @click="handleDelete(category)" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs">Delete</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div>
+        <h2 class="text-xl font-bold mb-4">{{ isEditing ? 'Edit Category' : 'New Category' }}</h2>
+        <div class="bg-white p-4 rounded shadow">
+          <CategoryForm :category="selectedCategory" @save="saveCategory" :key="formKey" />
+        </div>
       </div>
     </div>
-
-    <Modal :show="isModalOpen" @close="closeModal">
-      <template #header>
-        <h2 class="text-2xl font-bold">{{ isEditing ? 'Edit Category' : 'Add New Category' }}</h2>
-      </template>
-      <template #body>
-        <CategoryForm :initial-data="currentCategory" @submit="handleSubmit" @cancel="closeModal" />
-      </template>
-      <template #footer><div></div></template>
-    </Modal>
-  </AdminLayout>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { useAdminCategoryStore } from '../../stores/adminCategories';
-import AdminLayout from '../components/AdminLayout.vue';
-import Modal from '../components/Modal.vue';
-import CategoryForm from '../components/CategoryForm.vue';
+import { ref, onMounted } from 'vue';
+import { useAdminCategoriesStore } from '@/js/stores/adminCategories';
+import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
+import CategoryForm from '@/js/admin/components/CategoryForm.vue';
 
-const categoryStore = useAdminCategoryStore();
+const categoriesStore = useAdminCategoriesStore();
+const isEditing = ref(false);
+const selectedCategory = ref({ name: '', description: '' });
+const formKey = ref(0);
 
-const isModalOpen = ref(false);
-const currentCategory = ref({});
-const isEditing = computed(() => !!currentCategory.value.id);
+const headers = [
+    { text: 'Name', value: 'name' },
+    { text: 'Description', value: 'description' },
+    { text: 'Actions', value: 'actions' },
+];
 
-onMounted(() => {
-  categoryStore.fetchCategories();
-});
+onMounted(() => categoriesStore.fetchCategories());
 
-const openAddModal = () => {
-  currentCategory.value = { name: '', description: '' };
-  isModalOpen.value = true;
+const openModal = (category) => {
+    isEditing.value = true;
+    selectedCategory.value = { ...category };
+    formKey.value++; // Force re-render of form
 };
 
-const openEditModal = (category) => {
-  currentCategory.value = JSON.parse(JSON.stringify(category));
-  isModalOpen.value = true;
+const saveCategory = async (data) => {
+    if(isEditing.value) {
+        await categoriesStore.updateCategory(selectedCategory.value.id, data);
+    } else {
+        await categoriesStore.createCategory(data);
+    }
+    isEditing.value = false;
+    selectedCategory.value = { name: '', description: '' };
+    formKey.value++;
 };
 
-const closeModal = () => {
-  isModalOpen.value = false;
+const deleteCategory = (id) => {
+    if(confirm('Are you sure? Deleting a category may affect products.')) {
+        categoriesStore.deleteCategory(id);
+    }
 };
 
-const handleSubmit = async (categoryData) => {
-  let success = false;
-  if (isEditing.value) {
-    success = await categoryStore.updateCategory(categoryData.id, categoryData);
-  } else {
-    success = await categoryStore.createCategory(categoryData);
-  }
-  if (success) {
-    closeModal();
-  }
-};
-
-const handleDelete = async (category) => {
-  if (confirm(`Are you sure you want to delete category "${category.name}"?`)) {
-    await categoryStore.deleteCategory(category.id);
-  }
-};
 </script>
