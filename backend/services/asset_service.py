@@ -1,15 +1,18 @@
 import os
 import uuid
-from werkzeug.utils import secure_filename
 from flask import current_app
 from ..models import db, Asset
 from .exceptions import ServiceError, NotFoundException
+from werkzeug.utils import secure_filename
+from backend.services.exceptions import InvalidUsageException
+from backend.models.asset_models import Asset
+from backend.database import db
 
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
-def allowed_file(filename):
+def _allowed_file(filename):
+    """Helper function to check if the file extension is in the allowed list."""
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+           filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
 
 class AssetService:
     @staticmethod
