@@ -5,6 +5,7 @@ from flask_login import UserMixin
 from sqlalchemy.ext.hybrid import hybrid_property
 from utils.encryption import encrypt_data, decrypt_data
 from argon2 import PasswordHasher
+from backend.models.base import Base
 
 ph = PasswordHasher()
 
@@ -30,6 +31,25 @@ class User(db.Model, UserMixin):
 
     b2b_profile = db.relationship('B2BProfile', back_populates='user', uselist=False, cascade="all, delete-orphan")
 
+
+    @property
+    def is_staff(self):
+        """A user is considered staff if they have any role."""
+        return len(self.roles) > 0
+
+    @property
+    def is_admin(self):
+        """A user is an admin if they have the 'Admin' role."""
+        return any(role.name == 'Admin' for role in self.roles)
+
+    def get_permissions(self):
+        """Returns a set of all permissions for the user from all their roles."""
+        perms = set()
+        for role in self.roles:
+            for permission in role.permissions:
+                perms.add(permission.name)
+        return perms
+        
     def set_password(self, password):
         self.password_hash = ph.hash(password)
 
