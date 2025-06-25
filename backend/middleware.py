@@ -42,61 +42,49 @@ compress = Compress()
 # --- Middleware Definition Functions ---
 
 
-def register_middleware(app):
-    """Register middleware functions with the Flask app."""
+def check_staff_session():
+    """
+    This function is now a blueprint-specific `before_request` handler.
+    It checks session validity for authenticated STAFF users on admin routes.
+    """
+    # The path check is implicitly handled by attaching this to the admin blueprint
+    if current_user.is_authenticated and current_user.is_staff:
+        now = datetime.utcnow()
+        timeout_reason = None
 
-    @app.before_request
-    def before_request_session_check():
-        """
-        Checks session validity before each request for authenticated users.
-        - Checks for inactivity timeout based on role.
-        - Checks for maximum session lifetime.
-        """
-        if current_user.is_authenticated:
-            now = datetime.utcnow()
-            
-            # Use a single reason for timeout to simplify frontend logic
-            if current_user.is_authenticated and current_user.is_staff:
-                now = datetime.utcnow()
-                timeout_reason = None
-    
-                # --- Check for maximum session lifetime (re-authentication) ---
-    
-                login_time_str = session.get('login_time')
-                if login_time_str:
-                    login_time = datetime.fromisoformat(login_time_str)
-                    max_lifetime = current_app.config['SESSION_MAX_LIFETIME']
-                    
-                    if now - login_time > max_lifetime:
-                        timeout_reason = "Session has expired. Please log in again."
-                        session['reauth_needed'] = True # Flag that re-auth is required
-                else:
-                    session['login_time'] = now.isoformat()
-    
-                # --- Check for inactivity timeout ---
-                last_activity_str = session.get('last_activity_time')
-                if last_activity_str:
-                    last_activity = datetime.fromisoformat(last_activity_str)
-                    
-                    if current_user.role.name.lower() == 'admin':
-                        timeout_duration = current_app.config['ADMIN_INACTIVITY_TIMEOUT']
-                    else:
-                        timeout_duration = current_app.config['STAFF_INACTIVITY_TIMEOUT']
-    
-                    if now - last_activity > timeout_duration:
-                        timeout_reason = "Session timed out due to inactivity."
-                        session['reauth_needed'] = True # Flag that re-auth is required
-                
-                # If a timeout occurred, return a specific 401 error
-                if timeout_reason:
-                    return jsonify({
-                        "error": "Authentication Required", 
-                        "message": timeout_reason,
-                        "reason": "reauth_required" # Specific key for frontend to check
-                    }), 401
-    
-                # If no timeout, update the last activity time
-                session['last_activity_time'] = now.isoformat()
+        # --- Check for maximum session lifetime (re-authentication) ---
+        login_time_str = session.get('login_time')
+        if login_time_str:
+            login_time = datetime.fromisoformat(login_time_str)
+            if now - login_time > current_app.config['SESSION_MAX_LIFETIME']:
+                timeout_reason = "Session has expired for security reasons."
+        else:
+            # This is a fallback, login time should be set at login
+            session['login_time'] = now.isoformat()
+
+        # --- Check for inactivity timeout ---
+        last_activity_str = session.get('last_activity_time')
+        if last_activity_str:
+            last_activity = datetime.fromisoformat(last_activity_str)
+            timeout_duration = (
+                current_app.config['ADMIN_INACTIVITY_TIMEOUT']
+                if current_user.is_admin
+                else current_app.config['STAFF_INACTIVITY_TIMEOUT']
+            )
+            if now - last_activity > timeout_duration:
+                timeout_reason = "Session timed out due to inactivity."
+        
+        if timeout_reason:
+            return jsonify({
+                "error": "Authentication Required", 
+                "message": timeout_reason,
+                "reason": "reauth_required"
+            }), 401
+
+        # Update last activity time if all checks pass
+        session['last_activity_time'] = now.isoformat()
+
+
             
 def mfa_check_middleware(app):
     """
