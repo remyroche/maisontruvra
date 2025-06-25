@@ -1,86 +1,88 @@
-/*
- * FILENAME: website/js/stores/adminAuth.js
- * DESCRIPTION: Pinia store for managing Admin Portal authentication state.
- *
- * This store is the single source of truth for the current admin's session,
- * user details, and permissions. It includes actions for checking authentication
- * status and logging out.
- */
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
-import adminApiClient from '../common/adminApiClient';
+import apiClient from '@/js/common/adminApiClient';
+import router from '@/js/admin/router';
 
-export const useAdminAuthStore = defineStore('adminAuth', () => {
-  // --- STATE ---
-  const adminUser = ref(null); // Holds user object { email, first_name, etc. }
-  const permissions = ref([]); // Holds a list of user permissions [ 'manage_users', ... ]
-  const error = ref(null); // Holds the last authentication error
-  const isLoading = ref(true); // Tracks if we are currently fetching auth status
-
-  // --- GETTERS ---
-  const isAuthenticated = computed(() => !!adminUser.value);
-
-  // --- ACTIONS ---
-
-  /**
-   * Checks the backend to see if a valid admin session exists.
-   * This is called when the app loads to initialize the auth state.
-   */
-  async function checkAuthStatus() {
-    isLoading.value = true;
-    error.value = null;
-    try {
-      const response = await adminApiClient.get('/auth/status');
-      if (response.data.is_authenticated) {
-        adminUser.value = response.data.user;
-        permissions.value = response.data.permissions;
-      } else {
-        adminUser.value = null;
-        permissions.value = [];
+export const useAdminAuthStore = defineStore('adminAuth', {
+  state: () => ({
+    user: null,
+    isAuthenticated: false,
+    isLoading: false,
+    error: null,
+    // State for re-authentication flow
+    isReAuthRequired: false,
+    failedRequest: null,
+  }),
+  actions: {
+    async login(credentials) {
+      this.isLoading = true;
+      try {
+        await apiClient.post('/auth/login', credentials);
+        await this.checkAuth();
+        if (this.isAuthenticated) {
+            router.push({ name: 'AdminDashboard' });
+        }
+      } catch (error) {
+        this.error = 'Login failed. Please check your credentials.';
+        this.isAuthenticated = false;
+        throw error;
+      } finally {
+        this.isLoading = false;
       }
-    } catch (err) {
-      console.error("Error checking auth status:", err);
-      error.value = 'Could not verify session. Please try logging in again.';
-      adminUser.value = null;
-      permissions.value = [];
-    } finally {
-      isLoading.value = false;
-    }
-  }
+    },
+    
+    async logout() {
+        try {
+            await apiClient.post('/auth/logout');
+        } catch (e) {
+            console.error("Logout failed, clearing session locally.", e);
+        } finally {
+            this.user = null;
+            this.isAuthenticated = false;
+            this.isReAuthRequired = false;
+            router.push({ name: 'AdminLogin' });
+        }
+    },
+    
+    async checkAuth() {
+        this.isLoading = true;
+        try {
+            const response = await apiClient.get('/auth/status');
+            this.user = response.data.user;
+            this.isAuthenticated = response.data.is_authenticated;
+        } catch (error) {
+            this.user = null;
+            this.isAuthenticated = false;
+        } finally {
+            this.isLoading = false;
+        }
+    },
 
-  /**
-   * Logs out the current admin user.
-   * This calls the backend logout endpoint and clears the local state.
-   */
-  async function logout() {
-    isLoading.value = true;
-    error.value = null;
-    try {
-      await adminApiClient.post('/auth/logout');
-      // Backend call successful, now clear local state
-      adminUser.value = null;
-      permissions.value = [];
-      // --- LOGGING ---
-      // The backend's /auth/logout endpoint should be responsible for
-      // creating an audit log entry for the successful logout event.
-    } catch (err) {
-      console.error("Logout failed:", err);
-      error.value = 'Logout failed. Please try again.';
-      // Even if the API call fails, we clear the frontend state for security.
-      adminUser.value = null;
-      permissions.value = [];
-    } finally {
-      isLoading.value = false;
-    }
-  }
+    promptForReAuth(requestConfig) {
+        if (!this.isReAuthRequired) { // Prevent multiple prompts
+            this.failedRequest = requestConfig;
+            this.isReAuthRequired = true;
+        }
+    },
 
-  return {
-    adminUser,
-    permissions,
-    error,
-    isLoading,
-    isAuthenticated,
-    checkAuthStatus,
-    logout,
-  };
+    async reauthenticateAndRetry(password) {
+        try {
+            await apiClient.post('/auth/reauthenticate', { password });
+            this.isReAuthRequired = false;
+            if (this.failedRequest) {
+                const requestToRetry = { ...this.failedRequest };
+                this.failedRequest = null;
+                return apiClient(requestToRetry);
+            }
+        } catch (error) {
+            console.error("Re-authentication failed", error);
+            throw error;
+        }
+    },
+    
+    cancelReAuth() {
+        this.isReAuthRequired = false;
+        this.failedRequest = null;
+        this.logout(); // If they cancel, log them out completely.
+    }
+  },
 });
