@@ -5,21 +5,46 @@ from threading import Thread
 from backend.extensions import mail
 from backend.tasks import send_email_task
 
+from flask import render_template
+from backend.tasks import send_email_task
+
 class EmailService:
-    def send_email(self, recipient, subject, template_name, context=None):
-        """Queues an email for background processing."""
+    @staticmethod
+    def send_email(recipient, subject, template_name, context=None):
+        """
+        Sends an email by queuing it as an asynchronous background task.
+        
+        This is the sole public entry point for sending emails. All other parts
+        of the application MUST call this method, which guarantees that the
+        email sending is handled by a Celery worker and does not block the
+        user-facing request.
+
+        :param recipient: Email address of the recipient.
+        :param subject: Subject of the email.
+        :param template_name: The name of the HTML template file (e.g., 'welcome.html').
+        :param context: A dictionary of data to pass to the template.
+        """
         if context is None:
             context = {}
-        print(f"Queuing email for {recipient} with template '{template_name}'")
+        print(f"ASYNC SEND TRIGGERED: Queuing email for {recipient} with template '{template_name}'")
         send_email_task.delay(recipient, subject, template_name, context)
 
     @staticmethod
     def send_email_immediately(recipient, subject, template_name, context):
-        """Renders and sends the email. ONLY called by Celery worker."""
+        """
+        Renders the email template and sends the email synchronously.
+        
+        IMPORTANT: This method should ONLY be called by the 'send_email_task'
+        Celery worker in the background. It is not intended for direct use by
+        the main application threads.
+        """
         html_body = render_template(template_name, **context)
-        print(f"--- SIMULATING EMAIL SEND to {recipient} ---")
-        # Actual email sending logic would be here
-        print(f"Email sent successfully to {recipient}.")
+        print(f"--- CELERY WORKER: SIMULATING EMAIL SEND to {recipient} ---")
+        # In a real application, the logic to connect to an SMTP server
+        # or an email API service (like SendGrid, Mailgun) would be here.
+        # Example: mail.send(msg)
+        print(f"--- CELERY WORKER: Email to {recipient} sent successfully. ---")
+              
 
     # --- B2C & General User Emails ---
     @staticmethod
