@@ -209,7 +209,46 @@ class LoyaltyService:
             trans.is_expired = True
         
         db.session.commit()
-        return len(expired_transactions)s)
+        return len(expired_transactions)
+
+
+    @staticmethod
+    def get_loyalty_tiers() -> list:
+        """
+        Retrieves all defined loyalty tiers.
+        """
+        tiers = LoyaltyTier.query.order_by(LoyaltyTier.min_points.asc()).all()
+        return [tier.to_dict() for tier in tiers]
+
+    @staticmethod
+    def create_loyalty_tier(name: str, min_points: int, discount_percentage: float) -> LoyaltyTier:
+        """
+        Creates a new loyalty tier.
+        """
+        if LoyaltyTier.query.filter_by(name=name).first():
+            raise ValidationError(f"Loyalty tier with name '{name}' already exists.")
+        
+        new_tier = LoyaltyTier(name=name, min_points=min_points, discount_percentage=discount_percentage)
+        db.session.add(new_tier)
+        db.session.commit()
+        return new_tier
+
+    @staticmethod
+    def update_loyalty_tier(tier_id: int, name: str, min_points: int, discount_percentage: float) -> LoyaltyTier:
+        """
+        Updates an existing loyalty tier.
+        """
+        tier = LoyaltyTier.query.get(tier_id)
+        if not tier:
+            raise NotFoundError(f"Loyalty tier with ID {tier_id} not found.")
+        
+        # Check for duplicate name if name is changed
+        if tier.name != name and LoyaltyTier.query.filter_by(name=name).first():
+            raise ValidationError(f"Loyalty tier with name '{name}' already exists.")
+            
+        tier.name = name
+        tier.min_points = min_points
+        tier.discount_percentage = discount_percentage
 
     @staticmethod
     def update_user_tiers_task():
@@ -274,36 +313,4 @@ class LoyaltyService:
                 updates_made += 1
         
         db.session.commit()
-        return updates_made()
-
-        total_ranked_users = len(ranked_users)
-        if total_ranked_users == 0:
-            return 0
-        
-        # 3. Get tier definitions from the database
-        tiers = {tier.name: tier.id for tier in LoyaltyTier.query.all()}
-        tier1_id = tiers.get('Tier 1')
-        tier2_id = tiers.get('Tier 2')
-        standard_tier_id = tiers.get('Standard')
-
-        if not all([tier1_id, tier2_id, standard_tier_id]):
-            raise Exception("Tier 1, Tier 2, and Standard tiers must be defined in the database.")
-
-        # 4. Assign tiers based on percentile rank
-        tier1_cutoff = total_ranked_users * 0.25
-        tier2_cutoff = total_ranked_users * 0.50
-
-        case_statement = case(
-            (ranked_users.c.rank <= tier1_cutoff, tier1_id),
-            (ranked_users.c.rank <= tier2_cutoff, tier2_id),
-            else_=standard_tier_id
-        )
-
-        # 5. Update all users in a single bulk update
-        db.session.query(User).filter(User.id.in_([u.user_id for u in ranked_users])).update({
-            User.loyalty_tier_id: case_statement
-        }, synchronize_session=False)
-
-        db.session.commit()
-        return total_ranked_users
-
+        return updates_made

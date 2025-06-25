@@ -5,22 +5,29 @@
 # ==============================================================================
 import json
 import os
-from flask import current_app, Markup, url_for
+from flask import current_app, url_for
+from markupsafe import Markup
 
-def vite_asset(path):
+def vite_asset(path: str) -> Markup:
     """
     Vite asset helper.
     Generates a <script> or <link> tag for a Vite asset.
     In development, it points to the Vite dev server.
     In production, it points to the built asset file.
+    
+    Args:
+        path: The path to the asset in the Vite project
+        
+    Returns:
+        Markup object containing HTML tags for the asset
     """
     manifest_path = os.path.join(current_app.static_folder, 'dist', 'manifest.json')
     
     # In development, Vite serves assets from its own server (HMR)
     if current_app.debug:
         # The base script for the dev server must be included.
-        # This assumes your Vite dev server is running on localhost:5173
-        dev_server_base = "http://localhost:5173"
+        # Get the Vite dev server URL from config or use default
+        dev_server_base = current_app.config.get('VITE_DEV_SERVER', "http://localhost:5173")
         return Markup(f'<script type="module" src="{dev_server_base}/@vite/client"></script>\n'
                       f'<script type="module" src="{dev_server_base}/{path}"></script>')
 

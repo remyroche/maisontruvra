@@ -83,6 +83,9 @@ class Config:
 
     # Encryption Key
     ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY') or Fernet.generate_key().decode()
+    
+    # Vite Development Server URL
+    VITE_DEV_SERVER = os.environ.get('VITE_DEV_SERVER', 'http://localhost:5173')
 
 class DevelopmentConfig(Config):
     """Development configuration."""

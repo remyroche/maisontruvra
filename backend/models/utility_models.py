@@ -1,7 +1,7 @@
 from backend.database import db
 from .base import BaseModel
 from sqlalchemy.dialects.postgresql import JSONB
-import datetime
+from datetime import datetime
 
 class StockNotification(db.Model):
     """
@@ -15,7 +15,7 @@ class StockNotification(db.Model):
     
     # To prevent sending multiple emails for the same restock event.
     notified = db.Column(db.Boolean, default=False, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     product = db.relationship('Product')
     user = db.relationship('User')

@@ -1,10 +1,11 @@
 import os
 import uuid
+import logging
 from flask import render_template, current_app
-from ..models import db, Product
-from .exceptions import ServiceError, NotFoundException
-from backend.models.passport_models import ProductPassport
 from backend.database import db
+from backend.models.product_models import Product
+from backend.models.passport_models import ProductPassport
+from .exceptions import ServiceError, NotFoundException
 
 logger = logging.getLogger(__name__)
 

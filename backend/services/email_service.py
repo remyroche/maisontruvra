@@ -51,7 +51,7 @@ class EmailService:
     def send_verification_email(user, token):
         """Sends the initial account verification email to a new B2C user."""
         confirmation_link = url_for('auth.confirm_email', token=token, _external=True)
-        send_email(
+        EmailService.send_email(
             subject="Bienvenue à la Maison Truvrā",
             recipients=[user.email],
             template="welcome_and_verify.html",
@@ -62,7 +62,7 @@ class EmailService:
     @staticmethod
     def send_b2c_newsletter_confirmation(email):
         """Confirms B2C newsletter subscription."""
-        send_email(
+        EmailService.send_email(
             subject="Votre inscription à notre journal",
             recipients=[email],
             template="b2c_newsletter_confirmation.html"
@@ -72,7 +72,7 @@ class EmailService:
     def send_back_in_stock_email(user, product):
         """Notifies a user that a product they are interested in is back in stock."""
         product_url = url_for('products.get_product', product_id=product.id, _external=True)
-        send_email(
+        EmailService.send_email(
             subject=f"Votre produit {product.name} est de retour",
             recipients=[user.email],
             template="back_in_stock_notification.html",
@@ -85,7 +85,7 @@ class EmailService:
     @staticmethod
     def send_b2b_account_pending_email(user):
         """Informs a B2B user that their application is under review."""
-        send_email(
+        EmailService.send_email(
             subject="Votre demande de compte professionnel Maison Truvrā",
             recipients=[user.email],
             template="b2b_account_pending.html",
@@ -95,7 +95,7 @@ class EmailService:
     @staticmethod
     def send_b2b_account_approved_email(user):
         """Informs a B2B user that their account has been approved."""
-        send_email(
+        EmailService.send_email(
             subject="Votre compte professionnel Maison Truvrā est activé",
             recipients=[user.email],
             template="b2b_account_approved.html",
@@ -105,7 +105,7 @@ class EmailService:
     @staticmethod
     def send_b2b_newsletter_confirmation(email):
         """Confirms B2B newsletter subscription."""
-        send_email(
+        EmailService.send_email(
             subject="Confirmation de votre inscription professionnelle",
             recipients=[email],
             template="b2b_newsletter_confirmation.html"
@@ -124,13 +124,13 @@ class EmailService:
             template = "b2c_order_confirmation.html"
             subject = f"Votre commande Maison Truvrā n°{order.id} est confirmée"
         
-        send_email(subject=subject, recipients=[user.email], template=template, order=order)
+        EmailService.send_email(subject=subject, recipients=[user.email], template=template, order=order)
 
     @staticmethod
     def send_order_shipped_email(order, tracking_link, tracking_number):
         """Notifies a user that their order has shipped."""
         user = order.user or order.b2b_account.primary_user
-        send_email(
+        EmailService.send_email(
             subject="Votre commande Maison Truvrā a été expédiée",
             recipients=[user.email],
             template="order_shipped.html",
@@ -143,7 +143,7 @@ class EmailService:
     def send_order_cancelled_email(order):
         """Confirms to a user that their order has been cancelled."""
         user = order.user or order.b2b_account.primary_user
-        send_email(
+        EmailService.send_email(
             subject=f"Annulation de votre commande n°{order.id}",
             recipients=[user.email],
             template="order_cancelled.html",
@@ -160,7 +160,7 @@ class EmailService:
         else:
             reset_link = url_for('auth.reset_password', token=token, _external=True)
             
-        send_email(
+        EmailService.send_email(
             subject="Réinitialisation de votre mot de passe Maison Truvrā",
             recipients=[user.email],
             template="password_reset_request.html",
@@ -171,7 +171,7 @@ class EmailService:
     @staticmethod
     def send_password_change_confirmation(user):
         """Confirms that a user's password has been changed."""
-        send_email(
+        EmailService.send_email(
             subject="Votre mot de passe a été modifié",
             recipients=[user.email],
             template="password_change_confirmation.html",
@@ -183,7 +183,7 @@ class EmailService:
         """Confirms that 2FA has been enabled or disabled."""
         template = "2fa_enabled_confirmation.html" if enabled else "2fa_disabled_confirmation.html"
         subject = "Sécurité de votre compte renforcée" if enabled else "Sécurité de votre compte modifiée"
-        send_email(
+        EmailService.send_email(
             subject=subject,
             recipients=[user.email],
             template=template,
@@ -194,7 +194,7 @@ class EmailService:
     def send_security_alert_email(user, ip_address):
         """Sends a security alert for a new device login."""
         from datetime import datetime
-        send_email(
+        EmailService.send_email(
             subject="Alerte de sécurité : Nouvelle connexion détectée",
             recipients=[user.email],
             template="security_alert.html",

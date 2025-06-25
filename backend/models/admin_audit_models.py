@@ -1,5 +1,6 @@
 from backend.database import db
 from backend.models.base import BaseModel
+from datetime import datetime, timezone
 
 class AdminAuditLog(db.Model):
     __tablename__ = 'admin_audit_log'
@@ -18,7 +19,7 @@ class AdminAuditLog(db.Model):
     
     # Security information
     ip_address = db.Column(db.String(45), nullable=True)
-    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Renamed from 'admin' to 'user' for consistency with the old model
     user = db.relationship('User', backref='admin_audit_logs')

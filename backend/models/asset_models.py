@@ -14,7 +14,7 @@ class Asset(db.Model):
     mime_type = db.Column(db.String(100), nullable=False)
     # Could be 'product_image', 'blog_post_hero', 'logo', etc.
     usage_tag = db.Column(db.String(50), index=True)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {

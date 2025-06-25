@@ -13,8 +13,8 @@ from .blog_models import BlogPost, BlogCategory
 from .newsletter_models import NewsletterSubscriber # Corrected: Import NewsletterSubscriber
 from .inventory_models import Inventory
 from .auth_models import TokenBlocklist
-from backend.services.audit_log_service import AuditLogService
-from .referral_models import B2BReferral
+
+from .referral_models import Referral
 from .request_models import GenericRequest
 from .utility_models import Setting
 from .analytics_models import PageView, SalesAnalytics

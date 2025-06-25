@@ -5,6 +5,7 @@
 # --- Configuration ---
 FLASK_APP_PATH="manage.py"
 FLASK_DEBUG_MODE=1
+
 VITE_CONFIG_PATH="website/vite.config.js"
 VENV_PATH="venv" # Common name for virtual environment folder
 
@@ -47,6 +48,33 @@ start_flask_backend() {
     FLASK_PID=$!
     echo "   Flask backend started with PID: $FLASK_PID"
 }
+
+install_weasyprint_deps() {
+    # This check is specific to macOS users with Homebrew.
+    if [[ "$OSTYPE" != "darwin"* ]]; then
+        echo "-> Skipping WeasyPrint macOS dependency check (not on macOS)."
+        return
+    fi
+
+    echo "-> Checking for WeasyPrint system dependencies (macOS/Homebrew)..."
+    if ! command -v brew &> /dev/null; then
+        echo "   [ERROR] Homebrew is not installed, but it's required for WeasyPrint dependencies on macOS."
+        echo "   Please install Homebrew from https://brew.sh/ and run this script again."
+        exit 1
+    fi
+
+    echo "   Homebrew found. Installing/updating WeasyPrint dependencies..."
+    # brew install is idempotent; it will only install missing packages.
+    brew install cairo pango gdk-pixbuf libffi glib gobject-introspection
+    if [ $? -ne 0 ]; then
+        echo "   [ERROR] Failed to install WeasyPrint dependencies via Homebrew."
+        echo "   Please check the Homebrew output above for errors and try to resolve them."
+        exit 1
+    else
+        echo "   WeasyPrint dependencies are installed."
+    fi
+}
+
 
 start_vite_frontend() {
     echo "-> Starting Vite frontend dev server..."
@@ -98,6 +126,10 @@ fi
 
 # Trap SIGINT (Ctrl+C) and call cleanup
 trap cleanup SIGINT
+
+# Install WeasyPrint system dependencies (if on macOS with Homebrew)
+install_weasyprint_deps
+
 
 # Start servers
 start_flask_backend

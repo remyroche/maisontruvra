@@ -1,10 +1,9 @@
 from functools import wraps
-from flask import request, jsonify, g, session, current_app, redirect, Flask # Added redirect, Flask type hint
+from flask import request, jsonify, g, session, current_app, redirect, Flask
 from flask_jwt_extended import get_jwt_identity # For JWT identity if needed in early middleware
 import logging
 import uuid
 from datetime import datetime, timedelta
-from functools import wraps
 from flask_login import current_user, logout_user
 
 
@@ -16,17 +15,16 @@ from flask_compress import Compress
 from werkzeug.exceptions import RequestEntityTooLarge, HTTPException, default_exceptions # For payload size error handling
 import ipaddress # For IP whitelisting
 
-# Assuming these utilities exist from previous implementations
+# Import utilities
 from backend.utils.csrf_protection import CSRFProtection
-from backend.utils.sanitization import InputSanitizer
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.models.user_models import User
 # Assuming RBACService is defined elsewhere and imported, or defined below for self-containment
 # from backend.services.rbac_service import RBACService
 
 
-# It's good practice to get loggers this way.
-logger = logging.getLogger(__name__)
-security_logger = logging.getLogger('security')
+# Import centralized loggers
+from backend.loggers import security_logger, app_logger as logger
 
 
 # --- Global Flask Extensions Initialization ---
@@ -42,53 +40,65 @@ compress = Compress()
 # --- Middleware Definition Functions ---
 
 
-def check_staff_session():
+def check_staff_session(app: Flask):
     """
-    This function is now a blueprint-specific `before_request` handler.
+    Registers a blueprint-specific `before_request` handler.
     It checks session validity for authenticated STAFF users on admin routes.
+    
+    Args:
+        app: The Flask application instance
     """
-    # The path check is implicitly handled by attaching this to the admin blueprint
-    if current_user.is_authenticated and current_user.is_staff:
-        now = datetime.utcnow()
-        timeout_reason = None
+    @app.before_request
+    def check_staff_session_handler():
+        # Only apply to admin routes
+        if not request.path.startswith('/api/admin/'):
+            return
+            
+        # Check if user is authenticated and is staff
+        if current_user.is_authenticated and current_user.is_staff:
+            now = datetime.utcnow()
+            timeout_reason = None
 
-        # --- Check for maximum session lifetime (re-authentication) ---
-        login_time_str = session.get('login_time')
-        if login_time_str:
-            login_time = datetime.fromisoformat(login_time_str)
-            if now - login_time > current_app.config['SESSION_MAX_LIFETIME']:
-                timeout_reason = "Session has expired for security reasons."
-        else:
-            # This is a fallback, login time should be set at login
-            session['login_time'] = now.isoformat()
+            # --- Check for maximum session lifetime (re-authentication) ---
+            login_time_str = session.get('login_time')
+            if login_time_str:
+                login_time = datetime.fromisoformat(login_time_str)
+                if now - login_time > current_app.config['SESSION_MAX_LIFETIME']:
+                    timeout_reason = "Session has expired for security reasons."
+            else:
+                # This is a fallback, login time should be set at login
+                session['login_time'] = now.isoformat()
 
-        # --- Check for inactivity timeout ---
-        last_activity_str = session.get('last_activity_time')
-        if last_activity_str:
-            last_activity = datetime.fromisoformat(last_activity_str)
-            timeout_duration = (
-                current_app.config['ADMIN_INACTIVITY_TIMEOUT']
-                if current_user.is_admin
-                else current_app.config['STAFF_INACTIVITY_TIMEOUT']
-            )
-            if now - last_activity > timeout_duration:
-                timeout_reason = "Session timed out due to inactivity."
-        
-        if timeout_reason:
-            return jsonify({
-                "error": "Authentication Required", 
-                "message": timeout_reason,
-                "reason": "reauth_required"
-            }), 401
+            # --- Check for inactivity timeout ---
+            last_activity_str = session.get('last_activity_time')
+            if last_activity_str:
+                last_activity = datetime.fromisoformat(last_activity_str)
+                timeout_duration = (
+                    current_app.config['ADMIN_INACTIVITY_TIMEOUT']
+                    if current_user.is_admin
+                    else current_app.config['STAFF_INACTIVITY_TIMEOUT']
+                )
+                if now - last_activity > timeout_duration:
+                    timeout_reason = "Session timed out due to inactivity."
+            
+            if timeout_reason:
+                return jsonify({
+                    "error": "Authentication Required", 
+                    "message": timeout_reason,
+                    "reason": "reauth_required"
+                }), 401
 
-        # Update last activity time if all checks pass
-        session['last_activity_time'] = now.isoformat()
+            # Update last activity time if all checks pass
+            session['last_activity_time'] = now.isoformat()
 
 
             
-def mfa_check_middleware(app):
+def mfa_check_middleware(app: Flask):
     """
     Registers a 'before_request' hook to enforce Multi-Factor Authentication (MFA).
+    
+    Args:
+        app: The Flask application instance
     """
     @app.before_request
     def check_mfa_status():
@@ -133,9 +143,12 @@ class RBACService:
 
 # --- Main Middleware Setup Function ---
 
-def setup_middleware(app: Flask):
+def setup_middleware(app: Flask) -> None:
     """
     Setup global middleware for the Flask application.
+    
+    Args:
+        app: The Flask application instance
 
     This function integrates:
     1. Global Request ID Generation & Initial Logging

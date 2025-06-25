@@ -1,6 +1,6 @@
 import logging
 from flask import current_app
-from backend.extensions import celery
+from backend.celery_worker import celery
 from backend.services.email_service import EmailService
 from backend.services.loyalty_service import LoyaltyService
 from backend.services.invoice_service import InvoiceService

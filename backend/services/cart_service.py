@@ -1,12 +1,12 @@
 from flask import current_app
 from flask_login import current_user
-from ..models import db, Cart, CartItem, Product, ProductVariant # Assuming ProductVariant exists
+from backend.database import db
+from backend.models.cart_models import Cart, CartItem
+from backend.models.product_models import Product, ProductVariant
+from backend.models.inventory_models import InventoryReservation # Added: Import InventoryReservation
 from .exceptions import ServiceError, ValidationException, NotFoundException
 from .inventory_service import InventoryService
-from ..utils.sanitization import sanitize_input # Assuming this utility exists
-
-# Use the Flask app logger
-logger = current_app.logger
+from backend.utils.input_sanitizer import InputSanitizer
 
 class CartService:
     @staticmethod
@@ -24,7 +24,7 @@ class CartService:
     @staticmethod
     def add_to_cart(cart_data: dict):
         """Add item to cart with validation and inventory reservation."""
-        cart_data = sanitize_input(cart_data)
+        cart_data = InputSanitizer.sanitize_json(cart_data)
         
         if not current_user.is_authenticated:
             raise ServiceError("User must be authenticated", 401)
@@ -49,7 +49,7 @@ class CartService:
         try:
             InventoryService.reserve_stock(product_id, quantity, user_id=user_id)
         except ServiceError as e:
-            logger.warning(f"Failed to reserve stock for product {product_id} for user {user_id}: {e.message}")
+            current_app.logger.warning(f"Failed to reserve stock for product {product_id} for user {user_id}: {e.message}")
             raise e # Re-raise to inform the client of the stock issue
         # --- End Reservation Logic ---
 
@@ -64,19 +64,19 @@ class CartService:
                 db.session.add(new_item)
             
             db.session.commit()
-            logger.info(f"Item added to cart: User {user_id}, Product {product_id}, Quantity {quantity}")
+            current_app.logger.info(f"Item added to cart: User {user_id}, Product {product_id}, Quantity {quantity}")
             return cart.to_dict() # Return the updated cart
         except Exception as e:
             db.session.rollback()
             # If DB operation fails, we must release the reservation
             InventoryService.release_stock(product_id, quantity, user_id=user_id)
-            logger.error(f"Failed to add item to cart after reservation: {str(e)}", exc_info=True)
+            current_app.logger.error(f"Failed to add item to cart after reservation: {str(e)}", exc_info=True)
             raise ServiceError(f"Failed to add item to cart: {str(e)}")
 
     @staticmethod
     def update_cart_item(item_id: int, update_data: dict):
         """Update cart item quantity with inventory reservation adjustments."""
-        update_data = sanitize_input(update_data)
+        update_data = InputSanitizer.sanitize_json(update_data)
         if not current_user.is_authenticated:
             raise ServiceError("User must be authenticated", 401)
         user_id = current_user.id
@@ -112,16 +112,16 @@ class CartService:
             # Update item quantity in cart
             cart_item.quantity = new_quantity
             db.session.commit()
-            logger.info(f"Cart item updated: Item {item_id}, New quantity {new_quantity}")
+            current_app.logger.info(f"Cart item updated: Item {item_id}, New quantity {new_quantity}")
             return cart_item.cart.to_dict()
 
         except ServiceError as e:
             db.session.rollback()
-            logger.warning(f"Failed to update cart item {item_id} due to stock issue: {e.message}")
+            current_app.logger.warning(f"Failed to update cart item {item_id} due to stock issue: {e.message}")
             raise e
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to update cart item {item_id}: {str(e)}", exc_info=True)
+            current_app.logger.error(f"Failed to update cart item {item_id}: {str(e)}", exc_info=True)
             raise ServiceError(f"Failed to update cart item: {str(e)}")
 
     @staticmethod
@@ -146,11 +146,11 @@ class CartService:
             # Release the inventory reservation after successful removal from cart
             InventoryService.release_stock(product_id, quantity_to_release, user_id=user_id)
             
-            logger.info(f"Cart item removed: Item {item_id}")
+            current_app.logger.info(f"Cart item removed: Item {item_id}")
             return cart.to_dict()
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to remove cart item {item_id}: {str(e)}", exc_info=True)
+            current_app.logger.error(f"Failed to remove cart item {item_id}: {str(e)}", exc_info=True)
             raise ServiceError(f"Failed to remove cart item: {str(e)}")
 
 
@@ -176,12 +176,11 @@ class CartService:
             
             db.session.commit()
             
-            logger.info(f"Cart and all associated reservations cleared for user {user_id}")
+            current_app.logger.info(f"Cart and all associated reservations cleared for user {user_id}")
             return cart.to_dict(cleared=True) # Assuming to_dict can handle this state
             
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to clear cart for user {user_id}: {str(e)}", exc_info=True)
+            current_app.logger.error(f"Failed to clear cart for user {user_id}: {str(e)}", exc_info=True)
             # The transaction is rolled back, so no reservations were released and no items were deleted.
             raise ServiceError(f"Failed to clear cart due to a database error.")
-

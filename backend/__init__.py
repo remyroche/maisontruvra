@@ -4,19 +4,17 @@ from flask_login import LoginManager
 from flask_cors import CORS
 from flask_mail import Mail
 from celery import Celery
-from . import config # Changed: Use relative import for config
-from datetime import datetime # Added: Import datetime for logging timestamps
-import logging
-from logging.handlers import RotatingFileHandler
+from . import config # Use relative import for config
+from datetime import datetime
 import os
 from argon2 import PasswordHasher
-from .middleware import setup_middleware, RequestLoggingMiddleware, check_staff_session, mfa_check_middleware
-from .inputsanitizer import InputSanitizer
-from backend.logger_and_error_handler import setup_logging, register_error_handlers
-from flask_login import user_logged_in, user_login_failed, user_unauthorized # Added: user_unauthorized
-from flask import request, session # Added: session for make_session_permanent
-from backend.utils.vite import vite_asset
-from backend.logger_and_error_handler import security_logger # Assuming security_logger is exposed here 
+from .middleware import setup_middleware, check_staff_session, mfa_check_middleware
+from .utils.input_sanitizer import InputSanitizer, init_app_middleware
+from .loggers import setup_logging, security_logger
+from .logger_and_error_handler import register_error_handlers
+from flask_login import user_logged_in, user_unauthorized
+from flask import request, session
+from .utils.vite import vite_asset
 from .database import db, setup_database_security
 
 migrate = Migrate()
@@ -29,6 +27,16 @@ celery = Celery(__name__, broker=config.Config.CELERY_BROKER_URL) # No change ne
  
 def create_app(config_class=config.Config):
     app = Flask(__name__)
+    
+    # Handle string configuration names
+    if isinstance(config_class, str):
+        if config_class == 'default':
+            config_class = config.Config
+        elif config_class in config.config_by_name:
+            config_class = config.config_by_name[config_class]
+        else:
+            raise ValueError(f"Unknown configuration: {config_class}")
+    
     app.config.from_object(config_class)
 
     # Initialize extensions
@@ -76,15 +84,8 @@ def create_app(config_class=config.Config):
             'timestamp': datetime.utcnow().isoformat()
         })
     
-    @user_login_failed.connect_via(app)
-    def _login_failed(sender, **extra):
-        """Log failed login attempts."""
-        security_logger.warning({
-            'event': 'USER_LOGIN_FAILED',
-            'ip_address': request.remote_addr,
-            'user_agent': request.headers.get('User-Agent'),
-            'timestamp': datetime.utcnow().isoformat()
-        })
+    # Note: user_login_failed signal doesn't exist in flask_login
+    # Failed login attempts should be logged in the login route itself
 
     @user_unauthorized.connect_via(app)
     def _login_failed():
@@ -95,8 +96,8 @@ def create_app(config_class=config.Config):
         security_logger.warning(f"Unauthorized access attempt to a protected endpoint from IP: {request.remote_addr}")
 
 
-    # Loggin
-    app.wsgi_app = RequestLoggingMiddleware(app.wsgi_app)
+    # Logging
+    # app.wsgi_app = RequestLoggingMiddleware(app.wsgi_app)  # RequestLoggingMiddleware class not found
     setup_logging(app)
     register_error_handlers(app)
 
@@ -226,6 +227,7 @@ def create_app(config_class=config.Config):
     # Security at middleware level: CSRF, sanitization, HTTPS, ...
     setup_middleware(app)
     mfa_check_middleware(app)
+    init_app_middleware(app)  # Initialize input sanitization middleware
 
     @app.before_request
     def make_session_permanent():

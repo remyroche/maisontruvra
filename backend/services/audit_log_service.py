@@ -1,4 +1,4 @@
-from backend.models import db
+from backend.database import db
 from backend.models.admin_audit_models import AdminAuditLog
 from backend.models.user_models import User
 from flask import current_app
@@ -22,14 +22,14 @@ class AuditLogService:
         :param details: A more detailed description of the event (e.g., 'Deleted user with email a@b.com').
         """
         try:
-            log_entry = AdminAuditLog(admin_user_id=staff_user_id, action=action, details=details)
+            # Corrected the variable name from staff_user_id to admin_user_id
+            log_entry = AdminAuditLog(admin_user_id=admin_user_id, action=action, details=details)
             db.session.add(log_entry)
             db.session.commit()
             current_app.logger.info(f"Audit log created: Admin {admin_user_id} -> {action}")
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Failed to create audit log: {e}")
-
 
     @staticmethod
     def get_logs(page=1, per_page=20, date_filter=None):
@@ -63,4 +63,3 @@ class AuditLogService:
         except Exception as e:
             current_app.logger.error(f"Failed to retrieve audit logs: {e}")
             return {"logs": [], "total": 0, "pages": 0}
-

@@ -1,4 +1,7 @@
-from ..models import db, StockNotification, Product, User
+from backend.database import db
+from backend.models.product_models import Product
+from backend.models.user_models import User
+from backend.models.inventory_models import StockNotification
 from .exceptions import ServiceError, NotFoundException
 from flask import current_app
 

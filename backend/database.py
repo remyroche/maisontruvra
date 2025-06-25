@@ -1,11 +1,10 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import logging
 from flask import request
+from backend.loggers import database_logger as db_logger
 
 db = SQLAlchemy()
 migrate = Migrate()
-db_logger = logging.getLogger('database')
 
 def setup_database_security(app):
     """Setup database security configurations."""

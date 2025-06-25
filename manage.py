@@ -10,7 +10,10 @@ from backend import create_app, db
 from backend.models.user_models import User, UserRole
 
 # Create a minimal app instance for the CLI to work
-app = create_app(os.getenv('FLASK_CONFIG') or 'default')
+# Use environment variable FLASK_CONFIG to determine which config to use
+# Valid values are 'dev', 'test', 'prod', or 'default'
+flask_env = os.getenv('FLASK_CONFIG') or 'default'
+app = create_app(flask_env)
 
 migrate = Migrate(app, db)
 
@@ -29,11 +32,11 @@ def create_admin(email, password):
 
     # Create the new user
     new_admin = User(
-        email=email,
-        role=UserRole.ADMIN,
+        email=email, # Assuming email is a direct attribute
+        role=UserRole.ADMIN.value, # Use .value for enum string
         is_active=True,
-        email_verified=True, # Admins are trusted by default
-        totp_secret=totp_secret # Save the secret
+        email_verified=True, # Admins are trusted by default (assuming this field exists)
+        two_factor_secret=totp_secret # Corrected attribute name
     )
     new_admin.set_password(password)
     

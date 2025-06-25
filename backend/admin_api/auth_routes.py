@@ -11,6 +11,16 @@ from utils.sanitization import sanitize_input
 from ..services.auth_service import AuthService
 from ..services.exceptions import ServiceError
 import logging
+from flask import Blueprint, request, jsonify, session, current_app
+from flask_login import current_user, login_user, logout_user
+from datetime import datetime
+from backend.services.user_service import UserService
+from backend.services.auth_service import AuthService
+from backend.utils.decorators import admin_required, staff_required
+from backend.loggers import security_logger
+
+admin_auth_bp = Blueprint('admin_auth', __name__)
+
 
 admin_auth_bp = Blueprint('admin_auth_bp', __name__)
 user_service = UserService()
@@ -65,6 +75,29 @@ def reset_password():
         return jsonify({"message": "Password has been reset successfully."}), 200
     except ServiceError as e:
         return jsonify({"error": e.message}), e.status_code
+
+
+@admin_auth_bp.route('/reauthenticate', methods=['POST'])
+@staff_required
+@admin_required # Ensures a user must exist to even attempt re-auth
+def reauthenticate():
+    """
+    Re-authenticates an existing session after a timeout.
+    """
+    data = request.get_json()
+    password = data.get('password')
+    
+    if not current_user.check_password(password):
+        security_logger.warning(f"Re-authentication failed for user {current_user.id} due to invalid password.")
+        return jsonify({"error": "Invalid password"}), 401
+
+    session['login_time'] = datetime.utcnow().isoformat()
+    session['last_activity_time'] = datetime.utcnow().isoformat()
+    session.pop('reauth_needed', None)
+    
+    security_logger.info(f"User {current_user.id} successfully re-authenticated.")
+    return jsonify({"message": "Re-authentication successful."})
+
 
 @admin_auth_bp.route('/login', methods=['POST'])
 def login():

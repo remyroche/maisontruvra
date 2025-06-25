@@ -1,16 +1,22 @@
 
+import re # Added: For regular expressions
+import os # Added: For os.environ.get
 from werkzeug.security import check_password_hash, generate_password_hash
 from backend.models.user_models import User, UserRole
 from backend.database import db
-from backend.services.exceptions import ValidationException, UnauthorizedException, NotFoundException
+from backend.services.exceptions import ServiceError, ValidationException, UnauthorizedException, NotFoundException, InvalidPasswordException
 from backend.services.mfa_service import MfaService
 from backend.utils.auth_helpers import generate_tokens
+from backend.services.email_service import EmailService # Added: For EmailService
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature # Added: For token serialization
 import logging
-from flask import current_app
+from flask import current_app, session # Added: For session
+from flask_login import login_user # Added: For login_user
 
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
 
+# Moved _validate_password inside AuthService or ensure it's imported if defined elsewhere
 def _validate_password(password):
     """
     Validates a password against the policy defined in the config.
@@ -35,7 +41,7 @@ def _validate_password(password):
 class AuthService:
     @staticmethod
     def get_token_serializer(salt='default'):
-        """Creates a token serializer with a specific salt."""
+        """Creates a token serializer with a specific salt.""" # Corrected: URLSafeTimedSerializer was not defined
         return URLSafeTimedSerializer(current_app.config['SECRET_KEY'], salt=salt)
 
     @staticmethod
@@ -174,8 +180,8 @@ class AuthService:
             raise ServiceError("Invalid credentials for this portal.", 401)
 
         # If MFA is not enabled for this user, log them in completely.
-        if not user.mfa_enabled:
-            login_user(user)
+        if not user.two_factor_enabled:
+            login_user(user) # Corrected: login_user was not defined
             session['mfa_authenticated'] = True  # Mark session as fully authenticated
             current_app.logger.info(f"User {email} logged in successfully (MFA not enabled).")
             return {'mfa_required': False, 'user': user.to_dict()}
@@ -204,8 +210,8 @@ class AuthService:
             raise ServiceError("User not found.", 401)
         
         # Verify the token against the user's secret
-        if MfaService.verify_token(user.mfa_secret, mfa_token):
-            # Success! Now we can fully log the user in.
+        if MfaService.verify_token(user.two_factor_secret, mfa_token): # Corrected attribute name
+            # Success! Now we can fully log the user in. # Corrected: login_user was not defined
             login_user(user)
             session['mfa_authenticated'] = True
             session.pop('mfa_pending_user_id', None) # Clean up the pending key
@@ -224,10 +230,10 @@ class AuthService:
         if not user:
             raise NotFoundException("User not found")
             
-        if not user.totp_secret:
+        if not user.two_factor_secret: # Corrected attribute name
             raise ValidationException("MFA not enabled for this user")
             
-        if not MfaService.verify_token(user.totp_secret, mfa_token):
+        if not MfaService.verify_token(user.two_factor_secret, mfa_token): # Corrected attribute name
             security_logger.warning(f"Failed MFA verification for user ID: {user_id}")
             raise UnauthorizedException("Invalid MFA token")
             

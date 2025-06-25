@@ -1,12 +1,11 @@
 import os
 import uuid
 from flask import current_app
-from ..models import db, Asset
+from backend.database import db
+from backend.models.asset_models import Asset
 from .exceptions import ServiceError, NotFoundException
 from werkzeug.utils import secure_filename
 from backend.services.exceptions import InvalidUsageException
-from backend.models.asset_models import Asset
-from backend.database import db
 
 
 def _allowed_file(filename):
@@ -28,7 +27,7 @@ class AssetService:
         if not file_storage or file_storage.filename == '':
             raise ServiceError("No file selected.", 400)
 
-        if not allowed_file(file_storage.filename):
+        if not AssetService._allowed_file(file_storage.filename):
             raise ServiceError("File type not allowed.", 400)
 
         original_filename = secure_filename(file_storage.filename)
