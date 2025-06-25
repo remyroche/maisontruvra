@@ -83,16 +83,17 @@ def expire_loyalty_points_task(self):
             raise
 
 @scheduled_task
-def update_b2b_loyalty_tiers_task(self):
+def update_all_b2b_loyalty_tiers(self):
     """
-    Scheduled Celery task to recalculate and update B2B user loyalty tiers.
+    Scheduled task to recalculate and update all B2B user loyalty tiers.
+    This replaces the previous redundant tasks.
     """
     with current_app.app_context():
         try:
-            logger.info("Starting scheduled task: update_b2b_loyalty_tiers_task")
+            logger.info("Starting scheduled task: update_all_b2b_loyalty_tiers")
             count = LoyaltyService.update_user_tiers_task()
             logger.info(f"Finished scheduled task: Updated loyalty tiers for {count} active B2B users.")
             return f"Updated {count} B2B loyalty tiers."
         except Exception as e:
-            logger.error(f"Scheduled task update_b2b_loyalty_tiers_task failed: {e}", exc_info=True)
+            logger.error(f"Scheduled task update_all_b2b_loyalty_tiers failed: {e}", exc_info=True)
             raise
