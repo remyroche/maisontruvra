@@ -45,6 +45,7 @@ const routes = [
   { path: '/admin/blog', name: 'AdminManageBlog', component: ManageBlogView, meta: { requiresAuth: true, requiredPermission: 'manage_blog' } },
   { path: '/admin/loyalty', name: 'AdminManageLoyalty', component: ManageLoyaltyView, meta: { requiresAuth: true, requiredPermission: 'manage_loyalty' } },
   { path: '/admin/newsletter', name: 'AdminManageNewsletter', component: ManageNewsletterView, meta: { requiresAuth: true, requiredPermission: 'manage_newsletter' } },
+  { path: '/blog', name: 'ManageBlog', component: ManageBlogView, meta: { requiresAuth: true, roles: ['Admin', 'Manager', 'Editor'] } },
 
   // Site & System
   { path: '/admin/assets', name: 'AdminManageAssets', component: ManageAssetsView, meta: { requiresAuth: true, requiredPermission: 'manage_assets' } },
