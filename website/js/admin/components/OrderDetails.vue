@@ -1,102 +1,78 @@
-<!--
- * FILENAME: website/js/admin/components/OrderDetails.vue
- * DESCRIPTION: Component to display the detailed information of a single order.
- *
- * This component is used within a modal to show everything about an order,
- * including customer details, shipping address, and the list of products ordered.
--->
 <template>
-  <div class="text-sm text-gray-700">
-    <!-- Customer & Order Info -->
-    <div class="grid grid-cols-2 gap-4 mb-6">
-      <div>
-        <h3 class="font-bold text-gray-800">Customer</h3>
-        <p>{{ order.customer_name }}</p>
-        <p>{{ order.customer_email }}</p>
-      </div>
-      <div>
-        <h3 class="font-bold text-gray-800">Shipping Address</h3>
-        <p>{{ order.shipping_address.street }}</p>
-        <p>{{ order.shipping_address.city }}, {{ order.shipping_address.postal_code }}</p>
-        <p>{{ order.shipping_address.country }}</p>
-      </div>
-    </div>
-
-    <!-- Order Items -->
-    <div>
-      <h3 class="font-bold text-gray-800 mb-2">Items Ordered</h3>
-      <div class="border rounded-lg overflow-hidden">
-        <table class="min-w-full">
-          <thead class="bg-gray-100">
-            <tr>
-              <th class="py-2 px-3 text-left">Product</th>
-              <th class="py-2 px-3 text-center">Quantity</th>
-              <th class="py-2 px-3 text-right">Price</th>
-              <th class="py-2 px-3 text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in order.items" :key="item.id" class="border-t">
-              <td class="py-2 px-3">{{ item.product_name }}</td>
-              <td class="py-2 px-3 text-center">{{ item.quantity }}</td>
-              <td class="py-2 px-3 text-right">€{{ item.unit_price.toFixed(2) }}</td>
-              <td class="py-2 px-3 text-right">€{{ (item.quantity * item.unit_price).toFixed(2) }}</td>
-            </tr>
-          </tbody>
-          <tfoot class="font-bold bg-gray-50">
-            <tr>
-                <td colspan="3" class="py-2 px-3 text-right">Subtotal</td>
-                <td class="py-2 px-3 text-right">€{{ order.subtotal.toFixed(2) }}</td>
-            </tr>
-             <tr>
-                <td colspan="3" class="py-2 px-3 text-right">Shipping</td>
-                <td class="py-2 px-3 text-right">€{{ order.shipping_cost.toFixed(2) }}</td>
-            </tr>
-             <tr>
-                <td colspan="3" class="py-2 px-3 text-right text-lg">Total</td>
-                <td class="py-2 px-3 text-right text-lg">€{{ order.total_amount.toFixed(2) }}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-
-    <!-- Status Update -->
-    <div class="mt-6">
-        <label for="order_status" class="block font-bold text-gray-800 mb-2">Update Order Status</label>
-        <div class="flex">
-            <select id="order_status" v-model="newStatus" class="flex-grow border-gray-300 rounded-l-md shadow-sm">
-                <option>Pending</option>
-                <option>Processing</option>
-                <option>Shipped</option>
-                <option>Delivered</option>
-                <option>Cancelled</option>
-            </select>
-            <button @click="updateStatus" :disabled="orderStore.isLoading" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-r-md">
-                {{ orderStore.isLoading ? 'Updating...' : 'Update' }}
-            </button>
+  <div v-if="order" class="space-y-6">
+    <div class="bg-white p-4 rounded-lg shadow">
+        <h3 class="text-lg font-semibold border-b pb-2 mb-2">Order Summary</h3>
+        <p><strong>Order ID:</strong> #{{ order.id }}</p>
+        <p><strong>Date:</strong> {{ new Date(order.created_at).toLocaleString() }}</p>
+        <p><strong>Total:</strong> ${{ order.total_amount.toFixed(2) }}</p>
+        <div class="mt-4">
+            <label for="status" class="block text-sm font-medium text-gray-700">Order Status</label>
+            <div class="flex items-center space-x-2 mt-1">
+                <select id="status" v-model="newStatus" class="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
+                    <option v-for="status in ordersStore.statuses" :key="status" :value="status">{{ status }}</option>
+                </select>
+                <button @click="updateStatus" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">Update</button>
+            </div>
         </div>
     </div>
+    
+    <div class="bg-white p-4 rounded-lg shadow">
+        <h3 class="text-lg font-semibold border-b pb-2 mb-2">Customer Details</h3>
+        <p><strong>Name:</strong> {{ order.customer_name }}</p>
+        <p><strong>Email:</strong> {{ order.customer_email }}</p>
+    </div>
+
+    <div class="bg-white p-4 rounded-lg shadow">
+        <h3 class="text-lg font-semibold border-b pb-2 mb-2">Shipping Address</h3>
+        <p>{{ order.shipping_address.street }}</p>
+        <p>{{ order.shipping_address.city }}, {{ order.shipping_address.state }} {{ order.shipping_address.zip_code }}</p>
+        <p>{{ order.shipping_address.country }}</p>
+    </div>
+
+    <div class="bg-white p-4 rounded-lg shadow">
+      <h3 class="text-lg font-semibold border-b pb-2 mb-2">Items Ordered</h3>
+      <ul>
+        <li v-for="item in order.items" :key="item.id" class="flex justify-between items-center py-2 border-b last:border-b-0">
+            <div>
+                <p class="font-semibold">{{ item.product_name }}</p>
+                <p class="text-sm text-gray-600">SKU: {{ item.sku }}</p>
+            </div>
+            <div>
+                <p>{{ item.quantity }} x ${{ item.price.toFixed(2) }}</p>
+            </div>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+  <div v-else class="text-center text-gray-500">
+    Loading order details...
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { useAdminOrderStore } from '../../stores/adminOrders';
+import { ref, watch } from 'vue';
+import { useAdminOrdersStore } from '@/js/stores/adminOrders';
 
 const props = defineProps({
   order: {
     type: Object,
-    required: true
-  }
+    required: true,
+  },
 });
 
-const orderStore = useAdminOrderStore();
-const newStatus = ref(props.order.status);
+const ordersStore = useAdminOrdersStore();
+const newStatus = ref(props.order?.status);
 
-const updateStatus = async () => {
-    if (newStatus.value !== props.order.status) {
-        await orderStore.updateOrderStatus(props.order.id, newStatus.value);
+watch(() => props.order, (newOrder) => {
+    if (newOrder) {
+        newStatus.value = newOrder.status;
     }
-}
+}, { immediate: true });
+
+const updateStatus = () => {
+    if (newStatus.value && props.order) {
+        ordersStore.updateOrderStatus(props.order.id, newStatus.value);
+    }
+};
 </script>
