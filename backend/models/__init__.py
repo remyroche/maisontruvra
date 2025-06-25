@@ -7,7 +7,7 @@ from .product_models import Product, Category, Collection, Review, ProductImage
 from .order_models import Order, OrderItem, Invoice
 from .cart_models import Cart, CartItem
 from .b2b_models import B2BUser, B2BPartnershipRequest
-from .b2b_loyalty_models import B2BLoyaltyTier
+from .b2b_loyalty_models import LoyaltyTier # Corrected: Import LoyaltyTier
 from .passport_models import ProductPassport, PassportEntry
 from .blog_models import BlogPost, BlogCategory
 from .newsletter_models import NewsletterSubscription

@@ -8,7 +8,7 @@
 import axios from 'axios';
 import { useNotificationStore } from '@/stores/notification';
 
-const apiClient = axios.create({
+export const apiClient = axios.create({
     baseURL: '/api',
     withCredentials: true, // Necessary for sending HttpOnly cookies
     headers: {
@@ -88,5 +88,3 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-export default apiClient;

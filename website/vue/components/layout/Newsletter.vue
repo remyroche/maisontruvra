@@ -37,7 +37,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import apiClient from '../../../js/api-client';
+import { apiClient } from '../../../js/api-client';
 import { useNotificationStore } from '../../../js/stores/notification';
 
 const email = ref('');

@@ -1,11 +1,11 @@
-from .base import BaseModel
+from .base import BaseModel, SoftDeleteMixin # Added: Import SoftDeleteMixin
 from .enums import UserStatus, RoleType
-from .. import db
+from backend.database import db # Changed: Import db from backend.database
 from flask_login import UserMixin
 from sqlalchemy.ext.hybrid import hybrid_property
-from utils.encryption import encrypt_data, decrypt_data
+from backend.utils.encryption import encrypt_data, decrypt_data # Changed: Use absolute import for utils
 from argon2 import PasswordHasher
-from backend.models.base import Base
+from backend.models.base import BaseModel # No change needed here
 
 ph = PasswordHasher()
 

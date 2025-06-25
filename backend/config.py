@@ -1,7 +1,10 @@
 import os
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
+from datetime import timedelta # Added: Import timedelta
 
+# Define basedir for path calculations
+basedir = os.path.abspath(os.path.dirname(__file__))
 # Load environment variables from .env file
 load_dotenv()
 

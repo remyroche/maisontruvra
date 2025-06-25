@@ -18,7 +18,7 @@ import ipaddress # For IP whitelisting
 
 # Assuming these utilities exist from previous implementations
 from backend.utils.csrf_protection import CSRFProtection
-from backend.utils.sanitization import sanitize_input # Renamed from sanitize_input to match your example usage
+from backend.utils.sanitization import InputSanitizer
 from backend.models.user_models import User
 # Assuming RBACService is defined elsewhere and imported, or defined below for self-containment
 # from backend.services.rbac_service import RBACService
@@ -117,6 +117,18 @@ def mfa_check_middleware(app):
                     "error": "MFA verification required.",
                     "mfa_required": True
                 }), 403
+
+
+# Placeholder for RBACService if it's not defined elsewhere
+# In a real application, this would be in backend/services/rbac_service.py
+class RBACService:
+    @staticmethod
+    def user_is_staff(user_id):
+        # This is a placeholder. Implement actual logic to check if a user is staff.
+        # This might involve querying the database or checking user roles.
+        # For now, we'll return True for demonstration purposes if a user_id is provided.
+        # You should replace this with your actual RBAC logic.
+        return user_id is not None # Simple placeholder: any authenticated user is "staff" for this check
 
 
 # --- Main Middleware Setup Function ---
@@ -325,8 +337,3 @@ def sanitize_request_data(f):
 
         return f(*args, **kwargs)
     return decorated_function
-
-
-
-
-

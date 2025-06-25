@@ -1,32 +1,33 @@
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_cors import CORS
 from flask_mail import Mail
 from celery import Celery
-from config import Config
+from . import config # Changed: Use relative import for config
+from datetime import datetime # Added: Import datetime for logging timestamps
 import logging
 from logging.handlers import RotatingFileHandler
 import os
 from argon2 import PasswordHasher
-from .middleware import setup_middleware, RequestLoggingMiddleware, check_staff_session
+from .middleware import setup_middleware, RequestLoggingMiddleware, check_staff_session, mfa_check_middleware
 from .inputsanitizer import InputSanitizer
 from backend.logger_and_error_handler import setup_logging, register_error_handlers
-from flask_login import user_logged_in, user_login_failed
-from flask import request
+from flask_login import user_logged_in, user_login_failed, user_unauthorized # Added: user_unauthorized
+from flask import request, session # Added: session for make_session_permanent
 from backend.utils.vite import vite_asset
+from backend.logger_and_error_handler import security_logger # Assuming security_logger is exposed here 
+from .database import db, setup_database_security
 
-db = SQLAlchemy()
 migrate = Migrate()
 ph = PasswordHasher()
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
 login_manager.login_message_category = 'info'
 mail = Mail()
-celery = Celery(__name__, broker=Config.CELERY_BROKER_URL)
-
-def create_app(config_class=Config):
+celery = Celery(__name__, broker=config.Config.CELERY_BROKER_URL) # No change needed here, config is now correctly imported
+ 
+def create_app(config_class=config.Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
@@ -37,6 +38,19 @@ def create_app(config_class=Config):
     CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}})
     mail.init_app(app)
     celery.conf.update(app.config)
+
+    # Function to initialize Celery with Flask app context
+    def init_celery(app):
+        celery.conf.update(app.config)
+        class ContextTask(celery.Task):
+            def __call__(self, *args, **kwargs):
+                with app.app_context():
+                    return self.run(*args, **kwargs)
+        celery.Task = ContextTask
+
+    # Setup database security options and logging
+    setup_database_security(app)
+
     
     @app.context_processor
     def inject_vite_asset():
@@ -211,7 +225,7 @@ def create_app(config_class=Config):
 
     # Security at middleware level: CSRF, sanitization, HTTPS, ...
     setup_middleware(app)
-    init_app_middleware(app)
+    mfa_check_middleware(app)
 
     @app.before_request
     def make_session_permanent():

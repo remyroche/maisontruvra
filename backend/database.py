@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import logging
+from flask import request
 
 db = SQLAlchemy()
 migrate = Migrate()
