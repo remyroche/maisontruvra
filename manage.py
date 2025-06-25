@@ -4,12 +4,15 @@ import click
 from flask.cli import with_appcontext
 import pyotp
 import qrcode
+from flask_migrate import Migrate
 
 from backend import create_app, db
 from backend.models.user_models import User, UserRole
 
 # Create a minimal app instance for the CLI to work
 app = create_app(os.getenv('FLASK_CONFIG') or 'default')
+
+migrate = Migrate(app, db)
 
 @app.cli.command("create-admin")
 @click.argument("email")
