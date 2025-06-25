@@ -70,7 +70,7 @@ export const useAdminUsersStore = defineStore('adminUsers', {
     async softDeleteUser(id) {
       this.error = null;
       try {
-        await apiClient.delete(`/users/${id}/soft-delete`);
+        await apiClient.delete(`/users/${id}`);
       } catch (e) {
         console.error('Failed to soft delete user:', e);
         this.error = 'Could not soft-delete the user. Please try again.';
@@ -85,7 +85,7 @@ export const useAdminUsersStore = defineStore('adminUsers', {
     async hardDeleteUser(id) {
       this.error = null;
       try {
-        await apiClient.delete(`/users/${id}/hard-delete`);
+        await apiClient.delete(`/users/${id}?hard=true`);
       } catch (e) {
         console.error('Failed to hard delete user:', e);
         this.error = 'Could not permanently delete the user. Please try again.';
@@ -145,4 +145,3 @@ export const useAdminUsersStore = defineStore('adminUsers', {
     }
   },
 });
-
