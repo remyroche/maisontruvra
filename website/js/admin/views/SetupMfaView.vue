@@ -1,26 +1,47 @@
-<!--
- * FILENAME: website/js/admin/views/SetupMfaView.vue
- * UPDATED: Implemented with placeholder for QR code and setup flow.
--->
 <template>
-  <AdminLayout>
-    <div class="space-y-6 max-w-lg mx-auto">
-      <header><h1 class="text-3xl font-bold text-gray-800">Setup Multi-Factor Authentication</h1></header>
-      <div class="bg-white p-8 rounded-lg shadow-md text-center">
-        <h2 class="text-xl font-bold mb-4">Scan this QR Code</h2>
-        <div class="bg-gray-200 h-48 w-48 mx-auto flex items-center justify-center">
-            <p class="text-gray-500">QR Code Here</p>
-        </div>
-        <p class="mt-4 text-sm text-gray-600">Scan the code with your authenticator app, then enter the code below to verify.</p>
-         <div class="mt-4">
-            <label class="block text-sm font-medium">Verification Code</label>
-            <input type="text" class="mt-1 block w-full max-w-xs mx-auto border-gray-300 rounded-md shadow-sm">
-        </div>
-        <button class="mt-4 bg-indigo-600 text-white font-bold py-2 px-4 rounded">Enable MFA</button>
-      </div>
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Setup Multi-Factor Authentication</h1>
+    <div v-if="!mfaDetails.qrCode">
+        <p>Click the button to generate an MFA QR code. Scan it with your authenticator app.</p>
+        <button @click="generateMfa" class="bg-blue-500 text-white px-4 py-2 rounded">Generate QR Code</button>
     </div>
-  </AdminLayout>
+    <div v-else>
+        <img :src="mfaDetails.qrCode" alt="MFA QR Code">
+        <form @submit.prevent="verifyMfa">
+            <input v-model="mfaToken" placeholder="Enter MFA Token" class="border rounded p-2 mt-4 mr-2">
+            <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded">Verify</button>
+        </form>
+    </div>
+     <div v-if="mfaError" class="text-red-500 mt-4">{{ mfaError }}</div>
+  </div>
 </template>
+
 <script setup>
-import AdminLayout from '../components/AdminLayout.vue';
+import { ref } from 'vue';
+import apiClient from '@/js/common/adminApiClient';
+
+const mfaDetails = ref({});
+const mfaToken = ref('');
+const mfaError = ref(null);
+
+
+const generateMfa = async () => {
+    try {
+        const response = await apiClient.post('/auth/mfa/setup');
+        mfaDetails.value = response.data;
+    } catch (error) {
+        mfaError.value = 'Failed to generate MFA details.';
+    }
+};
+
+const verifyMfa = async () => {
+    try {
+        await apiClient.post('/auth/mfa/verify', { token: mfaToken.value });
+        alert('MFA setup successful!');
+        mfaDetails.value = {};
+    } catch (error) {
+         mfaError.value = 'Invalid MFA token.';
+    }
+};
+
 </script>
