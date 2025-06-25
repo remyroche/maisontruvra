@@ -7,6 +7,8 @@ from backend.database import db
 from backend.models.order_models import Order
 from backend.models.invoice_models import Invoice # Create this new model
 from backend.tasks import generate_invoice_pdf_task
+import logging
+from backend.models.b2b_models import Invoice, B2BProfile
 
 class InvoiceService:
     """
@@ -40,6 +42,15 @@ class InvoiceService:
             'customer_name': f"{order.user.first_name} {order.user.last_name}",
             'billing_address': order.billing_address, # Assuming this relationship exists
             'shipping_address': order.shipping_address # Assuming this relationship exists
+        }
+
+        context['company'] = {
+            'legal_status': current_app.config.get('COMPANY_LEGAL_STATUS', 'SAS'),
+            'siret': current_app.config.get('COMPANY_SIRET', '123 456 789 00010'),
+            'capital': current_app.config.get('COMPANY_CAPITAL', '10,000'),
+            'address': current_app.config.get('COMPANY_ADDRESS', '123 Rue de la République, 75001 Paris, France'),
+            'vat_number': current_app.config.get('COMPANY_VAT_NUMBER', 'FR00123456789'),
+            'email': current_app.config.get('COMPANY_EMAIL', 'contact@maisontruvra.com')
         }
 
         # If the user is B2B, add B2B-specific details to the context
