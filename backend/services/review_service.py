@@ -1,114 +1,134 @@
-
+from backend.models import Review
 from backend.database import db
-from backend.models.product_models import Review, Product
-from backend.models.user_models import User
-from backend.services.exceptions import ValidationError, NotFoundError, PermissionError
-from sqlalchemy import desc, func
-from datetime import datetime
-import logging
-
-logger = logging.getLogger(__name__)
+from .exceptions import NotFoundException
 
 class ReviewService:
     @staticmethod
-    def get_all_reviews(page: int = 1, per_page: int = 20, status_filter: str = None) -> dict:
-        """
-        Get all reviews with pagination and filtering.
-        """
-        query = Review.query.join(User).join(Product)
-        
+    def get_all_reviews(status_filter=None, include_deleted=False):
+        query = Review.query
+        if include_deleted:
+            query = query.with_deleted()
         if status_filter:
             query = query.filter(Review.status == status_filter)
-        
-        reviews = query.order_by(desc(Review.created_at)).paginate(
-            page=page, per_page=per_page, error_out=False
-        )
-        
-        return {
-            'reviews': [{
-                'id': review.id,
-                'rating': review.rating,
-                'comment': review.comment,
-                'status': review.status,
-                'user': {
-                    'id': review.user.id,
-                    'name': f"{review.user.first_name} {review.user.last_name}"
-                },
-                'product': {
-                    'id': review.product.id,
-                    'name': review.product.name
-                },
-                'created_at': review.created_at.isoformat()
-            } for review in reviews.items],
-            'pagination': {
-                'page': reviews.page,
-                'pages': reviews.pages,
-                'per_page': reviews.per_page,
-                'total': reviews.total
-            }
-        }
+        return query.all()
 
     @staticmethod
-    def update_review_status(review_id: int, status: str, admin_id: int) -> dict:
-        """
-        Update review status (approve/reject).
-        """
+    def get_all_reviews_paginated(page, per_page, filters):
+        query = Review.query
+        if filters.get('include_deleted'):
+            query = query.with_deleted()
+        if filters.get('status'):
+            query = query.filter(Review.status == filters['status'])
+        # Add other filters as needed
+        return query.paginate(page=page, per_page=per_page, error_out=False)
+
+    @staticmethod
+    def approve_review(review_id):
         review = Review.query.get(review_id)
         if not review:
-            raise NotFoundError(f"Review with ID {review_id} not found")
-        
-        valid_statuses = ['pending', 'approved', 'rejected']
-        if status not in valid_statuses:
-            raise ValidationError(f"Invalid status. Must be one of: {valid_statuses}")
-        
-        old_status = review.status
-        review.status = status
-        review.moderated_by = admin_id
-        review.moderated_at = datetime.utcnow()
-        
+            raise NotFoundException("Review not found")
+        review.status = 'approved'
         db.session.commit()
-        
-        # Log the status change
-        logger.info(f"Review {review_id} status changed from {old_status} to {status} by admin {admin_id}")
-        
-        return {
-            'id': review.id,
-            'status': review.status,
-            'moderated_at': review.moderated_at.isoformat()
-        }
+        return review
 
     @staticmethod
-    def delete_review(review_id: int, admin_id: int) -> bool:
-        """
-        Delete a review (admin action).
-        """
+    def soft_delete_review(review_id):
         review = Review.query.get(review_id)
-        if not review:
-            raise NotFoundError(f"Review with ID {review_id} not found")
-        
-        # Log before deletion
-        logger.info(f"Review {review_id} deleted by admin {admin_id}")
-        
-        db.session.delete(review)
-        db.session.commit()
-        return True
+        if review:
+            review.delete()
+            return True
+        return False
 
     @staticmethod
-    def get_review_statistics() -> dict:
-        """
-        Get review statistics for admin dashboard.
-        """
-        total_reviews = Review.query.count()
-        pending_reviews = Review.query.filter_by(status='pending').count()
-        approved_reviews = Review.query.filter_by(status='approved').count()
-        rejected_reviews = Review.query.filter_by(status='rejected').count()
+    def hard_delete_review(review_id):
+        review = Review.query.with_deleted().get(review_id)
+        if review:
+            review.hard_delete()
+            return True
+        return False
+
+    @staticmethod
+    def restore_review(review_id):
+        review = Review.query.with_deleted().get(review_id)
+        if review:
+            review.restore()
+            return True
+        return False
+
+```backend/services/blog_service.py`
+```python
+from backend.models import BlogPost, BlogCategory
+from backend.database import db
+from .exceptions import NotFoundException, ValidationException
+
+class BlogService:
+    # ... (create_post, update_post, etc. remain the same) ...
+
+    @staticmethod
+    def get_all_posts(include_deleted=False):
+        query = BlogPost.query
+        if include_deleted:
+            query = query.with_deleted()
+        return query.order_by(BlogPost.created_at.desc()).all()
+
+    @staticmethod
+    def soft_delete_post(post_id):
+        post = BlogPost.query.get(post_id)
+        if post:
+            post.delete()
+            return True
+        return False
+
+    @staticmethod
+    def hard_delete_post(post_id):
+        post = BlogPost.query.with_deleted().get(post_id)
+        if post:
+            post.hard_delete()
+            return True
+        return False
+
+    @staticmethod
+    def restore_post(post_id):
+        post = BlogPost.query.with_deleted().get(post_id)
+        if post:
+            post.restore()
+            return True
+        return False
+
+    # --- Blog Category Methods ---
+
+    @staticmethod
+    def get_all_categories(include_deleted=False):
+        query = BlogCategory.query
+        if include_deleted:
+            query = query.with_deleted()
+        return query.order_by(BlogCategory.name).all()
         
-        avg_rating = db.session.query(func.avg(Review.rating)).filter_by(status='approved').scalar() or 0
-        
-        return {
-            'total_reviews': total_reviews,
-            'pending_reviews': pending_reviews,
-            'approved_reviews': approved_reviews,
-            'rejected_reviews': rejected_reviews,
-            'average_rating': round(float(avg_rating), 2)
-        }
+    @staticmethod
+    def create_category(data):
+        # ... implementation ...
+        pass
+
+    @staticmethod
+    def soft_delete_category(category_id):
+        category = BlogCategory.query.get(category_id)
+        if category:
+            category.delete()
+            return True
+        return False
+
+    @staticmethod
+    def hard_delete_category(category_id):
+        category = BlogCategory.query.with_deleted().get(category_id)
+        if category:
+            category.hard_delete()
+            return True
+        return False
+
+    @staticmethod
+    def restore_category(category_id):
+        category = BlogCategory.query.with_deleted().get(category_id)
+        if category:
+            category.restore()
+            return True
+        return False
