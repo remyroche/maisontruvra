@@ -11,11 +11,11 @@ export const useAdminProductsStore = defineStore('adminProducts', {
     error: null,
   }),
   actions: {
-    async fetchProducts() {
+    async fetchProducts(params = {}) {
       this.isLoading = true;
       this.error = null;
       try {
-        const response = await apiClient.get('/products');
+        const response = await apiClient.get('/products', { params });
         this.products = response.data;
       } catch (error) {
         this.error = 'Failed to fetch products.';
@@ -117,7 +117,7 @@ export const useAdminProductsStore = defineStore('adminProducts', {
       }
     },
 
-    async deleteProduct(productId) {
+    async softDeleteProduct(productId) {
       this.isLoading = true;
       this.error = null;
       try {
@@ -130,5 +130,33 @@ export const useAdminProductsStore = defineStore('adminProducts', {
         this.isLoading = false;
       }
     },
+
+    async hardDeleteProduct(productId) {
+        this.isLoading = true;
+        this.error = null;
+        try {
+          await apiClient.delete(`/products/${productId}?hard=true`);
+          await this.fetchProducts();
+        } catch (error) {
+          this.error = 'Failed to permanently delete product.';
+          console.error(this.error, error);
+        } finally {
+          this.isLoading = false;
+        }
+      },
+  
+      async restoreProduct(productId) {
+        this.isLoading = true;
+        this.error = null;
+        try {
+          await apiClient.put(`/products/${productId}/restore`);
+          await this.fetchProducts();
+        } catch (error) {
+          this.error = 'Failed to restore product.';
+          console.error(this.error, error);
+        } finally {
+          this.isLoading = false;
+        }
+      },
   },
 });
