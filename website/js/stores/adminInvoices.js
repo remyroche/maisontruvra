@@ -1,30 +1,42 @@
-/*
- * FILENAME: website/js/stores/adminInvoices.js
- * DESCRIPTION: New Pinia store for fetching invoice data.
- */
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import adminApiClient from '../common/adminApiClient';
+import apiClient from '@/js/common/adminApiClient';
 
-export const useAdminInvoiceStore = defineStore('adminInvoices', () => {
-    const invoices = ref([]);
-    const isLoading = ref(false);
-    const error = ref(null);
-
-    async function fetchInvoices() {
-        isLoading.value = true;
-        error.value = null;
+export const useAdminInvoicesStore = defineStore('adminInvoices', {
+  state: () => ({
+    invoices: [],
+    isLoading: false,
+    error: null,
+  }),
+  actions: {
+    async fetchInvoices() {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const response = await apiClient.get('/invoices');
+        this.invoices = response.data;
+      } catch (e) {
+        this.error = 'Failed to fetch invoices.';
+        console.error(this.error, e);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    async downloadInvoice(invoiceId) {
         try {
-            // Assuming an endpoint exists to fetch all invoices
-            const response = await adminApiClient.get('/invoices');
-            invoices.value = response.data.invoices;
-        } catch (err) {
-            error.value = 'Failed to fetch invoices.';
-            console.error(err);
-        } finally {
-            isLoading.value = false;
+            const response = await apiClient.get(`/invoices/${invoiceId}/download`, {
+                responseType: 'blob', // Important for file downloads
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `invoice_${invoiceId}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (e) {
+            this.error = "Failed to download invoice."
+            console.error(this.error, e);
         }
     }
-
-    return { invoices, isLoading, error, fetchInvoices };
+  },
 });
