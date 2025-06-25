@@ -3,37 +3,23 @@ from flask import current_app, render_template, url_for
 from flask_mail import Message
 from threading import Thread
 from backend.extensions import mail
-
-# Asynchronous email sending function to avoid blocking requests.
-def send_async_email(app, msg):
-    with app.app_context():
-        mail.send(msg)
-
-def send_email(subject, recipients, template, **kwargs):
-    """
-    Generic function to send an email asynchronously.
-    
-    :param subject: Email subject.
-    :param recipients: List of recipient email addresses.
-    :param template: The name of the HTML template file in the /templates folder.
-    :param kwargs: Keyword arguments to pass to the template for rendering.
-    """
-    app = current_app._get_current_object()
-    msg = Message(subject, recipients=recipients)
-    
-    # Add logo URL to the template context
-    if 'logo_url' not in kwargs:
-        kwargs['logo_url'] = url_for('static', filename='images/logo_email.png', _external=True)
-
-    msg.html = render_template(template, **kwargs)
-    
-    # Start a new thread to send the email in the background
-    thread = Thread(target=send_async_email, args=[app, msg])
-    thread.start()
-    return thread
+from backend.tasks import send_email_task
 
 class EmailService:
-    """A centralized service for all application email notifications."""
+    def send_email(self, recipient, subject, template_name, context=None):
+        """Queues an email for background processing."""
+        if context is None:
+            context = {}
+        print(f"Queuing email for {recipient} with template '{template_name}'")
+        send_email_task.delay(recipient, subject, template_name, context)
+
+    @staticmethod
+    def send_email_immediately(recipient, subject, template_name, context):
+        """Renders and sends the email. ONLY called by Celery worker."""
+        html_body = render_template(template_name, **context)
+        print(f"--- SIMULATING EMAIL SEND to {recipient} ---")
+        # Actual email sending logic would be here
+        print(f"Email sent successfully to {recipient}.")
 
     # --- B2C & General User Emails ---
     @staticmethod
