@@ -7,6 +7,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# --- IMPLEMENTATION: Celery Task Retries and Timeouts ---
+@celery.task(
+    autoretry_for=(Exception,),      # Retry on any exception from the email service
+    retry_kwargs={'max_retries': 3}, # Attempt a maximum of 3 retries
+    retry_backoff=True,              # Use exponential backoff (e.g., wait 1s, 2s, 4s)
+    soft_time_limit=60,              # Raise exception if task runs longer than 60 seconds
+    time_limit=90                    # Forcefully kill worker if task runs > 90 seconds
+)
+def send_email_task(recipient, subject, template, **kwargs):
+    """
+    Celery task to send an email asynchronously with resilience features.
+    """
+    # This assumes the core email logic is in a method that can be called directly.
+    EmailService.send_email_immediately(recipient, subject, template, **kwargs)
+
+
+
 @celery.task(name='tasks.expire_points')
 def expire_points():
     """
@@ -35,19 +52,9 @@ def update_tiers():
             current_app.logger.error(f"Failed to update tiers: {str(e)}")
             raise
 
-@celery.task(name='tasks.send_email')
-def send_email_task(to, subject, html_body):
-    """
-    Celery task to send an email.
-    This runs in the background, so the application doesn't block.
-    """
-    with current_app.app_context():
-        try:
-            EmailService.send_email(to, subject, html_body)
-            current_app.logger.info(f"Email successfully sent to {to}")
-        except Exception as e:
-            current_app.logger.error(f"Failed to send email to {to}: {str(e)}")
-            raise
+from backend.celery_worker import celery
+from backend.services.email_service import EmailService
+
 
 @celery.task(name='tasks.generate_invoice_pdf')
 def generate_invoice_pdf_task(order_id):
