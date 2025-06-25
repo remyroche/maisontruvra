@@ -3,53 +3,42 @@ import apiClient from '@/js/common/adminApiClient';
 
 export const useAdminBlogStore = defineStore('adminBlog', {
   state: () => ({
-    articles: [],
+    posts: [],
     categories: [],
     isLoading: false,
     error: null,
   }),
   actions: {
-    async fetchArticles() {
+    // Post Actions
+    async fetchPosts(params = {}) {
       this.isLoading = true;
       try {
-        const response = await apiClient.get('/blog/articles');
-        this.articles = response.data;
+        const response = await apiClient.get('/blog/posts', { params });
+        this.posts = response.data;
       } catch (e) {
-        this.error = 'Failed to fetch articles.';
+        this.error = 'Failed to fetch blog posts.';
       } finally {
         this.isLoading = false;
       }
     },
-    async createArticle(articleData) {
-      try {
-        await apiClient.post('/blog/articles', articleData);
-        await this.fetchArticles();
-      } catch (e) {
-        this.error = 'Failed to create article.';
-        throw e;
-      }
+    async softDeletePost(id) {
+        await apiClient.delete(`/blog/posts/${id}`);
+        await this.fetchPosts({ include_deleted: true });
     },
-    async updateArticle(id, articleData) {
-      try {
-        await apiClient.put(`/blog/articles/${id}`, articleData);
-        await this.fetchArticles();
-      } catch (e) {
-        this.error = 'Failed to update article.';
-        throw e;
-      }
+    async hardDeletePost(id) {
+        await apiClient.delete(`/blog/posts/${id}?hard=true`);
+        await this.fetchPosts({ include_deleted: true });
     },
-    async deleteArticle(id) {
-        try {
-            await apiClient.delete(`/blog/articles/${id}`);
-            await this.fetchArticles();
-        } catch (e) {
-            this.error = "Failed to delete article."
-        }
+    async restorePost(id) {
+        await apiClient.put(`/blog/posts/${id}/restore`);
+        await this.fetchPosts({ include_deleted: true });
     },
-    async fetchCategories() {
+
+    // Category Actions
+    async fetchCategories(params = {}) {
         this.isLoading = true;
         try {
-            const response = await apiClient.get('/blog/categories');
+            const response = await apiClient.get('/blog/categories', { params });
             this.categories = response.data;
         } catch (e) {
             this.error = 'Failed to fetch blog categories.';
@@ -57,31 +46,17 @@ export const useAdminBlogStore = defineStore('adminBlog', {
             this.isLoading = false;
         }
     },
-    async createCategory(categoryData) {
-        try {
-            await apiClient.post('/blog/categories', categoryData);
-            await this.fetchCategories();
-        } catch (e) {
-            this.error = "Failed to create blog category."
-            throw e;
-        }
+    async softDeleteCategory(id) {
+        await apiClient.delete(`/blog/categories/${id}`);
+        await this.fetchCategories({ include_deleted: true });
     },
-    async updateCategory(id, categoryData) {
-        try {
-            await apiClient.put(`/blog/categories/${id}`, categoryData);
-            await this.fetchCategories();
-        } catch(e) {
-            this.error = "Failed to update blog category.";
-            throw e;
-        }
+    async hardDeleteCategory(id) {
+        await apiClient.delete(`/blog/categories/${id}?hard=true`);
+        await this.fetchCategories({ include_deleted: true });
     },
-     async deleteCategory(id) {
-        try {
-            await apiClient.delete(`/blog/categories/${id}`);
-            await this.fetchCategories();
-        } catch (e) {
-            this.error = "Failed to delete blog category."
-        }
+    async restoreCategory(id) {
+        await apiClient.put(`/blog/categories/${id}/restore`);
+        await this.fetchCategories({ include_deleted: true });
     },
   },
 });
