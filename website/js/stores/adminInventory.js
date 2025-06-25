@@ -1,55 +1,43 @@
-/*
- * FILENAME: website/js/stores/adminInventory.js
- * DESCRIPTION: Pinia store for managing product inventory levels.
- * UPDATED: Fully implemented with fetch and update actions.
- */
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import adminApiClient from '../common/adminApiClient';
+import adminApiClient from '@/common/adminApiClient';
 
 export const useAdminInventoryStore = defineStore('adminInventory', {
   state: () => ({
     inventory: [],
+    loading: false,
     error: null,
   }),
   actions: {
     async fetchInventory() {
+      this.loading = true;
+      this.error = null;
       try {
-        const response = await apiClient.get('/inventory');
-        this.inventory = response.data;
+        const response = await adminApiClient.get('/inventory');
+        // Add a 'new_stock' property to each item for v-model binding
+        this.inventory = response.data.map(item => ({...item, new_stock: item.stock_level }));
       } catch (error) {
-        this.error = 'Failed to fetch inventory.';
+        this.error = 'Failed to load inventory.';
+        console.error(error);
+      } finally {
+        this.loading = false;
       }
     },
-    async updateStock(productId, newStock) {
+    async updateStock(productId, newStockLevel) {
+      // The PUT request should send the new stock level in its body
       try {
-        await apiClient.put(`/inventory/${productId}`, { stock: newStock });
-        await this.fetchInventory();
+        const response = await adminApiClient.put(`/inventory/${productId}`, { stock_level: newStockLevel });
+        // Update the local state to reflect the change immediately
+        const index = this.inventory.findIndex(item => item.product_id === productId);
+        if (index !== -1) {
+          this.inventory[index].stock_level = response.data.stock_level;
+          this.inventory[index].new_stock = response.data.stock_level;
+        }
       } catch (error) {
-        this.error = 'Failed to update stock.';
+        console.error(`Failed to update stock for product ${productId}:`, error);
+        throw error; // Re-throw to be caught by the component
       }
     },
   },
 });
 
-    async function updateStock(productId, newStock) {
-        isLoading.value = true;
-        error.value = null;
-        try {
-            const response = await adminApiClient.put(`/inventory/stock/${productId}`, { stock_quantity: newStock });
-            const index = inventory.value.findIndex(p => p.id === productId);
-            if (index !== -1) {
-                inventory.value[index].stock_quantity = response.data.stock_quantity;
-            }
-             // --- LOGGING ---
-            // The backend should log this 'stock_update' event.
-            return true;
-        } catch (err) {
-            error.value = 'Failed to update stock.';
-            return false;
-        } finally {
-            isLoading.value = false;
-        }
-    }
-
-    return { inventory, isLoading, error, fetchInventory, updateStock };
+&
