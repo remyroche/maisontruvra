@@ -7,7 +7,7 @@ from ..utils.decorators import log_admin_action
 product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
 
 # CREATE a new product
-@product_management_bp.route('/', methods=['POST'])
+@product_management_bp.route('/products', methods=['POST'])
 @permissions_required('MANAGE_PRODUCTS')
 @log_admin_action
 @roles_required ('Admin', 'Manager')
@@ -36,7 +36,7 @@ def create_product():
         # Log the error e
         return jsonify(status="error", message="An internal error occurred while creating the product."), 500
 
-@admin_api_bp.route('/inventory/<int:inventory_id>', methods=['PUT'])
+@product_management_bp.route('/inventory/<int:inventory_id>', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
 @log_admin_action
 @roles_required ('Admin', 'Manager', 'Farmer')
@@ -79,7 +79,7 @@ def update_inventory(inventory_id):
     return jsonify({"message": f"Inventory for product {inventory_item.product_id} updated to {new_quantity}."}), 200
 
 # READ all products (with pagination)
-@product_management_bp.route('/', methods=['GET'])
+@product_management_bp.route('/products', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
 @log_admin_action
 @roles_required ('Admin', 'Staff')
@@ -91,7 +91,8 @@ def get_products():
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
-        products_pagination = ProductService.get_all_products_paginated(page=page, per_page=per_page)
+        include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'
+        products_pagination = ProductService.get_all_products_paginated(page=page, per_page=per_page, include_deleted=include_deleted)
         return jsonify({
             "status": "success",
             "data": [product.to_dict() for product in products_pagination.items],
@@ -104,7 +105,7 @@ def get_products():
         return jsonify(status="error", message="An internal error occurred while fetching products."), 500
 
 # READ a single product by ID
-@product_management_bp.route('/<int:product_id>', methods=['GET'])
+@product_management_bp.route('/products/<int:product_id>', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
 @log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
@@ -119,7 +120,7 @@ def get_product(product_id):
     return jsonify(status="error", message="Product not found"), 404
 
 # UPDATE an existing product
-@product_management_bp.route('/<int:product_id>', methods=['PUT'])
+@product_management_bp.route('/products/<int:product_id>', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
 @log_admin_action
 @roles_required ('Admin', 'Manager')
@@ -147,7 +148,7 @@ def update_product(product_id):
         return jsonify(status="error", message="An internal error occurred while updating the product."), 500
 
 # DELETE a product
-@product_management_bp.route('/<int:product_id>', methods=['DELETE'])
+@product_management_bp.route('/products/<int:product_id>', methods=['DELETE'])
 @permissions_required('MANAGE_PRODUCTS')
 @log_admin_action
 @roles_required ('Admin', 'Manager')
@@ -156,15 +157,24 @@ def delete_product(product_id):
     """
     Delete a product.
     """
-    if not ProductService.get_product_by_id(product_id):
-        return jsonify(status="error", message="Product not found"), 404
+    hard_delete = request.args.get('hard', 'false').lower() == 'true'
+    if hard_delete:
+        if ProductService.hard_delete_product(product_id):
+            return jsonify(status="success", message="Product permanently deleted")
+    else:
+        if ProductService.soft_delete_product(product_id):
+            return jsonify(status="success", message="Product soft-deleted successfully")
+    return jsonify(status="error", message="Product not found"), 404
 
-    try:
-        ProductService.delete_product(product_id)
-        return jsonify(status="success", message="Product deleted successfully"), 200
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An internal error occurred while deleting the product."), 500
+@product_management_bp.route('/products/<int:product_id>/restore', methods=['PUT'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def restore_product(product_id):
+    if ProductService.restore_product(product_id):
+        return jsonify(status="success", message="Product restored successfully")
+    return jsonify(status="error", message="Product not found"), 404
 
 
 
@@ -206,9 +216,24 @@ def update_product_category(category_id):
 @roles_required ('Admin', 'Manager')
 @admin_required
 def delete_product_category(category_id):
-    if ProductService.delete_category(category_id):
-        return jsonify({"message": "Product category deleted successfully"})
+    hard_delete = request.args.get('hard', 'false').lower() == 'true'
+    if hard_delete:
+        if ProductService.hard_delete_category(category_id):
+            return jsonify({"message": "Product category permanently deleted successfully"})
+    else:
+        if ProductService.delete_category(category_id):
+            return jsonify({"message": "Product category deleted successfully"})
     return jsonify({"error": "Product category not found"}), 404
+
+@product_management_bp.route('/product-categories/<int:category_id>/restore', methods=['PUT'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def restore_product_category(category_id):
+    if ProductService.restore_category(category_id):
+        return jsonify(status="success", message="Product category restored successfully")
+    return jsonify(status="error", message="Product category not found"), 404
 
 
 
@@ -250,7 +275,21 @@ def update_product_collection(collection_id):
 @roles_required ('Admin', 'Manager')
 @admin_required
 def delete_product_collection(collection_id):
-    if ProductService.delete_collection(collection_id):
-        return jsonify({"message": "Product collection deleted successfully"})
+    hard_delete = request.args.get('hard', 'false').lower() == 'true'
+    if hard_delete:
+        if ProductService.hard_delete_collection(collection_id):
+            return jsonify({"message": "Product collection permanently deleted successfully"})
+    else:
+        if ProductService.delete_collection(collection_id):
+            return jsonify({"message": "Product collection deleted successfully"})
     return jsonify({"error": "Product collection not found"}), 404
 
+@product_management_bp.route('/product-collections/<int:collection_id>/restore', methods=['PUT'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def restore_product_collection(collection_id):
+    if ProductService.restore_collection(collection_id):
+        return jsonify(status="success", message="Product collection restored successfully")
+    return jsonify(status="error", message="Product collection not found"), 404
