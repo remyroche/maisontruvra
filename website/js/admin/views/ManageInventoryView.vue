@@ -1,52 +1,44 @@
-<!--
- * FILENAME: website/js/admin/views/ManageInventoryView.vue
- * UPDATED: Fully implemented with data table and inline stock editing.
--->
 <template>
-  <AdminLayout>
-    <div class="space-y-6">
-      <header>
-        <h1 class="text-3xl font-bold text-gray-800">Manage Inventory</h1>
-        <p class="text-gray-500 mt-1">View and update stock levels for all products.</p>
-      </header>
-       <div v-if="inventoryStore.isLoading" class="text-center py-10">Loading inventory...</div>
-       <div v-else-if="inventoryStore.error" class="bg-red-100 p-4 rounded text-red-700">{{ inventoryStore.error }}</div>
-      <BaseDataTable v-else :columns="columns" :data="inventoryStore.inventory">
-        <template #cell(stock_quantity)="{ item }">
-          <input type="number" :value="item.stock_quantity" @change="handleStockUpdate(item.id, $event.target.value)"
-                 class="w-24 text-center border-gray-300 rounded-md shadow-sm" />
-        </template>
-      </BaseDataTable>
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Manage Inventory</h1>
+    <div v-if="inventoryStore.error" class="text-red-500">{{ inventoryStore.error }}</div>
+    <div v-else>
+      <table class="min-w-full bg-white">
+        <thead>
+          <tr>
+            <th class="py-2">Product</th>
+            <th class="py-2">Stock</th>
+            <th class="py-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in inventoryStore.inventory" :key="item.id">
+            <td class="border px-4 py-2">{{ item.name }}</td>
+            <td class="border px-4 py-2">{{ item.stock }}</td>
+            <td class="border px-4 py-2">
+              <input type="number" v-model.number="item.newStock" class="border rounded p-1" />
+              <button @click="updateStock(item.id, item.newStock)" class="bg-blue-500 text-white px-2 py-1 rounded ml-2">Update</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-  </AdminLayout>
+  </div>
 </template>
+
 <script setup>
 import { onMounted } from 'vue';
-import { useAdminInventoryStore } from '../../stores/adminInventory';
-import { useAdminNotificationStore } from '../../stores/adminNotifications';
-import AdminLayout from '../components/AdminLayout.vue';
-import BaseDataTable from '../components/ui/BaseDataTable.vue';
+import { useAdminInventoryStore } from '@/js/stores/adminInventory';
 
 const inventoryStore = useAdminInventoryStore();
-const notificationStore = useAdminNotificationStore();
 
-const columns = [
-    { key: 'id', label: 'Product ID'},
-    { key: 'name', label: 'Product Name'},
-    { key: 'sku', label: 'SKU'},
-    { key: 'stock_quantity', label: 'Stock Level'}
-];
+onMounted(() => {
+  inventoryStore.fetchInventory();
+});
 
-onMounted(() => { inventoryStore.fetchInventory(); });
-
-const handleStockUpdate = async (id, newStock) => {
-    const success = await inventoryStore.updateStock(id, parseInt(newStock, 10));
-    if(success) {
-        notificationStore.addNotification({ type: 'success', title: 'Stock Updated'});
-    } else {
-        notificationStore.addNotification({ type: 'error', title: 'Update Failed', message: inventoryStore.error });
-        // Optional: refresh data to revert optimistic update on failure
-        inventoryStore.fetchInventory();
-    }
+const updateStock = (productId, newStock) => {
+  if (newStock !== undefined && newStock >= 0) {
+    inventoryStore.updateStock(productId, newStock);
+  }
 };
 </script>
