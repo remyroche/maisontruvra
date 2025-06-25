@@ -10,9 +10,15 @@
 import axios from 'axios';
 
 // Create an Axios instance with default settings for the admin API
-const adminApiClient = axios.create({
-  baseURL: '/api/admin', // Base path for all admin API endpoints
+const apiClient = axios.create({
+  baseURL: '/api/admin', 
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+  },
 });
+
 
 // --- Security: CSRF Token Handling ---
 // Before making a state-changing request, we must fetch a CSRF token.
@@ -25,6 +31,27 @@ async function getCsrfToken() {
     throw new Error('Could not initialize secure session.');
   }
 }
+
+apiClient.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    const authStore = useAdminAuthStore();
+
+    if (error.response && error.response.status === 401) {
+      // Check if the server is specifically asking for re-authentication
+      if (error.response.data?.reason === 'reauth_required') {
+        // Don't log out. Instead, trigger the re-auth modal flow.
+        authStore.promptForReAuth(error.config);
+      } else {
+        // For any other 401 error, perform a full logout.
+        authStore.logout();
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Interceptor to attach the CSRF token to secure requests
 adminApiClient.interceptors.request.use(async (config) => {
