@@ -1,7 +1,7 @@
 from backend.database import db
-from .base import BaseModel
+from .base import BaseModel, SoftDeleteMixin
 
-class Product(BaseModel):
+class Product(BaseModel, SoftDeleteMixin):
     __tablename__ = 'products'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
@@ -30,6 +30,7 @@ class Product(BaseModel):
             'category': self.category.name if self.category else None,
             'collection': self.collection.name if self.collection else None,
             'base_sku': self.base_sku,
+            'is_deleted': self.is_deleted,
         }
         if include_variants:
             data['variants'] = [v.to_dict() for v in self.variants]
@@ -60,7 +61,7 @@ class Product(BaseModel):
             return self.to_b2b_dict()
         return self.to_public_dict(**kwargs)
 
-class ProductVariant(db.Model):
+class ProductVariant(db.Model, SoftDeleteMixin):
     """
     Represents a specific, purchasable version of a Product.
     This model holds the unique SKU, price, and inventory for each variation.
@@ -89,13 +90,14 @@ class ProductVariant(db.Model):
             'sku': self.sku,
             'price': str(self.price), # Return as string for consistency
             'attributes': self.attributes,
-            'available_stock': self.inventory.available_quantity if self.inventory else 0
+            'available_stock': self.inventory.available_quantity if self.inventory else 0,
+            'is_deleted': self.is_deleted,
         }
 
     def __repr__(self):
         return f'<ProductVariant {self.sku}>'
 
-class Category(BaseModel):
+class Category(BaseModel, SoftDeleteMixin):
     __tablename__ = 'categories'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -104,9 +106,9 @@ class Category(BaseModel):
     products = db.relationship('Product', back_populates='category')
 
     def to_dict(self):
-        return {'id': self.id, 'name': self.name, 'slug': self.slug}
+        return {'id': self.id, 'name': self.name, 'slug': self.slug, 'is_deleted': self.is_deleted}
 
-class Collection(BaseModel):
+class Collection(BaseModel, SoftDeleteMixin):
     __tablename__ = 'collections'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -115,9 +117,9 @@ class Collection(BaseModel):
     products = db.relationship('Product', back_populates='collection')
 
     def to_dict(self):
-        return {'id': self.id, 'name': self.name, 'slug': self.slug}
+        return {'id': self.id, 'name': self.name, 'slug': self.slug, 'is_deleted': self.is_deleted}
         
-class ProductImage(BaseModel):
+class ProductImage(BaseModel, SoftDeleteMixin):
     __tablename__ = 'product_images'
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
@@ -126,7 +128,7 @@ class ProductImage(BaseModel):
     
     product = db.relationship('Product', back_populates='images')
 
-class Review(BaseModel):
+class Review(BaseModel, SoftDeleteMixin):
     __tablename__ = 'reviews'
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
@@ -146,6 +148,7 @@ class Review(BaseModel):
             'text': self.text,
             'author': self.user.first_name,
             'created_at': self.created_at.isoformat(),
+            'is_deleted': self.is_deleted,
         }
 
     def to_admin_dict(self):
