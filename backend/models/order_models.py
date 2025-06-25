@@ -1,8 +1,8 @@
 from backend.database import db
-from .base import BaseModel
+from .base import BaseModel, SoftDeleteMixin
 from .enums import OrderStatus
 
-class Order(BaseModel):
+class Order(BaseModel, SoftDeleteMixin):
     __tablename__ = 'orders'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
@@ -28,6 +28,7 @@ class Order(BaseModel):
             'created_at': self.created_at.isoformat(),
             'items': [item.to_dict() for item in self.items],
             'shipping_address': self.shipping_address.to_dict() if self.shipping_address else None,
+            'is_deleted': self.is_deleted
         }
 
     def to_admin_dict(self):
@@ -41,7 +42,7 @@ class Order(BaseModel):
             return self.to_admin_dict()
         return self.to_user_dict()
 
-class OrderItem(BaseModel):
+class OrderItem(BaseModel, SoftDeleteMixin):
     __tablename__ = 'order_items'
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
@@ -57,10 +58,11 @@ class OrderItem(BaseModel):
             'product_id': self.product_id,
             'product_name': self.product.name,
             'quantity': self.quantity,
-            'price': str(self.price)
+            'price': str(self.price),
+            'is_deleted': self.is_deleted
         }
 
-class Invoice(BaseModel):
+class Invoice(BaseModel, SoftDeleteMixin):
     __tablename__ = 'invoices'
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False, unique=True)
@@ -74,5 +76,6 @@ class Invoice(BaseModel):
             'id': self.id,
             'order_id': self.order_id,
             'invoice_number': self.invoice_number,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat(),
+            'is_deleted': self.is_deleted
         }
