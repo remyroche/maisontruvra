@@ -25,6 +25,7 @@ def get_users():
         # Sanitized request args are already available due to middleware
         page = int(request.args.get('page', 1))
         per_page = min(int(request.args.get('per_page', 20)), 100)  # Max 100 per page
+        include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'
 
         filters = {}
         if request.args.get('role'):
@@ -34,7 +35,7 @@ def get_users():
         if request.args.get('email'):
             filters['email'] = request.args.get('email')
 
-        result = UserService.get_all_users_paginated(page, per_page, filters)
+        result = UserService.get_all_users_paginated(page, per_page, filters, include_deleted)
 
         # Log admin action
         logger.info({
@@ -137,32 +138,36 @@ def update_user(user_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 
-@user_management_bp.route('/<int:user_id>/soft-delete', methods=['DELETE'])
-@log_admin_action
-@roles_required ('Admin', 'Manager', 'Support')
-@admin_required
-@sanitize_request_data
-def soft_delete_user(user_id):
-    if UserService.soft_delete_user(user_id):
-        return jsonify({"message": "User soft-deleted successfully"})
-    return jsonify({"error": "User not found"}), 404
-
-@user_management_bp.route('/<int:user_id>/hard-delete', methods=['DELETE'])
+@user_management_bp.route('/<int:user_id>', methods=['DELETE'])
 @log_admin_action
 @roles_required ('Admin', 'Manager', 'Support', 'Deleter')
 @admin_required
 @sanitize_request_data
-def hard_delete_user(user_id):
-    if UserService.hard_delete_user(user_id):
-        security_logger.warning({
-            'event': 'ADMIN_DELETE_USER',
-            'admin_id': g.user['id'],
-            'admin_email': g.user['email'],
-            'deleted_user_id': user_id,
-            'ip_address': request.remote_addr,
-            'user_agent': request.headers.get('User-Agent'),
-            'request_id': getattr(g, 'request_id', 'unknown')
-        })
-        return jsonify({"message": "User permanently deleted"})
+def delete_user(user_id):
+    hard_delete = request.args.get('hard', 'false').lower() == 'true'
+    if hard_delete:
+        if UserService.hard_delete_user(user_id):
+            security_logger.warning({
+                'event': 'ADMIN_HARD_DELETE_USER',
+                'admin_id': g.user['id'],
+                'admin_email': g.user['email'],
+                'deleted_user_id': user_id,
+                'ip_address': request.remote_addr,
+                'user_agent': request.headers.get('User-Agent'),
+                'request_id': getattr(g, 'request_id', 'unknown')
+            })
+            return jsonify({"message": "User permanently deleted"})
+        return jsonify({"error": "User not found"}), 404
+    else:
+        if UserService.soft_delete_user(user_id):
+            return jsonify({"message": "User soft-deleted successfully"})
+        return jsonify({"error": "User not found"}), 404
+        
+@user_management_bp.route('/<int:user_id>/restore', methods=['PUT'])
+@log_admin_action
+@roles_required('Admin', 'Manager', 'Support')
+@admin_required
+def restore_user(user_id):
+    if UserService.restore_user(user_id):
+        return jsonify({"message": "User restored successfully"})
     return jsonify({"error": "User not found"}), 404
-
