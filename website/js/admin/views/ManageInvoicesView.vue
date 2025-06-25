@@ -1,58 +1,54 @@
-<!--
- * FILENAME: website/js/admin/views/ManageInvoicesView.vue
- * DESCRIPTION: New view for displaying and managing invoices.
--->
 <template>
-    <AdminLayout>
-        <div class="space-y-6">
-            <header>
-                <h1 class="text-3xl font-bold text-gray-800">Manage Invoices</h1>
-                <p class="text-gray-500 mt-1">View and download generated invoices for all orders.</p>
-            </header>
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Manage Invoices</h1>
 
-            <div v-if="invoiceStore.isLoading" class="text-center py-10">Loading invoices...</div>
-            <div v-else-if="invoiceStore.error" class="bg-red-100 p-4 rounded text-red-700">{{ invoiceStore.error }}</div>
-            
-            <BaseDataTable v-else :columns="columns" :data="invoiceStore.invoices">
-                <template #cell(order_id)="{ value }">
-                    <span class="font-mono text-sm">#{{ value }}</span>
-                </template>
-                 <template #cell(total_amount)="{ value }">
-                    €{{ value.toFixed(2) }}
-                </template>
-                 <template #cell(invoice_date)="{ value }">
-                    {{ new Date(value).toLocaleDateString() }}
-                </template>
-                <template #cell(actions)="{ item }">
-                    <a :href="`/api/admin/invoices/${item.id}/download`" 
-                       target="_blank" 
-                       class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded text-xs">
-                       Download PDF
-                    </a>
-                </template>
-            </BaseDataTable>
-        </div>
-    </AdminLayout>
+     <div v-if="invoicesStore.isLoading" class="text-center p-4">Loading invoices...</div>
+    <div v-if="invoicesStore.error" class="text-red-500 bg-red-100 p-4 rounded">{{ invoicesStore.error }}</div>
+
+    <BaseDataTable
+      v-if="!invoicesStore.isLoading"
+      :headers="headers"
+      :items="invoicesStore.invoices"
+    >
+      <template #item-status="{ item }">
+        <span class="px-2 py-1 text-xs font-semibold rounded-full" :class="statusClass(item.status)">
+          {{ item.status }}
+        </span>
+      </template>
+      <template #item-actions="{ item }">
+        <button @click="downloadInvoice(item.id)" class="text-indigo-600 hover:text-indigo-900">Download PDF</button>
+      </template>
+    </BaseDataTable>
+  </div>
 </template>
 
 <script setup>
 import { onMounted } from 'vue';
-import { useAdminInvoiceStore } from '../../stores/adminInvoices';
-import AdminLayout from '../components/AdminLayout.vue';
-import BaseDataTable from '../components/ui/BaseDataTable.vue';
+import { useAdminInvoicesStore } from '@/js/stores/adminInvoices';
+import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
 
-const invoiceStore = useAdminInvoiceStore();
+const invoicesStore = useAdminInvoicesStore();
 
-const columns = [
-    { key: 'id', label: 'Invoice ID' },
-    { key: 'order_id', label: 'Order ID' },
-    { key: 'customer_name', label: 'Customer' },
-    { key: 'invoice_date', label: 'Date' },
-    { key: 'total_amount', label: 'Amount', cellClass: 'text-right' },
-    { key: 'actions', label: 'Actions', cellClass: 'text-right' },
+const headers = [
+    { text: 'Invoice #', value: 'id' },
+    { text: 'Order ID', value: 'order_id' },
+    { text: 'Customer', value: 'customer_name' },
+    { text: 'Date', value: 'created_at' },
+    { text: 'Amount', value: 'total_amount' },
+    { text: 'Status', value: 'status' },
+    { text: 'Actions', value: 'actions' },
 ];
 
-onMounted(() => {
-    invoiceStore.fetchInvoices();
-});
+onMounted(() => invoicesStore.fetchInvoices());
+
+const downloadInvoice = (id) => {
+    invoicesStore.downloadInvoice(id);
+};
+
+const statusClass = (status) => ({
+  'paid': 'bg-green-100 text-green-800',
+  'pending': 'bg-yellow-100 text-yellow-800',
+  'overdue': 'bg-red-100 text-red-800',
+}[status]);
+
 </script>
