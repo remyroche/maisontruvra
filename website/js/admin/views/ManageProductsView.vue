@@ -1,124 +1,123 @@
-<!--
- * FILENAME: website/js/admin/views/ManageProductsView.vue
- * DESCRIPTION: View component for the 'Manage Products' page.
- *
- * This component orchestrates the display and management of products,
- * using the reusable Modal component and the new ProductForm.
--->
 <template>
-  <AdminLayout>
-    <div class="bg-white p-8 rounded-lg shadow-md">
-      <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-800">Manage Products</h1>
-        <button @click="openAddProductModal" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
-          + Add Product
-        </button>
-      </div>
-
-      <!-- Loading and Error States -->
-      <div v-if="productStore.isLoading && !productStore.products.length" class="text-center py-10">Loading products...</div>
-      <div v-else-if="productStore.error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4" role="alert">
-        {{ productStore.error }}
-      </div>
-
-      <!-- Data Table -->
-      <div v-else class="overflow-x-auto">
-        <table class="min-w-full bg-white">
-          <thead class="bg-gray-800 text-white">
-            <tr>
-              <th class="py-3 px-4 uppercase font-semibold text-sm text-left">ID</th>
-              <th class="py-3 px-4 uppercase font-semibold text-sm text-left">Name</th>
-              <th class="py-3 px-4 uppercase font-semibold text-sm text-left">Category</th>
-              <th class="py-3 px-4 uppercase font-semibold text-sm text-right">Price</th>
-              <th class="py-3 px-4 uppercase font-semibold text-sm text-right">Stock</th>
-              <th class="py-3 px-4 uppercase font-semibold text-sm text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="text-gray-700">
-            <tr v-for="product in productStore.products" :key="product.id" class="border-b border-gray-200 hover:bg-gray-100">
-              <td class="py-3 px-4">{{ product.id }}</td>
-              <td class="py-3 px-4">{{ product.name }}</td>
-              <td class="py-3 px-4">{{ product.category?.name || 'N/A' }}</td>
-              <td class="py-3 px-4 text-right">€{{ product.price.toFixed(2) }}</td>
-              <td class="py-3 px-4 text-right">{{ product.stock_quantity }}</td>
-              <td class="py-3 px-4 text-center">
-                <button @click="openEditProductModal(product)" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded text-xs mr-2">Edit</button>
-                <button @click="handleDeleteProduct(product)" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs">Delete</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Manage Products</h1>
+    
+    <div class="mb-4 flex justify-between items-center">
+      <input 
+        type="text" 
+        v-model="searchQuery" 
+        placeholder="Search by name or SKU..." 
+        class="border rounded p-2 w-1/3"
+      >
+      <button @click="openCreateModal" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+        Add Product
+      </button>
     </div>
 
-    <!-- Add/Edit Product Modal -->
-    <Modal :show="isModalOpen" @close="closeModal">
-      <template #header>
-        <h2 class="text-2xl font-bold">{{ modalMode === 'add' ? 'Add New Product' : 'Edit Product' }}</h2>
+    <div v-if="productsStore.isLoading" class="text-center p-4">Loading products...</div>
+    <div v-if="productsStore.error" class="text-red-500 bg-red-100 p-4 rounded">{{ productsStore.error }}</div>
+
+    <BaseDataTable
+      v-if="!productsStore.isLoading && filteredProducts.length"
+      :headers="headers"
+      :items="filteredProducts"
+    >
+      <template #item-price="{ item }">
+        <span>${{ item.price.toFixed(2) }}</span>
       </template>
-      <template #body>
+      <template #item-is_published="{ item }">
+        <span :class="item.is_published ? 'text-green-500' : 'text-gray-500'">
+          {{ item.is_published ? 'Published' : 'Draft' }}
+        </span>
+      </template>
+      <template #item-actions="{ item }">
+        <button @click="openEditModal(item)" class="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+        <button @click="confirmDelete(item)" class="text-red-600 hover:text-red-900">Delete</button>
+      </template>
+    </BaseDataTable>
+    <div v-if="!productsStore.isLoading && !filteredProducts.length" class="text-center text-gray-500 mt-8">
+        No products found.
+    </div>
+
+    <!-- Modal for Create/Edit Product -->
+    <Modal :is-open="isModalOpen" @close="closeModal">
+        <h2 class="text-xl font-bold mb-4">{{ isEditing ? 'Edit Product' : 'Create New Product' }}</h2>
         <ProductForm 
-          :initial-data="currentProduct" 
-          :categories="productStore.categories"
-          :collections="productStore.collections"
-          @submit="handleFormSubmit"
-          @cancel="closeModal"
+            :product="selectedProduct" 
+            @save="handleSaveProduct"
+            @cancel="closeModal"
         />
-      </template>
-       <template #footer><div></div></template>
     </Modal>
-  </AdminLayout>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useAdminProductStore } from '../../stores/adminProducts';
-import AdminLayout from '../components/AdminLayout.vue';
-import Modal from '../components/Modal.vue';
-import ProductForm from '../components/ProductForm.vue';
+import { ref, onMounted, computed } from 'vue';
+import { useAdminProductsStore } from '@/js/stores/adminProducts';
+import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
+import Modal from '@/js/admin/components/Modal.vue';
+import ProductForm from '@/js/admin/components/ProductForm.vue';
 
-const productStore = useAdminProductStore();
+const productsStore = useAdminProductsStore();
 
+const searchQuery = ref('');
 const isModalOpen = ref(false);
-const modalMode = ref('add');
-const currentProduct = ref({});
+const isEditing = ref(false);
+const selectedProduct = ref(null);
+
+const headers = [
+  { text: 'Name', value: 'name' },
+  { text: 'SKU', value: 'sku' },
+  { text: 'Price', value: 'price' },
+  { text: 'Category', value: 'category.name' },
+  { text: 'Status', value: 'is_published' },
+  { text: 'Actions', value: 'actions', sortable: false },
+];
 
 onMounted(() => {
-  productStore.fetchProductsAndRelatedData();
+  productsStore.fetchProducts();
 });
 
-const openAddProductModal = () => {
-  modalMode.value = 'add';
-  currentProduct.value = { name: '', description: '', price: 0, stock_quantity: 0, category_id: null, collection_id: null, is_active: true };
-  isModalOpen.value = true;
+const filteredProducts = computed(() => {
+  if (!searchQuery.value) {
+    return productsStore.products;
+  }
+  const lowerCaseQuery = searchQuery.value.toLowerCase();
+  return productsStore.products.filter(product => 
+    product.name.toLowerCase().includes(lowerCaseQuery) ||
+    (product.sku && product.sku.toLowerCase().includes(lowerCaseQuery))
+  );
+});
+
+const openCreateModal = () => {
+    isEditing.value = false;
+    selectedProduct.value = { name: '', description: '', price: 0, sku: '', category_id: null, collection_id: null, is_published: true, images: [] };
+    isModalOpen.value = true;
 };
 
-const openEditProductModal = (product) => {
-  modalMode.value = 'edit';
-  currentProduct.value = JSON.parse(JSON.stringify(product));
-  isModalOpen.value = true;
+const openEditModal = (product) => {
+    isEditing.value = true;
+    selectedProduct.value = { ...product };
+    isModalOpen.value = true;
 };
 
 const closeModal = () => {
-  isModalOpen.value = false;
+    isModalOpen.value = false;
+    selectedProduct.value = null;
 };
 
-const handleFormSubmit = async (productData) => {
-  let success = false;
-  if (modalMode.value === 'add') {
-    success = await productStore.createProduct(productData);
-  } else {
-    success = await productStore.updateProduct(productData.id, productData);
-  }
-  
-  if (success) {
+const handleSaveProduct = async (productData) => {
+    if (isEditing.value) {
+        await productsStore.updateProduct(productData.id, productData);
+    } else {
+        await productsStore.createProduct(productData);
+    }
     closeModal();
-  }
 };
 
-const handleDeleteProduct = async (product) => {
-  if (confirm(`Are you sure you want to delete product "${product.name}"?`)) {
-    await productStore.deleteProduct(product.id);
-  }
+const confirmDelete = (product) => {
+    if (window.confirm(`Are you sure you want to delete the product "${product.name}"?`)) {
+        productsStore.deleteProduct(product.id);
+    }
 };
 </script>
