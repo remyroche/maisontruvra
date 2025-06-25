@@ -14,6 +14,16 @@ class Config:
         'sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'app.db')
     FRONTEND_URL = os.environ.get('FRONTEND_URL') or 'http://localhost:5173'
 
+    # Admin/staff Session Timeout Configuration
+    ADMIN_INACTIVITY_TIMEOUT = timedelta(minutes=5)
+    STAFF_INACTIVITY_TIMEOUT = timedelta(minutes=10)
+    SESSION_MAX_LIFETIME = timedelta(hours=4)
+
+    # Logging Configuration
+    LOG_DIR = os.environ.get('LOG_DIR', 'logs')
+    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+    USE_JSON_LOGS = os.environ.get('USE_JSON_LOGS', 'false').lower() in ['true', '1']
+
     # --- Celery Configuration ---
     # The broker URL specifies the connection to your message broker instance (Redis).
     # Celery uses this to send and receive messages for background tasks.
