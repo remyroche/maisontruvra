@@ -7,24 +7,30 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import adminApiClient from '../common/adminApiClient';
 
-export const useAdminInventoryStore = defineStore('adminInventory', () => {
-    const inventory = ref([]);
-    const isLoading = ref(false);
-    const error = ref(null);
-
-    async function fetchInventory() {
-        isLoading.value = true;
-        error.value = null;
-        try {
-            const response = await adminApiClient.get('/inventory');
-            inventory.value = response.data.inventory;
-        } catch (err) {
-            error.value = 'Failed to fetch inventory data.';
-            console.error(err);
-        } finally {
-            isLoading.value = false;
-        }
-    }
+export const useAdminInventoryStore = defineStore('adminInventory', {
+  state: () => ({
+    inventory: [],
+    error: null,
+  }),
+  actions: {
+    async fetchInventory() {
+      try {
+        const response = await apiClient.get('/inventory');
+        this.inventory = response.data;
+      } catch (error) {
+        this.error = 'Failed to fetch inventory.';
+      }
+    },
+    async updateStock(productId, newStock) {
+      try {
+        await apiClient.put(`/inventory/${productId}`, { stock: newStock });
+        await this.fetchInventory();
+      } catch (error) {
+        this.error = 'Failed to update stock.';
+      }
+    },
+  },
+});
 
     async function updateStock(productId, newStock) {
         isLoading.value = true;
