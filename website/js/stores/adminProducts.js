@@ -1,130 +1,134 @@
-/*
- * FILENAME: website/js/stores/adminProducts.js
- * DESCRIPTION: Pinia store for managing product data in the Admin Portal.
- *
- * This store handles the state and CRUD operations for products, including
- * fetching product lists, categories, and handling creation, updates, and deletion.
- * It follows the same robust error and loading state management pattern.
- */
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import adminApiClient from '../common/adminApiClient';
+import apiClient from '@/js/common/adminApiClient';
 
-export const useAdminProductStore = defineStore('adminProducts', () => {
-  // --- STATE ---
-  const products = ref([]);
-  const categories = ref([]); // To populate form dropdowns
-  const collections = ref([]); // To populate form dropdowns
-  const isLoading = ref(false);
-  const error = ref(null);
-
-  // --- ACTIONS ---
-
-  /**
-   * Fetches all necessary data for the product management page.
-   */
-  async function fetchProductsAndRelatedData() {
-    isLoading.value = true;
-    error.value = null;
-    try {
-      // Fetch products, categories, and collections in parallel
-      const [productsRes, categoriesRes, collectionsRes] = await Promise.all([
-        adminApiClient.get('/product-management/products'),
-        adminApiClient.get('/product-management/categories'),
-        adminApiClient.get('/product-management/collections')
-      ]);
-      products.value = productsRes.data.products;
-      categories.value = categoriesRes.data.categories;
-      collections.value = collectionsRes.data.collections;
-    } catch (err) {
-      console.error('Failed to fetch product data:', err);
-      error.value = 'An error occurred while fetching product data.';
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
-  /**
-   * Creates a new product.
-   * @param {object} productData - The new product's data from the form.
-   */
-  async function createProduct(productData) {
-    isLoading.value = true;
-    error.value = null;
-    try {
-      const response = await adminApiClient.post('/product-management/products', productData);
-      products.value.unshift(response.data.product);
-       // --- LOGGING ---
-      // The backend POST endpoint should trigger the AuditLogService for 'product_create'.
-      return true;
-    } catch (err) {
-      console.error('Failed to create product:', err);
-      error.value = `Failed to create product: ${err.response?.data?.message || 'Server error'}`;
-      return false;
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
-  /**
-   * Updates an existing product.
-   * @param {number} productId - The ID of the product to update.
-   * @param {object} productData - The updated data.
-   */
-  async function updateProduct(productId, productData) {
-    isLoading.value = true;
-    error.value = null;
-    try {
-      const response = await adminApiClient.put(`/product-management/products/${productId}`, productData);
-      const index = products.value.findIndex(p => p.id === productId);
-      if (index !== -1) {
-        products.value[index] = response.data.product;
+export const useAdminProductsStore = defineStore('adminProducts', {
+  state: () => ({
+    products: [],
+    product: null, // For a single product
+    categories: [], // To populate form dropdowns
+    collections: [], // To populate form dropdowns
+    isLoading: false,
+    error: null,
+  }),
+  actions: {
+    async fetchProducts() {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const response = await apiClient.get('/products');
+        this.products = response.data;
+      } catch (error) {
+        this.error = 'Failed to fetch products.';
+        console.error(this.error, error);
+      } finally {
+        this.isLoading = false;
       }
-      // --- LOGGING ---
-      // The backend PUT endpoint should trigger the AuditLogService for 'product_update'.
-      return true;
-    } catch (err) {
-      console.error(`Failed to update product ${productId}:`, err);
-      error.value = `Failed to update product: ${err.response?.data?.message || 'Server error'}`;
-      return false;
-    } finally {
-      isLoading.value = false;
-    }
-  }
+    },
 
-  /**
-   * Deletes a product.
-   * @param {number} productId - The ID of the product to delete.
-   */
-  async function deleteProduct(productId) {
-    isLoading.value = true;
-    error.value = null;
-    try {
-      await adminApiClient.delete(`/product-management/products/${productId}`);
-      products.value = products.value.filter(p => p.id !== productId);
-      // --- LOGGING ---
-      // The backend DELETE endpoint should trigger the AuditLogService for 'product_delete'.
-      return true;
-    } catch (err) {
-      console.error(`Failed to delete product ${productId}:`, err);
-      error.value = `Failed to delete product: ${err.response?.data?.message || 'Server error'}`;
-      return false;
-    } finally {
-      isLoading.value = false;
-    }
-  }
+    async fetchProduct(productId) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const response = await apiClient.get(`/products/${productId}`);
+        this.product = response.data;
+        return this.product;
+      } catch (error) {
+        this.error = `Failed to fetch product ${productId}.`;
+        console.error(this.error, error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
 
+    // Fetch categories and collections for the product form
+    async fetchFormData() {
+        this.isLoading = true;
+        try {
+            const [categoriesRes, collectionsRes] = await Promise.all([
+                apiClient.get('/product-categories'),
+                apiClient.get('/product-collections')
+            ]);
+            this.categories = categoriesRes.data;
+            this.collections = collectionsRes.data;
+        } catch (error) {
+            this.error = 'Failed to fetch form data (categories/collections).';
+            console.error(this.error, error);
+        } finally {
+            this.isLoading = false;
+        }
+    },
 
-  return {
-    products,
-    categories,
-    collections,
-    isLoading,
-    error,
-    fetchProductsAndRelatedData,
-    createProduct,
-    updateProduct,
-    deleteProduct,
-  };
-  
+    async createProduct(productData) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        // The API might expect a FormData if images are included
+        const formData = new FormData();
+        for (const key in productData) {
+            if (key === 'images' && productData[key]) {
+                 for(let i = 0; i < productData[key].length; i++) {
+                    formData.append('images', productData[key][i]);
+                 }
+            } else if (productData[key] !== null) {
+                formData.append(key, productData[key]);
+            }
+        }
+        await apiClient.post('/products', formData, {
+             headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        await this.fetchProducts();
+      } catch (error) {
+        this.error = 'Failed to create product.';
+        console.error(this.error, error);
+        throw error;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async updateProduct(productId, productData) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        // Similar to create, handle FormData for updates if necessary
+        const formData = new FormData();
+        for (const key in productData) {
+            if (key === 'images' && productData[key] && productData[key].length > 0) {
+                 for(let i = 0; i < productData[key].length; i++) {
+                    // Check if it's a new file or an existing image URL
+                    if(productData[key][i] instanceof File) {
+                        formData.append('images', productData[key][i]);
+                    }
+                 }
+            } else if (productData[key] !== null) {
+                formData.append(key, productData[key]);
+            }
+        }
+        await apiClient.put(`/products/${productId}`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        await this.fetchProducts();
+      } catch (error) {
+        this.error = 'Failed to update product.';
+        console.error(this.error, error);
+        throw error;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async deleteProduct(productId) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        await apiClient.delete(`/products/${productId}`);
+        await this.fetchProducts();
+      } catch (error) {
+        this.error = 'Failed to delete product.';
+        console.error(this.error, error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+  },
 });
