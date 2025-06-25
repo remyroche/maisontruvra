@@ -1,27 +1,41 @@
-/*
- * FILENAME: website/js/stores/adminAssets.js
- * DESCRIPTION: Pinia store for managing site assets (images, etc.).
- */
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import adminApiClient from '../common/adminApiClient';
+import apiClient from '@/js/common/adminApiClient';
 
-export const useAdminAssetStore = defineStore('adminAssets', () => {
-    const assets = ref([]);
-    const isLoading = ref(false);
-    const error = ref(null);
-
-    async function fetchAssets() {
-        // ...
-    }
-
-    async function uploadAsset(file) {
-        // ...
-    }
-    
-    async function deleteAsset(id) {
-        // ...
-    }
-
-    return { assets, isLoading, error, fetchAssets, uploadAsset, deleteAsset };
+export const useAdminAssetsStore = defineStore('adminAssets', {
+  state: () => ({
+    assets: [],
+    error: null,
+  }),
+  actions: {
+    async fetchAssets() {
+      try {
+        const response = await apiClient.get('/assets');
+        this.assets = response.data;
+      } catch (error) {
+        this.error = 'Failed to fetch assets.';
+      }
+    },
+    async uploadAsset(file) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        await apiClient.post('/assets', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        await this.fetchAssets();
+      } catch (error) {
+        this.error = 'Failed to upload asset.';
+      }
+    },
+    async deleteAsset(assetId) {
+      try {
+        await apiClient.delete(`/assets/${assetId}`);
+        await this.fetchAssets();
+      } catch (error) {
+        this.error = 'Failed to delete asset.';
+      }
+    },
+  },
 });
