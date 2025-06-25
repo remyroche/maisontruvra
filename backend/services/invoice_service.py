@@ -6,7 +6,7 @@ from weasyprint import HTML
 from backend.database import db
 from backend.models.order_models import Order
 from backend.models.invoice_models import Invoice # Create this new model
-from backend.services.email_service import EmailService # Create this new service
+from backend.tasks import generate_invoice_pdf_task
 
 class InvoiceService:
     """
@@ -96,7 +96,8 @@ class InvoiceService:
         db.session.add(new_invoice)
         
         # 5. Send the correct confirmation email with the invoice attached
-        EmailService.send_order_confirmation(order, pdf_bytes, pdf_filename)
+        print(f"Invoice {new_invoice['id']} created. Queuing PDF generation.")
+        generate_invoice_pdf_task.delay(order_id)
 
         # The calling service is responsible for the final db.session.commit()
         return new_invoice
