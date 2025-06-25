@@ -1,92 +1,70 @@
-<!--
- * FILENAME: website/js/admin/views/ManageLoyaltyView.vue
- * DESCRIPTION: View for managing customer loyalty tiers.
--->
 <template>
-    <AdminLayout>
-        <div class="space-y-6">
-            <header class="flex justify-between items-center">
-                <h1 class="text-3xl font-bold text-gray-800">Manage Loyalty Tiers</h1>
-                <button @click="openAddModal" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
-                    + Add Tier
-                </button>
-            </header>
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Manage Loyalty Program</h1>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <!-- Tier List -->
+      <div class="md:col-span-2">
+        <h2 class="text-xl font-bold mb-4">Loyalty Tiers</h2>
+         <BaseDataTable :headers="headers" :items="loyaltyStore.tiers">
+             <template #item-actions="{ item }">
+                 <button @click="openEditForm(item)" class="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+                 <button @click="deleteTier(item.id)" class="text-red-600 hover:text-red-900">Delete</button>
+             </template>
+        </BaseDataTable>
+      </div>
 
-            <div v-if="loyaltyStore.isLoading" class="text-center py-10">Loading tiers...</div>
-            <div v-else-if="loyaltyStore.error" class="bg-red-100 p-4 rounded text-red-700">{{ loyaltyStore.error }}</div>
-            
-            <BaseDataTable v-else :columns="columns" :data="loyaltyStore.tiers">
-                 <template #cell(min_spend)="{ value }">€{{ value.toFixed(2) }}</template>
-                 <template #cell(multiplier)="{ value }">{{ value }}x</template>
-                 <template #cell(actions)="{ item }">
-                    <button @click="openEditModal(item)" class="bg-yellow-500 text-white font-bold py-1 px-2 rounded text-xs mr-2">Edit</button>
-                    <button @click="handleDelete(item)" class="bg-red-500 text-white font-bold py-1 px-2 rounded text-xs">Delete</button>
-                </template>
-            </BaseDataTable>
+      <!-- Tier Form -->
+      <div>
+        <h2 class="text-xl font-bold mb-4">{{ isEditing ? 'Edit Tier' : 'New Tier' }}</h2>
+        <div class="bg-white p-4 rounded shadow">
+          <LoyaltyTierForm :tier="selectedTier" @save="saveTier" :key="formKey" />
         </div>
-
-        <Modal :show="isModalOpen" @close="closeModal">
-            <template #header><h2 class="text-2xl font-bold">{{ isEditing ? 'Edit Tier' : 'Add New Tier' }}</h2></template>
-            <template #body><LoyaltyTierForm :initial-data="currentItem" @submit="handleSubmit" @cancel="closeModal" /></template>
-            <template #footer><div></div></template>
-        </Modal>
-    </AdminLayout>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { useAdminLoyaltyStore } from '../../stores/adminLoyalty';
-import { useAdminNotificationStore } from '../../stores/adminNotifications';
-import AdminLayout from '../components/AdminLayout.vue';
-import BaseDataTable from '../components/ui/BaseDataTable.vue';
-import Modal from '../components/Modal.vue';
-import LoyaltyTierForm from '../components/LoyaltyTierForm.vue';
+import { ref, onMounted } from 'vue';
+import { useAdminLoyaltyStore } from '@/js/stores/adminLoyalty';
+import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
+import LoyaltyTierForm from '@/js/admin/components/LoyaltyTierForm.vue';
 
 const loyaltyStore = useAdminLoyaltyStore();
-const notificationStore = useAdminNotificationStore();
+const isEditing = ref(false);
+const selectedTier = ref({ name: '', min_points: 0, multiplier: 1.0 });
+const formKey = ref(0); // To reset the form component
 
-const isModalOpen = ref(false);
-const currentItem = ref({});
-const isEditing = computed(() => !!currentItem.value.id);
-
-const columns = [
-    { key: 'id', label: 'ID' },
-    { key: 'name', label: 'Tier Name' },
-    { key: 'min_spend', label: 'Min Spend' },
-    { key: 'multiplier', label: 'Point Multiplier' },
-    { key: 'actions', label: 'Actions', cellClass: 'text-right' }
+const headers = [
+    { text: 'Tier Name', value: 'name' },
+    { text: 'Minimum Points', value: 'min_points' },
+    { text: 'Points Multiplier', value: 'multiplier' },
+    { text: 'Actions', value: 'actions' },
 ];
 
-onMounted(() => { loyaltyStore.fetchTiers(); });
+onMounted(() => loyaltyStore.fetchTiers());
 
-const openAddModal = () => {
-    currentItem.value = { name: '', min_spend: 0, multiplier: 1.0 };
-    isModalOpen.value = true;
+const openEditForm = (tier) => {
+    isEditing.value = true;
+    selectedTier.value = { ...tier };
+    formKey.value++;
 };
-const openEditModal = (item) => {
-    currentItem.value = JSON.parse(JSON.stringify(item));
-    isModalOpen.value = true;
-};
-const closeModal = () => { isModalOpen.value = false; };
 
-const handleSubmit = async (data) => {
-    const success = isEditing.value ? await loyaltyStore.updateTier(data.id, data) : await loyaltyStore.createTier(data);
-    if(success) {
-        closeModal();
-        notificationStore.addNotification({ type: 'success', title: `Tier ${isEditing.value ? 'Updated' : 'Created'}`});
+const saveTier = async (data) => {
+    if(isEditing.value) {
+        await loyaltyStore.updateTier(selectedTier.value.id, data);
     } else {
-        notificationStore.addNotification({ type: 'error', title: 'Save Failed', message: loyaltyStore.error });
+        await loyaltyStore.createTier(data);
     }
+    // Reset form
+    isEditing.value = false;
+    selectedTier.value = { name: '', min_points: 0, multiplier: 1.0 };
+    formKey.value++;
 };
 
-const handleDelete = async (item) => {
-    if (confirm(`Are you sure you want to delete tier "${item.name}"?`)) {
-        const success = await loyaltyStore.deleteTier(item.id);
-        if (success) {
-            notificationStore.addNotification({ type: 'success', title: 'Tier Deleted' });
-        } else {
-            notificationStore.addNotification({ type: 'error', title: 'Delete Failed', message: loyaltyStore.error });
-        }
+const deleteTier = (id) => {
+    if(confirm('Are you sure you want to delete this tier?')) {
+        loyaltyStore.deleteTier(id);
     }
 };
 </script>
