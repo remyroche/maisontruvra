@@ -1,51 +1,88 @@
-/*
- * FILENAME: website/js/stores/adminSystem.js
- * DESCRIPTION: Pinia store for various system management tasks.
- * UPDATED: Implemented functionality for Roles, Sessions, and Passports.
- */
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import adminApiClient from '../common/adminApiClient';
+import apiClient from '@/js/common/adminApiClient';
 
-export const useAdminSystemStore = defineStore('adminSystem', () => {
-    const roles = ref([]);
-    const sessions = ref([]);
-    const passports = ref([]);
-    const isLoading = ref(false);
-    const error = ref(null);
-
-    async function fetchRoles() { 
-        isLoading.value = true; error.value = null;
+export const useAdminSystemStore = defineStore('adminSystem', {
+  state: () => ({
+    roles: [],
+    sessions: [],
+    users: [],
+    error: null,
+  }),
+  actions: {
+    async fetchRoles() {
+      try {
+        const response = await apiClient.get('/roles');
+        this.roles = response.data;
+      } catch (error) {
+        this.error = 'Failed to fetch roles.';
+      }
+    },
+    async createRole(roleData) {
+      try {
+        await apiClient.post('/roles', roleData);
+        await this.fetchRoles();
+      } catch (error) {
+        this.error = 'Failed to create role.';
+      }
+    },
+    async updateRole(roleId, roleData) {
+      try {
+        await apiClient.put(`/roles/${roleId}`, roleData);
+        await this.fetchRoles();
+      } catch (error) {
+        this.error = 'Failed to update role.';
+      }
+    },
+    async deleteRole(roleId) {
+      try {
+        await apiClient.delete(`/roles/${roleId}`);
+        await this.fetchRoles();
+      } catch (error) {
+        this.error = 'Failed to delete role.';
+      }
+    },
+    async fetchSessions() {
+      try {
+        const response = await apiClient.get('/sessions');
+        this.sessions = response.data;
+      } catch (error) {
+        this.error = 'Failed to fetch sessions.';
+      }
+    },
+    async terminateSession(sessionId) {
+      try {
+        await apiClient.post(`/sessions/${sessionId}/terminate`);
+        await this.fetchSessions();
+      } catch (error) {
+        this.error = 'Failed to terminate session.';
+      }
+    },
+    async fetchUsers() {
         try {
-            const response = await adminApiClient.get('/user-management/roles');
-            roles.value = response.data.roles;
-        } catch(err) { error.value = 'Failed to fetch roles.'; } 
-        finally { isLoading.value = false; }
-    }
-    async function updateRole(id, data) { 
-        // ... API call to update a role and its permissions
-    }
-
-    async function fetchSessions() { 
-        isLoading.value = true; error.value = null;
+          const response = await apiClient.get('/users');
+          this.users = response.data;
+        } catch (error) {
+          this.error = 'Failed to fetch users.';
+        }
+      },
+  
+      async freezeUser(userId) {
         try {
-            const response = await adminApiClient.get('/sessions');
-            sessions.value = response.data.sessions;
-        } catch(err) { error.value = 'Failed to fetch sessions.'; } 
-        finally { isLoading.value = false; }
-    }
-    async function terminateSession(id) { 
-        // ... API call to terminate a session
-    }
-
-    async function fetchPassports() { 
-        isLoading.value = true; error.value = null;
+          await apiClient.post(`/sessions/user/${userId}/freeze`);
+          await this.fetchUsers();
+        } catch (error) {
+          this.error = 'Failed to freeze user.';
+        }
+      },
+  
+      async unfreezeUser(userId) {
         try {
-            const response = await adminApiClient.get('/passports');
-            passports.value = response.data.passports;
-        } catch(err) { error.value = 'Failed to fetch passports.'; } 
-        finally { isLoading.value = false; }
-    }
-
-    return { roles, sessions, passports, isLoading, error, fetchRoles, updateRole, fetchSessions, terminateSession, fetchPassports };
+          await apiClient.post(`/sessions/user/${userId}/unfreeze`);
+          await this.fetchUsers();
+        } catch (error) {
+          this.error = 'Failed to unfreeze user.';
+        }
+      },
+  },
 });
+
