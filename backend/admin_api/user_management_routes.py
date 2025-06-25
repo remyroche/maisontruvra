@@ -136,17 +136,24 @@ def update_user(user_id):
         logger.error(f"Error updating user {user_id}: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
-@user_management_bp.route('/users/<int:user_id>', methods=['DELETE'])
+
+@user_management_bp.route('/<int:user_id>/soft-delete', methods=['DELETE'])
 @log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
 @admin_required
 @sanitize_request_data
-def delete_user(user_id):
-    """Soft delete user with full audit logging."""
-    try:
-        UserService.delete_user(user_id)
+def soft_delete_user(user_id):
+    if UserService.soft_delete_user(user_id):
+        return jsonify({"message": "User soft-deleted successfully"})
+    return jsonify({"error": "User not found"}), 404
 
-        # Log critical admin action
+@user_management_bp.route('/<int:user_id>/hard-delete', methods=['DELETE'])
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support', 'Deleter')
+@admin_required
+@sanitize_request_data
+def hard_delete_user(user_id):
+    if UserService.hard_delete_user(user_id):
         security_logger.warning({
             'event': 'ADMIN_DELETE_USER',
             'admin_id': g.user['id'],
@@ -156,13 +163,6 @@ def delete_user(user_id):
             'user_agent': request.headers.get('User-Agent'),
             'request_id': getattr(g, 'request_id', 'unknown')
         })
+        return jsonify({"message": "User permanently deleted"})
+    return jsonify({"error": "User not found"}), 404
 
-        return jsonify({'message': 'User deleted successfully'})
-
-    except NotFoundException as e:
-        return jsonify({'error': str(e)}), 404
-    except ValidationException as e:
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        logger.error(f"Error deleting user {user_id}: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
