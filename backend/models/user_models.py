@@ -134,7 +134,7 @@ class User(db.Model, UserMixin):
         return self.to_user_dict()
 
 
-class Role(BaseModel):
+class Role(BaseModel, SoftDeleteMixin):
     __tablename__ = 'roles'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.Enum(RoleType), unique=True, nullable=False)
@@ -142,14 +142,15 @@ class Role(BaseModel):
     users = db.relationship('User', secondary='user_roles', back_populates='roles')
 
     def to_dict(self):
-        return {'id': self.id, 'name': self.name.value}
+        return {'id': self.id, 'name': self.name.value, 'is_deleted': self.is_deleted}
+
 
 class UserRole(db.Model):
     __tablename__ = 'user_roles'
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
     role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), primary_key=True)
 
-class Address(BaseModel):
+class Address(BaseModel, SoftDeleteMixin):
     __tablename__ = 'addresses'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -171,4 +172,5 @@ class Address(BaseModel):
             'state': self.state,
             'postal_code': self.postal_code,
             'country': self.country,
+            'is_deleted': self.is_deleted,
         }
