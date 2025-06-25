@@ -15,14 +15,14 @@ logger = logging.getLogger(__name__)
     soft_time_limit=60,              # Raise exception if task runs longer than 60 seconds
     time_limit=90                    # Forcefully kill worker if task runs > 90 seconds
 )
+
 def send_email_task(recipient, subject, template, **kwargs):
     """
     Celery task to send an email asynchronously with resilience features.
     """
     # This assumes the core email logic is in a method that can be called directly.
     EmailService.send_email_immediately(recipient, subject, template, **kwargs)
-
-
+    
 
 @celery.task(name='tasks.expire_points')
 def expire_points():
