@@ -15,6 +15,7 @@ from .inputsanitizer import InputSanitizer
 from backend.logger_and_error_handler import setup_logging, register_error_handlers
 from flask_login import user_logged_in, user_login_failed
 from flask import request
+from backend.utils.vite import vite_asset
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -37,6 +38,9 @@ def create_app(config_class=Config):
     mail.init_app(app)
     celery.conf.update(app.config)
     
+    @app.context_processor
+    def inject_vite_asset():
+        return dict(vite_asset=vite_asset)
 
     # Register CSRF routes
     from backend.auth.csrf_routes import csrf_bp
