@@ -4,9 +4,60 @@ from backend.utils.sanitization import sanitize_input
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 
-loyalty_management_bp = Blueprint('loyalty_management_bp', __name__, url_prefix='/admin/loyalty')
+loyalty_bp = Blueprint('admin_loyalty_routes', __name__, url_prefix='/api/admin/loyalty')
 
 # --- Loyalty Program Settings ---
+
+loyalty_bp = Blueprint('admin_loyalty_routes', __name__, url_prefix='/api/admin/loyalty')
+
+@loyalty_bp.route('/tiers', methods=['GET'])
+
+@permissions_required('MANAGE_LOYALTY_PROGRAM')
+@log_admin_action
+@roles_required ('Admin', 'Staff')
+@admin_requireddef get_tiers():
+    tiers = LoyaltyService.get_all_tiers()
+    return jsonify([tier.to_dict() for tier in tiers])
+
+@loyalty_bp.route('/tiers', methods=['POST'])
+@permissions_required('MANAGE_LOYALTY_PROGRAM')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def create_tier():
+    data = request.get_json()
+    try:
+        tier = LoyaltyService.create_tier(
+            name=data['name'],
+            min_points=data['min_points'],
+            multiplier=data.get('multiplier', 1.0)
+        )
+        return jsonify(tier.to_dict()), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@loyalty_bp.route('/tiers/<int:tier_id>', methods=['PUT'])
+@permissions_required('MANAGE_LOYALTY_PROGRAM')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def update_tier(tier_id):
+    data = request.get_json()
+    tier = LoyaltyService.update_tier(tier_id, data)
+    if not tier:
+        return jsonify({"error": "Tier not found"}), 404
+    return jsonify(tier.to_dict())
+
+@loyalty_bp.route('/tiers/<int:tier_id>', methods=['DELETE'])
+@permissions_required('MANAGE_LOYALTY_PROGRAM')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def delete_tier(tier_id):
+    if LoyaltyService.delete_tier(tier_id):
+        return jsonify({"message": "Tier deleted successfully"})
+    return jsonify({"error": "Tier not found"}), 404
+
 
 @loyalty_management_bp.route('/settings', methods=['GET'])
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
