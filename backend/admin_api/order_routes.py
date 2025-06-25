@@ -4,51 +4,121 @@ from backend.utils.sanitization import sanitize_input
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 
-order_management_bp = Blueprint('order_management_bp', __name__, url_prefix='/admin/orders')
+order_routes = Blueprint('admin_order_routes', __name__, url_prefix='/api/admin/orders')
 
-# READ all orders (with pagination)
-@order_management_bp.route('/', methods=['GET'])
+@order_routes.route('/<int:order_id>', methods=['GET'])
+@permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def get_order_details(order_id):
+    """
+    Retrieves details for a specific order.
+    ---
+    tags:
+      - Admin Orders
+    parameters:
+      - in: path
+        name: order_id
+        required: true
+        schema:
+          type: integer
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: Detailed information about the order.
+      404:
+        description: Order not found.
+    """
+    order = OrderService.get_order_by_id(order_id)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+    return jsonify(order.to_dict(include_details=True))
+
+
+@order_routes.route('/<int:order_id>/status', methods=['PUT'])
+@permissions_required('MANAGE_ORDERS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def update_order_status(order_id):
+    """
+    Updates the status of a specific order.
+    ---
+    tags:
+      - Admin Orders
+    parameters:
+      - in: path
+        name: order_id
+        required: true
+        schema:
+          type: integer
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              description: The new status for the order.
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: Order status updated successfully.
+      400:
+        description: Invalid status provided.
+      404:
+        description: Order not found.
+    """
+    data = request.get_json()
+    new_status = data.get('status')
+    if not new_status:
+        return jsonify({"error": "Status is required"}), 400
+    
+    try:
+        updated_order = OrderService.update_order_status(order_id, new_status)
+        if not updated_order:
+            return jsonify({"error": "Order not found"}), 404
+        return jsonify(updated_order.to_dict())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+        
+@order_routes.route('/', methods=['GET'])
 @permissions_required('MANAGE_ORDERS')
 @log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
 @admin_required
 def get_orders():
     """
-    Get a paginated list of all orders.
-    Query Params:
-    - page: integer, the page number to retrieve.
-    - per_page: integer, the number of orders per page.
+    Retrieves all orders with optional filtering.
+    ---
+    tags:
+      - Admin Orders
+    parameters:
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Filter orders by status.
+      - in: query
+        name: user_id
+        schema:
+          type: string
+        description: Filter orders by user ID.
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: A list of orders.
     """
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        # Assuming the service method is updated to handle pagination
-        orders_pagination = OrderService.get_all_orders_paginated(page=page, per_page=per_page)
-        return jsonify({
-            "status": "success",
-            "data": [order.to_dict() for order in orders_pagination.items],
-            "total": orders_pagination.total,
-            "pages": orders_pagination.pages,
-            "current_page": orders_pagination.page
-        }), 200
-    except Exception as e:
-        # In a real app, log the error e
-        return jsonify(status="error", message="An internal error occurred while fetching orders."), 500
+    status = request.args.get('status')
+    user_id = request.args.get('user_id')
+    orders = OrderService.get_all_orders(status=status, user_id=user_id)
+    return jsonify([order.to_dict() for order in orders])
 
-# READ a single order by ID
-@order_management_bp.route('/<int:order_id>', methods=['GET'])
-@permissions_required('MANAGE_ORDERS')
-@log_admin_action
-@roles_required ('Admin', 'Manager', 'Support')
-@admin_required
-def get_order(order_id):
-    """
-    Get a single order by its ID.
-    """
-    order = OrderService.get_order_by_id(order_id)
-    if order:
-        return jsonify(status="success", data=order.to_dict()), 200
-    return jsonify(status="error", message="Order not found"), 404
 
 # UPDATE an existing order's status
 @order_management_bp.route('/<int:order_id>/status', methods=['PUT'])
