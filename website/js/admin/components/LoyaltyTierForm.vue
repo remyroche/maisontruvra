@@ -1,38 +1,72 @@
 <template>
-  <form @submit.prevent="submit" class="space-y-4">
-    <div>
-      <label class="block text-sm font-medium">Tier Name</label>
-      <input v-model="form.name" type="text" required class="mt-1 block w-full border p-2 rounded">
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Manage Product Reviews</h1>
+
+    <div class="mb-4">
+        <select v-model="statusFilter" @change="applyFilters" class="border rounded p-2">
+            <option value="">All Reviews</option>
+            <option v-for="status in reviewsStore.statuses" :key="status" :value="status">{{ status }}</option>
+        </select>
     </div>
-    <div>
-      <label class="block text-sm font-medium">Minimum Points</label>
-      <input v-model.number="form.min_points" type="number" required class="mt-1 block w-full border p-2 rounded">
+
+    <div v-if="reviewsStore.isLoading" class="text-center p-4">Loading reviews...</div>
+    <div v-if="reviewsStore.error" class="text-red-500 bg-red-100 p-4 rounded">{{ reviewsStore.error }}</div>
+
+    <div v-if="!reviewsStore.isLoading" class="space-y-4">
+        <div v-for="review in reviewsStore.reviews" :key="review.id" class="bg-white p-4 rounded-lg shadow">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="font-semibold">{{ review.product_name }}</p>
+                    <p class="text-sm text-gray-600">by {{ review.user_name }}</p>
+                    <StarRating :rating="review.rating" class="mt-1" />
+                </div>
+                <div class="text-right">
+                     <span class="px-2 py-1 text-xs font-semibold rounded-full" :class="statusClass(review.status)">
+                        {{ review.status }}
+                    </span>
+                    <p class="text-xs text-gray-500 mt-1">{{ new Date(review.created_at).toLocaleDateString() }}</p>
+                </div>
+            </div>
+            <p class="mt-2 text-gray-700">{{ review.comment }}</p>
+            <div class="mt-4 flex justify-end space-x-2">
+                <button v-if="review.status === 'pending'" @click="approveReview(review.id)" class="bg-green-500 text-white px-3 py-1 text-sm rounded">Approve</button>
+                <button @click="deleteReview(review.id)" class="bg-red-500 text-white px-3 py-1 text-sm rounded">Delete</button>
+            </div>
+        </div>
+        <div v-if="!reviewsStore.reviews.length" class="text-center text-gray-500 py-8">
+            No reviews found for this filter.
+        </div>
     </div>
-    <div>
-      <label class="block text-sm font-medium">Points Multiplier (e.g., 1.5)</label>
-      <input v-model.number="form.multiplier" type="number" step="0.1" required class="mt-1 block w-full border p-2 rounded">
-    </div>
-    <button type="submit" class="bg-indigo-600 text-white w-full py-2 rounded">Save Tier</button>
-  </form>
+  </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, onMounted } from 'vue';
+import { useAdminReviewsStore } from '@/js/stores/adminReviews';
+import StarRating from '@/js/admin/components/ui/StarRating.vue';
 
-const props = defineProps({
-  tier: Object,
+const reviewsStore = useAdminReviewsStore();
+const statusFilter = ref('');
+
+onMounted(() => {
+    reviewsStore.fetchReviews();
 });
-const emit = defineEmits(['save']);
 
-const form = ref({ name: '', min_points: 0, multiplier: 1.0 });
+const applyFilters = () => {
+    reviewsStore.fetchReviews({ status: statusFilter.value });
+};
 
-watch(() => props.tier, (newVal) => {
-    if (newVal) {
-        form.value = { ...newVal };
+const approveReview = (id) => {
+    reviewsStore.approveReview(id);
+};
+
+const deleteReview = (id) => {
+    if (confirm('Are you sure you want to delete this review permanently?')) {
+        reviewsStore.deleteReview(id);
     }
-}, { immediate: true, deep: true });
+};
 
-const submit = () => {
-  emit('save', form.value);
+const statusClass = (status) => {
+  return status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
 };
 </script>
