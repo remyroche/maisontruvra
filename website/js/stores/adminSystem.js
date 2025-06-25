@@ -5,7 +5,6 @@ export const useAdminSystemStore = defineStore('adminSystem', {
   state: () => ({
     roles: [],
     sessions: [],
-    users: [],
     error: null,
   }),
   actions: {
@@ -57,32 +56,5 @@ export const useAdminSystemStore = defineStore('adminSystem', {
         this.error = 'Failed to terminate session.';
       }
     },
-    async fetchUsers() {
-        try {
-          const response = await apiClient.get('/users');
-          this.users = response.data;
-        } catch (error) {
-          this.error = 'Failed to fetch users.';
-        }
-      },
-  
-      async freezeUser(userId) {
-        try {
-          await apiClient.post(`/sessions/user/${userId}/freeze`);
-          await this.fetchUsers();
-        } catch (error) {
-          this.error = 'Failed to freeze user.';
-        }
-      },
-  
-      async unfreezeUser(userId) {
-        try {
-          await apiClient.post(`/sessions/user/${userId}/unfreeze`);
-          await this.fetchUsers();
-        } catch (error) {
-          this.error = 'Failed to unfreeze user.';
-        }
-      },
   },
 });
-
