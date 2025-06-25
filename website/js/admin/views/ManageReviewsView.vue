@@ -1,91 +1,106 @@
-<!--
- * FILENAME: website/js/admin/views/ManageReviewsView.vue
- * DESCRIPTION: View for managing product reviews, now fully implemented.
--->
 <template>
-  <AdminLayout>
-    <div class="space-y-6">
-      <header class="flex justify-between items-center">
-        <h1 class="text-3xl font-bold text-gray-800">Manage Reviews</h1>
-      </header>
-
-      <div v-if="reviewStore.isLoading && !reviewStore.reviews.length" class="text-center py-10">Loading reviews...</div>
-      <div v-else-if="reviewStore.error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" role="alert">
-        {{ reviewStore.error }}
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Manage Reviews</h1>
+    <div class="mb-4 flex justify-between items-center">
+      <div class="flex items-center space-x-4">
+        <select v-model="statusFilter" @change="fetchData" class="border rounded p-2">
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+        </select>
+        <label class="flex items-center text-sm">
+            <input type="checkbox" v-model="includeDeleted" @change="fetchData" class="mr-2 h-4 w-4 rounded">
+            Show Deleted
+        </label>
       </div>
-      
-      <BaseDataTable v-else :columns="columns" :data="reviewStore.reviews">
-        <template #cell(product_name)="{ value }">
-            <span class="font-medium">{{ value }}</span>
-        </template>
-         <template #cell(rating)="{ value }">
-            <StarRating :rating="value" />
-        </template>
-        <template #cell(is_approved)="{ value }">
-             <span :class="value ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'" 
-                   class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
-                  {{ value ? 'Approved' : 'Pending' }}
-             </span>
-        </template>
-        <template #cell(actions)="{ item }">
-            <template v-if="!item.is_approved">
-                 <button @click="handleUpdateStatus(item, true)" class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-2 rounded text-xs mr-2">Approve</button>
-            </template>
-            <template v-else>
-                 <button @click="handleUpdateStatus(item, false)" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-1 px-2 rounded text-xs mr-2">Un-approve</button>
-            </template>
-             <button @click="handleDelete(item)" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs">Delete</button>
-        </template>
-      </BaseDataTable>
     </div>
-  </AdminLayout>
+    <div v-if="reviewsStore.isLoading" class="text-center p-4">Loading reviews...</div>
+    <div v-if="reviewsStore.error" class="text-red-500 bg-red-100 p-4 rounded">{{ reviewsStore.error }}</div>
+
+    <BaseDataTable
+      v-if="!reviewsStore.isLoading && reviewsStore.reviews.length"
+      :headers="headers"
+      :items="reviewsStore.reviews"
+    >
+        <template #row="{ item }">
+            <tr :class="{ 'bg-red-50 text-gray-500 italic': item.is_deleted }">
+                <td v-for="header in headers" :key="header.value" class="px-6 py-4 whitespace-nowrap text-sm">
+                   <slot :name="`item-${header.value}`" :item="item">{{ getNestedValue(item, header.value) }}</slot>
+                </td>
+            </tr>
+        </template>
+        <template #item-rating="{ item }">{{ '★'.repeat(item.rating) }}</template>
+        <template #item-status="{ item }">
+             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                :class="getStatusClass(item.status)">
+                {{ item.status }}
+            </span>
+             <span v-if="item.is_deleted" class="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-red-200 text-red-800">Deleted</span>
+        </template>
+        <template #item-actions="{ item }">
+            <div class="flex items-center space-x-2">
+                <button v-if="!item.is_deleted && item.status === 'pending'" @click="reviewsStore.approveReview(item.id)" class="text-blue-600 hover:text-blue-900 text-sm">Approve</button>
+                <button v-if="!item.is_deleted" @click="confirmDelete(item, 'soft')" class="text-yellow-600 hover:text-yellow-900 text-sm">Soft Delete</button>
+                <button v-if="item.is_deleted" @click="restoreReview(item.id)" class="text-green-600 hover:text-green-900 text-sm">Restore</button>
+                <button @click="confirmDelete(item, 'hard')" class="text-red-600 hover:text-red-900 text-sm">Hard Delete</button>
+            </div>
+        </template>
+    </BaseDataTable>
+  </div>
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
-import { useAdminReviewStore } from '../../stores/adminReviews';
-import { useAdminNotificationStore } from '../../stores/adminNotifications';
+import { ref, onMounted } from 'vue';
+import { useAdminReviewsStore } from '@/js/stores/adminReviews';
+import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
 
-import AdminLayout from '../components/AdminLayout.vue';
-import BaseDataTable from '../components/ui/BaseDataTable.vue';
-import StarRating from '../components/ui/StarRating.vue';
+const reviewsStore = useAdminReviewsStore();
+const statusFilter = ref('');
+const includeDeleted = ref(false);
 
-const reviewStore = useAdminReviewStore();
-const notificationStore = useAdminNotificationStore();
-
-const columns = [
-    { key: 'id', label: 'ID' },
-    { key: 'product_name', label: 'Product' },
-    { key: 'user_name', label: 'Customer' },
-    { key: 'rating', label: 'Rating' },
-    { key: 'comment', label: 'Comment' },
-    { key: 'is_approved', label: 'Status' },
-    { key: 'actions', label: 'Actions', cellClass: 'text-right' },
+const headers = [
+  { text: 'Product', value: 'product.name' },
+  { text: 'User', value: 'user.first_name' },
+  { text: 'Rating', value: 'rating' },
+  { text: 'Status', value: 'status' },
+  { text: 'Comment', value: 'comment' },
+  { text: 'Actions', value: 'actions' },
 ];
 
-onMounted(() => {
-  reviewStore.fetchReviews();
-});
-
-const handleUpdateStatus = async (review, newStatus) => {
-    const action = newStatus ? 'approve' : 'un-approve';
-    if (confirm(`Are you sure you want to ${action} this review?`)) {
-        const success = await reviewStore.updateReviewStatus(review.id, newStatus);
-        if (success) {
-            notificationStore.addNotification({ type: 'success', title: 'Status Updated' });
-        } else {
-            notificationStore.addNotification({ type: 'error', title: 'Update Failed', message: reviewStore.error });
-        }
-    }
+const fetchData = () => {
+    reviewsStore.fetchReviews({
+        status: statusFilter.value,
+        include_deleted: includeDeleted.value,
+    });
 };
 
-const handleDelete = async (review) => {
-    // Note: A delete action in the store is pending implementation.
-    if (confirm(`Are you sure you want to permanently delete this review?`)) {
-        notificationStore.addNotification({ type: 'info', title: 'Action Not Implemented', message: 'Review deletion logic is pending.'})
-        // const success = await reviewStore.deleteReview(review.id);
-        // ...
-    }
+onMounted(fetchData);
+
+const getNestedValue = (item, path) => {
+    return path.split('.').reduce((acc, part) => acc && acc[part], item);
 }
 
+const getStatusClass = (status) => {
+    const classes = {
+        'pending': 'bg-yellow-100 text-yellow-800',
+        'approved': 'bg-green-100 text-green-800',
+        'rejected': 'bg-red-100 text-red-800',
+    };
+    return classes[status] || 'bg-gray-100 text-gray-800';
+};
+
+const confirmDelete = (review, type) => {
+  const action = type === 'soft' ? 'soft-delete' : 'PERMANENTLY DELETE';
+  if (window.confirm(`Are you sure you want to ${action} this review?`)) {
+    const deleteAction = type === 'soft' ? reviewsStore.softDeleteReview : reviewsStore.hardDeleteReview;
+    deleteAction(review.id);
+  }
+};
+
+const restoreReview = (reviewId) => {
+  if (window.confirm(`Are you sure you want to restore this review?`)) {
+    reviewsStore.restoreReview(reviewId);
+  }
+};
 </script>
