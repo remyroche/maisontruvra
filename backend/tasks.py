@@ -1,110 +1,98 @@
+import logging
+from flask import current_app
 from backend.extensions import celery
 from backend.services.email_service import EmailService
 from backend.services.loyalty_service import LoyaltyService
-from flask import current_app
-from flask_mail import Message
-import logging
+from backend.services.invoice_service import InvoiceService
+from backend.services.passport_service import PassportService
 
 logger = logging.getLogger(__name__)
 
-# --- IMPLEMENTATION: Celery Task Retries and Timeouts ---
-@celery.task(
-    autoretry_for=(Exception,),      # Retry on any exception from the email service
-    retry_kwargs={'max_retries': 3}, # Attempt a maximum of 3 retries
-    retry_backoff=True,              # Use exponential backoff (e.g., wait 1s, 2s, 4s)
-    soft_time_limit=60,              # Raise exception if task runs longer than 60 seconds
-    time_limit=90                    # Forcefully kill worker if task runs > 90 seconds
+# Define a standard decorator for resilient, one-off tasks (e.g., triggered by user action)
+resilient_task = celery.task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_kwargs={'max_retries': 3},
+    retry_backoff=True,
+    soft_time_limit=300,  # 5 minutes
+    time_limit=600        # 10 minutes
 )
 
-def send_email_task(recipient, subject, template, **kwargs):
-    """
-    Celery task to send an email asynchronously with resilience features.
-    """
-    # This assumes the core email logic is in a method that can be called directly.
-    EmailService.send_email_immediately(recipient, subject, template, **kwargs)
-    
+# Define a standard decorator for scheduled (beat) tasks
+# These typically should not retry indefinitely as they will run again on the next schedule.
+scheduled_task = celery.task(
+    bind=True,
+    soft_time_limit=1800, # 30 minutes
+    time_limit=3600       # 1 hour
+)
 
-@celery.task(name='tasks.expire_points')
-def expire_points():
+@resilient_task
+def send_email_task(self, recipient, subject, template_name, context):
     """
-    Celery task to expire loyalty points older than one year.
+    Celery task to send an email asynchronously.
     """
-    with current_app.app_context():
-        try:
-            count = LoyaltyService.expire_points_task()
-            current_app.logger.info(f"Expired {count} loyalty point transactions.")
-            return count
-        except Exception as e:
-            current_app.logger.error(f"Failed to expire points: {str(e)}")
-            raise
+    try:
+        logger.info(f"Executing task id {self.request.id} for recipient {recipient}")
+        with current_app.app_context(): # Ensure app context for render_template
+            EmailService.send_email_immediately(recipient, subject, template_name, context)
+    except Exception as e:
+        logger.error(f"Task {self.request.id} failed: {e}", exc_info=True)
+        raise
 
-@celery.task(name='tasks.update_tiers')
-def update_tiers():
-    """
-    Celery task to recalculate and update B2B user loyalty tiers.
-    """
-    with current_app.app_context():
-        try:
-            count = LoyaltyService.update_user_tiers_task()
-            current_app.logger.info(f"Updated loyalty tiers for {count} active B2B users.")
-            return count
-        except Exception as e:
-            current_app.logger.error(f"Failed to update tiers: {str(e)}")
-            raise
-
-from backend.celery_worker import celery
-from backend.services.email_service import EmailService
-
-
-@celery.task(name='tasks.generate_invoice_pdf')
-def generate_invoice_pdf_task(order_id):
+@resilient_task
+def generate_invoice_pdf_task(self, order_id):
     """
     Celery task to generate a PDF invoice for an order.
     """
-    with current_app.app_context():
-        try:
-            current_app.logger.info(f"Generating invoice PDF for order {order_id}...")
-            # from backend.services.invoice_service import InvoiceService
-            # InvoiceService.generate_pdf(order_id)
-            current_app.logger.info(f"Successfully generated invoice for order {order_id}")
-        except Exception as e:
-            current_app.logger.error(f"Failed to generate invoice for order {order_id}: {str(e)}")
-            raise
+    try:
+        logger.info(f"Executing invoice generation task id {self.request.id} for order {order_id}")
+        with current_app.app_context():
+            InvoiceService.generate_pdf(order_id)
+        logger.info(f"Successfully generated invoice for order {order_id}")
+    except Exception as e:
+        logger.error(f"Task {self.request.id} failed to generate invoice for order {order_id}: {e}", exc_info=True)
+        raise
 
-@celery.task(name='tasks.generate_passport_pdf')
-def generate_passport_pdf_task(passport_id):
+@resilient_task
+def generate_passport_pdf_task(self, passport_id):
     """
     Celery task to generate a product passport PDF.
     """
+    try:
+        logger.info(f"Executing passport generation task id {self.request.id} for passport {passport_id}")
+        with current_app.app_context():
+            PassportService.generate_pdf(passport_id)
+        logger.info(f"Successfully generated passport for {passport_id}")
+    except Exception as e:
+        logger.error(f"Task {self.request.id} failed to generate passport for {passport_id}: {e}", exc_info=True)
+        raise
+
+@scheduled_task
+def expire_loyalty_points_task(self):
+    """
+    Scheduled Celery task to expire loyalty points older than one year.
+    """
     with current_app.app_context():
         try:
-            current_app.logger.info(f"Generating product passport PDF for {passport_id}...")
-            # from backend.services.passport_service import PassportService
-            # PassportService.generate_pdf(passport_id)
-            current_app.logger.info(f"Successfully generated passport for {passport_id}")
+            logger.info("Starting scheduled task: expire_loyalty_points_task")
+            count = LoyaltyService.expire_points_task()
+            logger.info(f"Finished scheduled task: Expired {count} loyalty point transactions.")
+            return f"Expired {count} loyalty point records."
         except Exception as e:
-            current_app.logger.error(f"Failed to generate passport for {passport_id}: {str(e)}")
+            logger.error(f"Scheduled task expire_loyalty_points_task failed: {e}", exc_info=True)
             raise
 
-@celery.task(name='tasks.update_b2b_loyalty_tiers')
-def update_b2b_loyalty_tiers_task():
+@scheduled_task
+def update_b2b_loyalty_tiers_task(self):
     """
-    Celery task to periodically update B2B loyalty tiers.
+    Scheduled Celery task to recalculate and update B2B user loyalty tiers.
     """
     with current_app.app_context():
         try:
-            current_app.logger.info("Starting scheduled task: update_b2b_loyalty_tiers_task")
-            LoyaltyService.update_user_tiers_task()
-            current_app.logger.info("Finished scheduled task: update_b2b_loyalty_tiers_task")
-            return "B2B loyalty tiers updated successfully."
+            logger.info("Starting scheduled task: update_b2b_loyalty_tiers_task")
+            count = LoyaltyService.update_user_tiers_task()
+            logger.info(f"Finished scheduled task: Updated loyalty tiers for {count} active B2B users.")
+            return f"Updated {count} B2B loyalty tiers."
         except Exception as e:
-            current_app.logger.error(f"Scheduled task update_b2b_loyalty_tiers_task failed: {e}", exc_info=True)
+            logger.error(f"Scheduled task update_b2b_loyalty_tiers_task failed: {e}", exc_info=True)
             raise
-
-# Example of how you might schedule this task in your Celery beat configuration:
-# celery.conf.beat_schedule = {
-#     'update-b2b-tiers-every-day': {
-#         'task': 'app.update_b2b_loyalty_tiers',
-#         'schedule': crontab(hour=0, minute=0),  # Run daily at midnight
-#     },
-# }
