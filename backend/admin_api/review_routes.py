@@ -4,68 +4,49 @@ from backend.utils.sanitization import sanitize_input
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 
-review_management_bp = Blueprint('review_management_bp', __name__, url_prefix='/admin/reviews')
+review_bp = Blueprint('admin_review_routes', __name__, url_prefix='/api/admin/reviews')
 
 # READ all reviews (with pagination and filtering)
-@review_management_bp.route('/', methods=['GET'])
+@review_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_REVIEWS')
 @log_admin_action
-@roles_required ('Admin', 'Manager', 'Support')
+@roles_required ('Admin', 'Staff')
 @admin_required
-def get_all_reviews():
+def get_reviews():
     """
-    Get all reviews with pagination and filtering.
+    Retrieves all product reviews with optional filtering by status.
     """
-    page = int(request.args.get('page', 1))
-    per_page = int(request.args.get('per_page', 20))
     status_filter = request.args.get('status')
-    
-    try:
-        result = ReviewService.get_all_reviews(page, per_page, status_filter)
-        return jsonify(status="success", data=result), 200
-    except Exception as e:
-        return jsonify(status="error", message="Failed to fetch reviews"), 500
+    reviews = ReviewService.get_all_reviews(status_filter=status_filter)
+    return jsonify([review.to_dict() for review in reviews])
 
-@review_management_bp.route('/<int:review_id>/status', methods=['PUT'])
+@review_bp.route('/<int:review_id>/approve', methods=['PUT'])
 @permissions_required('MANAGE_REVIEWS')
 @log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
 @admin_required
-def update_review_status(review_id):
+def approve_review(review_id):
     """
-    Update review status (approve/reject).
+    Approves a pending review.
     """
-    data = request.get_json()
-    if not data or 'status' not in data:
-        return jsonify(status="error", message="Status is required"), 400
-    
-    status = sanitize_input(data['status'])
-    admin_id = request.current_user.id  # Assuming current user is available
-    
-    try:
-        result = ReviewService.update_review_status(review_id, status, admin_id)
-        return jsonify(status="success", data=result), 200
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        return jsonify(status="error", message="Failed to update review status"), 500
+    review = ReviewService.approve_review(review_id)
+    if not review:
+        return jsonify({"error": "Review not found"}), 404
+    return jsonify(review.to_dict())
 
-@review_management_bp.route('/<int:review_id>', methods=['DELETE'])
+@review_bp.route('/<int:review_id>', methods=['DELETE'])
 @permissions_required('MANAGE_REVIEWS')
 @log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
 @admin_required
 def delete_review(review_id):
     """
-    Delete a review.
+    Deletes a review.
     """
-    admin_id = request.current_user.id
-    
-    try:
-        ReviewService.delete_review(review_id, admin_id)
-        return jsonify(status="success", message="Review deleted"), 200
-    except Exception as e:
-        return jsonify(status="error", message="Failed to delete review"), 500
+    if ReviewService.delete_review(review_id):
+        return jsonify({"message": "Review deleted successfully"})
+    return jsonify({"error": "Review not found"}), 404
+
         
 @review_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_REVIEWS')
@@ -106,66 +87,4 @@ def get_reviews():
         # Proper logging should be implemented here
         return jsonify(status="error", message="An internal error occurred while fetching reviews."), 500
 
-# READ a single review by ID
-@review_management_bp.route('/<int:review_id>', methods=['GET'])
-@permissions_required('MANAGE_REVIEWS')
-@log_admin_action
-@roles_required ('Admin', 'Manager', 'Support')
-@admin_required
-def get_review(review_id):
-    """
-    Get a single review by its ID.
-    """
-    review = ReviewService.get_review_by_id(review_id)
-    if review:
-        return jsonify(status="success", data=review.to_dict()), 200
-    return jsonify(status="error", message="Review not found"), 404
-
-# UPDATE an existing review
-@review_management_bp.route('/<int:review_id>', methods=['PUT'])
-@permissions_required('MANAGE_REVIEWS')
-@log_admin_action
-@roles_required ('Admin', 'Manager', 'Support')
-@admin_required
-def update_review(review_id):
-    """
-    Update a review's content or status.
-    This can be used to approve, reject, or edit a review.
-    """
-    data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid or missing JSON body"), 400
-
-    if not ReviewService.get_review_by_id(review_id):
-        return jsonify(status="error", message="Review not found"), 404
-
-    sanitized_data = sanitize_input(data)
-
-    try:
-        updated_review = ReviewService.update_review(review_id, sanitized_data)
-        return jsonify(status="success", data=updated_review.to_dict()), 200
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        # Proper logging should be implemented here
-        return jsonify(status="error", message="An internal error occurred while updating the review."), 500
-
-# DELETE a review
-@review_management_bp.route('/<int:review_id>', methods=['DELETE'])
-@permissions_required('MANAGE_REVIEWS')
-@log_admin_action
-@roles_required ('Admin', 'Manager', 'Support')
-@admin_required
-def delete_review(review_id):
-    """
-    Delete a review.
-    """
-    if not ReviewService.get_review_by_id(review_id):
-        return jsonify(status="error", message="Review not found"), 404
-
-    try:
-        ReviewService.delete_review(review_id)
-        return jsonify(status="success", message="Review deleted successfully"), 200
-    except Exception as e:
-        # Proper logging should be implemented here
         return jsonify(status="error", message="An internal error occurred while deleting the review."), 500
