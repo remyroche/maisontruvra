@@ -1,48 +1,50 @@
-<!--
- * FILENAME: website/js/admin/components/BlogArticleForm.vue
- * DESCRIPTION: New form for creating/editing blog articles.
--->
 <template>
-  <form @submit.prevent="$emit('submit', formData)">
-    <div class="space-y-4">
-      <div>
-        <label class="block text-sm font-medium">Title</label>
-        <input type="text" v-model="formData.title" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
-      </div>
-       <div>
-        <label class="block text-sm font-medium">Category</label>
-        <select v-model="formData.category_id" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
-            <option :value="null">-- Select Category --</option>
-            <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium">Content</label>
-        <textarea v-model="formData.content" rows="10" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm"></textarea>
-      </div>
-       <div>
-        <label class="flex items-center">
-            <input type="checkbox" v-model="formData.is_published" class="h-4 w-4 text-indigo-600 rounded">
-            <span class="ml-2 text-sm">Published</span>
-        </label>
-      </div>
+  <form @submit.prevent="submit" class="space-y-4">
+    <div>
+      <label>Title</label>
+      <input v-model="form.title" type="text" required class="w-full border p-2 rounded">
     </div>
-    <div class="mt-6 flex justify-end space-x-3">
-      <button type="button" @click="$emit('cancel')" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded">Cancel</button>
-      <button type="submit" class="bg-indigo-600 text-white font-bold py-2 px-4 rounded">Save Article</button>
+    <div>
+      <label>Content</label>
+      <textarea v-model="form.content" rows="10" required class="w-full border p-2 rounded"></textarea>
+    </div>
+    <div>
+      <label>Category</label>
+      <select v-model="form.category_id" class="w-full border p-2 rounded">
+        <option :value="null">Select a category</option>
+        <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+      </select>
+    </div>
+    <div>
+      <label class="flex items-center">
+        <input v-model="form.is_published" type="checkbox" class="mr-2">
+        Published
+      </label>
+    </div>
+    <div class="flex justify-end space-x-2">
+      <button type="button" @click="$emit('cancel')" class="bg-gray-200 px-4 py-2 rounded">Cancel</button>
+      <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded">Save</button>
     </div>
   </form>
 </template>
 
 <script setup>
 import { ref, watch } from 'vue';
+
 const props = defineProps({
-  initialData: Object,
-  categories: Array
+  article: Object,
+  categories: Array,
 });
-defineEmits(['submit', 'cancel']);
-const formData = ref({ ...props.initialData });
-watch(() => props.initialData, (newData) => {
-  formData.value = { ...newData };
-}, { deep: true, immediate: true });
+const emit = defineEmits(['save', 'cancel']);
+
+const form = ref({});
+
+watch(() => props.article, (newVal) => {
+    form.value = { ...newVal };
+}, { immediate: true });
+
+const submit = () => {
+  emit('save', form.value);
+};
 </script>
+
