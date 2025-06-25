@@ -34,7 +34,11 @@
       </template>
       <template #item-actions="{ item }">
         <button @click="openEditModal(item)" class="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
-        <button @click="toggleFreeze(item)" class="mr-4" :class="item.is_frozen ? 'text-green-600 hover:text-green-900' : 'text-blue-600 hover:text-blue-900'">
+        <button 
+          @click="toggleFreeze(item)" 
+          class="mr-4" 
+          :class="item.is_frozen ? 'text-green-600 hover:text-green-900' : 'text-blue-600 hover:text-blue-900'"
+        >
             {{ item.is_frozen ? 'Unfreeze' : 'Freeze' }}
         </button>
         <button @click="confirmDelete(item)" class="text-red-600 hover:text-red-900">Delete</button>
@@ -109,12 +113,24 @@ const closeModal = () => {
 };
 
 const handleSave = async (userData) => {
+    const originalFrozenState = selectedUser.value?.is_frozen;
+
     if (isEditing.value) {
         await usersStore.updateUser(userData.id, userData);
+        // If the frozen state was changed in the form, call the specific endpoint
+        if (userData.is_frozen !== originalFrozenState) {
+            if (userData.is_frozen) {
+                await usersStore.freezeUser(userData.id);
+            } else {
+                await usersStore.unfreezeUser(userData.id);
+            }
+        }
     } else {
         await usersStore.createUser(userData);
     }
     closeModal();
+    // Refresh the entire list to get the latest state
+    await usersStore.fetchUsers();
 };
 
 const toggleFreeze = (user) => {
