@@ -17,7 +17,8 @@ def get_reviews():
     Retrieves all product reviews with optional filtering by status.
     """
     status_filter = request.args.get('status')
-    reviews = ReviewService.get_all_reviews(status_filter=status_filter)
+    include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'
+    reviews = ReviewService.get_all_reviews(status_filter=status_filter, include_deleted=include_deleted)
     return jsonify([review.to_dict() for review in reviews])
 
 @review_bp.route('/<int:review_id>/approve', methods=['PUT'])
@@ -43,12 +44,26 @@ def delete_review(review_id):
     """
     Deletes a review.
     """
-    if ReviewService.delete_review(review_id):
-        return jsonify({"message": "Review deleted successfully"})
+    hard_delete = request.args.get('hard', 'false').lower() == 'true'
+    if hard_delete:
+        if ReviewService.hard_delete_review(review_id):
+            return jsonify({"message": "Review permanently deleted successfully"})
+    else:
+        if ReviewService.delete_review(review_id):
+            return jsonify({"message": "Review deleted successfully"})
     return jsonify({"error": "Review not found"}), 404
 
-        
-@review_management_bp.route('/', methods=['GET'])
+@review_bp.route('/<int:review_id>/restore', methods=['PUT'])
+@permissions_required('MANAGE_REVIEWS')
+@log_admin_action
+@roles_required ('Admin', 'Manager', 'Support')
+@admin_required
+def restore_review(review_id):
+    if ReviewService.restore_review(review_id):
+        return jsonify({"message": "Review restored successfully"})
+    return jsonify({"error": "Review not found"}), 404
+
+@review_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_REVIEWS')
 @log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
@@ -69,7 +84,8 @@ def get_reviews():
         filters = {
             'status': request.args.get('status', type=str),
             'product_id': request.args.get('product_id', type=int),
-            'user_id': request.args.get('user_id', type=int)
+            'user_id': request.args.get('user_id', type=int),
+            'include_deleted': request.args.get('include_deleted', 'false').lower() == 'true'
         }
         # Remove None values so we don't pass empty filters
         filters = {k: v for k, v in filters.items() if v is not None}
@@ -86,5 +102,3 @@ def get_reviews():
     except Exception as e:
         # Proper logging should be implemented here
         return jsonify(status="error", message="An internal error occurred while fetching reviews."), 500
-
-        return jsonify(status="error", message="An internal error occurred while deleting the review."), 500
