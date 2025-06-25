@@ -2,6 +2,31 @@
 from backend.database import db
 from datetime import datetime
 
+class SoftDeleteMixin:
+    """
+    A mixin that adds soft delete functionality to a model.
+    """
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    deleted_at = db.Column(db.DateTime, nullable=True)
+
+    def soft_delete(self):
+        """Mark the record as deleted."""
+        self.is_deleted = True
+        self.deleted_at = datetime.utcnow()
+        db.session.add(self)
+
+    def restore(self):
+        """Restore a soft-deleted record."""
+        self.is_deleted = False
+        self.deleted_at = None
+        db.session.add(self)
+        
+    @staticmethod
+    def active_query(query):
+        """Filters a query to only include non-deleted records."""
+        return query.filter_by(is_deleted=False)
+
+
 class BaseModel(db.Model):
     __abstract__ = True
     
@@ -27,7 +52,7 @@ class BaseModel(db.Model):
         public_fields = getattr(self, '_public_fields', [])
         admin_fields = getattr(self, '_admin_fields', [])
         sensitive_fields = getattr(self, '_sensitive_fields', [])
-        
+    
         # Determine which fields to include
         if context == 'basic':
             allowed_fields = basic_fields
