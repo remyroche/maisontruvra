@@ -1,10 +1,68 @@
 import os
 import uuid
 from flask import render_template, current_app
-from ..models import db, ProductPassport, Product
+from ..models import db, Product
 from .exceptions import ServiceError, NotFoundException
+from backend.models.passport_models import ProductPassport
+from backend.database import db
+
+logger = logging.getLogger(__name__)
 
 class PassportService:
+
+    @staticmethod
+    def generate_pdf(passport_id):
+        """
+        Generates a Product Passport PDF, saves it, and updates the
+        passport record in the database.
+        This is called by a Celery task.
+        """
+        logger.info(f"Starting PDF generation for passport_id: {passport_id}")
+
+        # 1. Fetch passport and related product data from the database
+        passport = ProductPassport.query.options(
+            db.joinedload(ProductPassport.product)
+        ).get(passport_id)
+
+        if not passport:
+            logger.error(f"Could not generate passport: Passport {passport_id} not found.")
+            raise ValueError(f"Passport {passport_id} not found")
+
+        # 2. Build the context dictionary for the template
+        template_name = 'non-email/product_passport.html'
+        context = {
+            'passport': passport,
+            'product': passport.product,
+            # You can add any other related data the template might need here
+        }
+
+        try:
+            # 3. Render an HTML template with the context
+            html_string = render_template(template_name, **context)
+
+            # 4. Use a library like WeasyPrint to convert the HTML to PDF
+            # pdf_file = HTML(string=html_string).write_pdf()
+
+            # 5. Save the PDF (e.g., to a cloud storage bucket) and update the passport record
+            filename = f"passports/passport-{passport.id}-{passport.product.sku}.pdf"
+            # cloud_storage.save(pdf_file, filename) # Real implementation
+
+            passport.pdf_url = filename
+            # Assuming a status field exists on the passport model to track generation
+            if hasattr(passport, 'status'):
+                passport.status = 'generated'
+
+            db.session.commit()
+
+            logger.info(f"PDF generation for passport {passport.id} completed. Saved to {filename}")
+            return True
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"An error occurred during PDF generation for passport {passport_id}: {e}", exc_info=True)
+            # The Celery task's autoretry will handle this exception.
+            raise
+
     @staticmethod
     def create_and_render_passport(product_id: int):
         """
