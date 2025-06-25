@@ -22,11 +22,6 @@
       <label for="is-active" class="ml-2 block text-sm text-gray-900">Active</label>
     </div>
 
-     <div class="flex items-center">
-      <input id="is-frozen" type="checkbox" v-model="form.is_frozen" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
-      <label for="is-frozen" class="ml-2 block text-sm text-gray-900">Frozen</label>
-    </div>
-
     <div class="flex justify-end space-x-4">
         <button type="button" @click="$emit('cancel')" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
         <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">Save</button>
@@ -41,7 +36,7 @@ import { useAdminSystemStore } from '@/js/stores/adminSystem';
 const props = defineProps({
   user: {
     type: Object,
-    default: () => ({ email: '', password: '', role_id: null, is_active: true, is_frozen: false })
+    default: () => ({ email: '', password: '', role_id: null, is_active: true })
   }
 });
 
@@ -53,7 +48,7 @@ const form = ref({ ...props.user });
 
 watch(() => props.user, (newUser) => {
   form.value = { ...newUser };
-});
+}, { deep: true, immediate: true });
 
 onMounted(() => {
     systemStore.fetchRoles();
@@ -65,6 +60,8 @@ const submitForm = () => {
     if (!dataToSend.password) {
         delete dataToSend.password;
     }
-  emit('save', dataToSend);
+    // The is_frozen property is no longer managed by this form
+    delete dataToSend.is_frozen; 
+    emit('save', dataToSend);
 };
 </script>
