@@ -1,149 +1,122 @@
-
 <template>
-  <div class="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
-    <h2 class="text-2xl font-bold mb-6 text-center">Créer un compte</h2>
-    
-    <Form @submit="handleSubmit" :validation-schema="schema">
-      <div class="mb-4">
-        <label for="first_name" class="block text-sm font-medium text-gray-700 mb-2">
-          Prénom *
-        </label>
-        <Field
-          name="first_name"
-          type="text"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          :class="{ 'border-red-500': errors.first_name }"
-        />
-        <ErrorMessage name="first_name" class="text-red-500 text-sm mt-1" />
+  <div class="registration-form-container">
+    <h2>Create Your Account</h2>
+    <Form :validation-schema="schema" @submit="handleRegister" v-slot="{ isSubmitting }">
+      <div class="form-group">
+        <label for="firstName">First Name</label>
+        <Field name="firstName" type="text" id="firstName" class="form-input" />
+        <ErrorMessage name="firstName" class="error-message" />
       </div>
 
-      <div class="mb-4">
-        <label for="last_name" class="block text-sm font-medium text-gray-700 mb-2">
-          Nom *
-        </label>
-        <Field
-          name="last_name"
-          type="text"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          :class="{ 'border-red-500': errors.last_name }"
-        />
-        <ErrorMessage name="last_name" class="text-red-500 text-sm mt-1" />
+      <div class="form-group">
+        <label for="lastName">Last Name</label>
+        <Field name="lastName" type="text" id="lastName" class="form-input" />
+        <ErrorMessage name="lastName" class="error-message" />
       </div>
 
-      <div class="mb-4">
-        <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
-          Email *
-        </label>
-        <Field
-          name="email"
-          type="email"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          :class="{ 'border-red-500': errors.email }"
-        />
-        <ErrorMessage name="email" class="text-red-500 text-sm mt-1" />
+      <div class="form-group">
+        <label for="email">Email</label>
+        <Field name="email" type="email" id="email" class="form-input" />
+        <ErrorMessage name="email" class="error-message" />
       </div>
 
-      <div class="mb-4">
-        <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
-          Mot de passe *
-        </label>
-        <Field
-          name="password"
-          type="password"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          :class="{ 'border-red-500': errors.password }"
-        />
-        <ErrorMessage name="password" class="text-red-500 text-sm mt-1" />
-        <div class="text-xs text-gray-500 mt-1">
-          Minimum 8 caractères avec majuscule, minuscule, chiffre et caractère spécial
-        </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <Field name="password" type="password" id="password" class="form-input" />
+        <ErrorMessage name="password" class="error-message" />
       </div>
 
-      <div class="mb-6">
-        <label for="password_confirmation" class="block text-sm font-medium text-gray-700 mb-2">
-          Confirmer le mot de passe *
-        </label>
-        <Field
-          name="password_confirmation"
-          type="password"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          :class="{ 'border-red-500': errors.password_confirmation }"
-        />
-        <ErrorMessage name="password_confirmation" class="text-red-500 text-sm mt-1" />
+      <div class="form-group">
+        <label for="confirmPassword">Confirm Password</label>
+        <Field name="confirmPassword" type="password" id="confirmPassword" class="form-input" />
+        <ErrorMessage name="confirmPassword" class="error-message" />
       </div>
 
-      <button
-        type="submit"
-        :disabled="isSubmitting"
-        class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-      >
-        <span v-if="isSubmitting">Création en cours...</span>
-        <span v-else>Créer mon compte</span>
+      <button type="submit" class="submit-button" :disabled="isSubmitting">
+        <span v-if="isSubmitting">Registering...</span>
+        <span v-else>Create Account</span>
       </button>
     </Form>
   </div>
 </template>
 
 <script setup>
-import { Form, Field, ErrorMessage, useForm } from 'vee-validate';
-import { toTypedSchema } from '@vee-validate/yup';
-import * as yup from 'yup';
-import { authService } from '../../auth_service.js';
+import { Form, Field, ErrorMessage } from 'vee-validate';
+import { useAuthStore } from '@/stores/auth'; // Assuming you have an auth store
+import { required, email, minLength, hasUppercase, hasLowercase, hasDigit, hasSpecialChar } from '@/validation/rules';
 import { useRouter } from 'vue-router';
-import { ref } from 'vue';
 
+const authStore = useAuthStore();
 const router = useRouter();
-const isSubmitting = ref(false);
 
-// Validation schema matching backend rules
-const schema = toTypedSchema(
-  yup.object({
-    first_name: yup
-      .string()
-      .required('Le prénom est requis')
-      .min(2, 'Le prénom doit contenir au moins 2 caractères')
-      .max(50, 'Le prénom ne peut pas dépasser 50 caractères'),
-    last_name: yup
-      .string()
-      .required('Le nom est requis')
-      .min(2, 'Le nom doit contenir au moins 2 caractères')
-      .max(50, 'Le nom ne peut pas dépasser 50 caractères'),
-    email: yup
-      .string()
-      .required('L\'email est requis')
-      .email('Format email invalide')
-      .max(255, 'L\'email ne peut pas dépasser 255 caractères'),
-    password: yup
-      .string()
-      .required('Le mot de passe est requis')
-      .min(8, 'Le mot de passe doit contenir au moins 8 caractères')
-      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, 
-        'Le mot de passe doit contenir au moins une majuscule, une minuscule, un chiffre et un caractère spécial'),
-    password_confirmation: yup
-      .string()
-      .required('La confirmation du mot de passe est requise')
-      .oneOf([yup.ref('password')], 'Les mots de passe ne correspondent pas')
-  })
-);
+// Define the validation schema using the imported rules
+const schema = {
+  firstName: (value) => required(value),
+  lastName: (value) => required(value),
+  email: (value) => required(value) && email(value),
+  password: (value) => 
+    required(value) && 
+    minLength(value, [8]) && 
+    hasUppercase(value) &&
+    hasLowercase(value) &&
+    hasDigit(value) &&
+    hasSpecialChar(value),
+  confirmPassword: (value, { form }) => {
+    if (!value) return 'This field is required';
+    return value === form.password ? true : 'Passwords must match';
+  },
+};
 
-const { errors } = useForm({ validationSchema: schema });
-
-const handleSubmit = async (values) => {
-  isSubmitting.value = true;
-  
+const handleRegister = async (values, { setErrors }) => {
   try {
-    await authService.register({
-      first_name: values.first_name,
-      last_name: values.last_name,
-      email: values.email,
-      password: values.password
-    });
-    
-    router.push('/login?message=registration_success');
+    await authStore.register(values);
+    // Redirect to login or a "check your email" page after successful registration
+    router.push('/login'); 
   } catch (error) {
-    console.error('Registration failed:', error);
-  } finally {
-    isSubmitting.value = false;
+    // Assuming the API returns a 400 with an error message
+    if (error.response && error.response.data.message) {
+      setErrors({ email: error.response.data.message });
+    } else {
+      setErrors({ email: 'An unexpected error occurred. Please try again.' });
+    }
   }
 };
 </script>
+
+<style scoped>
+/* Add some basic styling for the form */
+.registration-form-container {
+  max-width: 400px;
+  margin: 2rem auto;
+  padding: 2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+}
+.form-group {
+  margin-bottom: 1.5rem;
+}
+.form-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #cbd5e0;
+  border-radius: 0.25rem;
+}
+.error-message {
+  color: #e53e3e;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+.submit-button {
+  width: 100%;
+  padding: 0.75rem;
+  background-color: #4a5568;
+  color: white;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+.submit-button:disabled {
+  background-color: #a0aec0;
+  cursor: not-allowed;
+}
+</style>
