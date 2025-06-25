@@ -1,29 +1,24 @@
 from functools import wraps
-from flask import jsonify
+from flask import jsonify, request
 from flask_login import current_user
 from backend.services.audit_log_service import AuditLogService
+import re
 
-def admin_required(f):
-    """Ensures the user is authenticated and is an admin."""
+def staff_required(f):
+    """Ensures the user is an authenticated staff member (not B2C or B2B)."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.is_admin:
-            return jsonify({"error": "Admin access required"}), 403
+        if not current_user.is_authenticated or not current_user.is_staff:
+            return jsonify({"error": "Staff access required"}), 403
         return f(*args, **kwargs)
     return decorated_function
 
 def roles_required(*role_names):
-    """
-    Ensures the user has at least one of the specified roles.
-    Falls back to admin_required if no roles are provided.
-    """
+    """Ensures the user has at least one of the specified roles. Admins always pass."""
     def decorator(f):
         @wraps(f)
+        @staff_required # All role-based routes are for staff
         def decorated_function(*args, **kwargs):
-            if not current_user.is_authenticated:
-                return jsonify({"error": "Authentication required"}), 401
-            
-            # Admins have access to everything
             if current_user.is_admin:
                 return f(*args, **kwargs)
 
@@ -32,22 +27,14 @@ def roles_required(*role_names):
                 return jsonify({"error": f"Requires one of the following roles: {', '.join(role_names)}"}), 403
             return f(*args, **kwargs)
         return decorated_function
-    # If called as @roles_required with no roles, it's a mistake. Default to admin.
-    if not role_names:
-        return admin_required
     return decorator
 
-
 def permissions_required(*permission_names):
-    """
-    Ensures the user has ALL of the specified permissions.
-    """
+    """Ensures the user has ALL of the specified permissions. Admins always pass."""
     def decorator(f):
         @wraps(f)
+        @staff_required # All permission-based routes are for staff
         def decorated_function(*args, **kwargs):
-            if not current_user.is_authenticated:
-                 return jsonify({"error": "Authentication required"}), 401
-            
             if current_user.is_admin:
                 return f(*args, **kwargs)
 
@@ -58,30 +45,43 @@ def permissions_required(*permission_names):
         return decorated_function
     return decorator
 
+def _generate_action_name(func_name):
+    """Transforms a function name like 'soft_delete_user' into 'Soft Delete User'."""
+    return ' '.join(word.capitalize() for word in func_name.split('_'))
 
-def audit_admin_action(action_name):
+def audit_action(f):
     """
-    Decorator to automatically log an admin action to the audit log.
-    It inspects the request to create a meaningful log message.
+    Decorator to automatically log a staff action to the audit log.
+    It inspects the request and function name to create a meaningful log message.
     """
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            # Execute the function first to see if it succeeds
-            response = f(*args, **kwargs)
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Execute the function first to see if it succeeds
+        response_tuple = f(*args, **kwargs)
+        
+        # Flask returns a tuple (response, status_code) or a Response object
+        if isinstance(response_tuple, tuple):
+            response, status_code = response_tuple
+        else:
+            response = response_tuple
+            status_code = response.status_code
+
+        # Only log successful actions (2xx status codes)
+        if 200 <= status_code < 300:
+            action_name = _generate_action_name(f.__name__)
+            details = f"Route: {request.path} | Method: {request.method}"
             
-            # Only log successful actions (2xx status codes)
-            if 200 <= response.status_code < 300:
-                details = f"Route: {request.path} | Method: {request.method}"
-                # Add request data to details if available
-                if request.is_json and request.get_json():
-                    details += f" | Payload: {request.get_json()}"
-                
-                AuditLogService.create_log(
-                    admin_user_id=current_user.id,
-                    action=action_name,
-                    details=details
-                )
-            return response
-        return decorated_function
-    return decorator
+            payload = request.get_json(silent=True)
+            if payload:
+                # Avoid logging sensitive info like passwords
+                sensitive_keys = ['password', 'token', 'secret']
+                filtered_payload = {k: v for k, v in payload.items() if k not in sensitive_keys}
+                details += f" | Payload: {filtered_payload}"
+            
+            AuditLogService.create_log(
+                staff_user_id=current_user.id,
+                action=action_name,
+                details=details
+            )
+        return response, status_code
+    return decorated_function
