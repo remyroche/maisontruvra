@@ -1,113 +1,134 @@
-<!--
- * FILENAME: website/js/admin/views/ManageUsersView.vue
- * DESCRIPTION: View component for 'Manage Users', updated to use BaseDataTable.
- * UPDATED: Replaced the hardcoded table with the new reusable BaseDataTable component.
--->
 <template>
-  <AdminLayout>
-    <div class="space-y-6">
-      <header class="flex justify-between items-center">
-        <h1 class="text-3xl font-bold text-gray-800">Manage Users</h1>
-        <button @click="openAddUserModal" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
-          + Add User
-        </button>
-      </header>
-
-      <div v-if="userStore.isLoading && !userStore.users.length" class="text-center py-10">Loading users...</div>
-      <div v-else-if="userStore.error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" role="alert">
-        {{ userStore.error }}
-      </div>
-      
-      <BaseDataTable v-else :columns="userColumns" :data="userStore.users">
-        <!-- Custom cell rendering for 'role' -->
-        <template #cell(role)="{ value }">
-            <span class="bg-blue-200 text-blue-800 py-1 px-3 rounded-full text-xs font-medium">{{ value }}</span>
-        </template>
-        <!-- Custom cell rendering for 'is_verified' -->
-        <template #cell(is_verified)="{ value }">
-             <span :class="value ? 'text-green-600' : 'text-red-600'" class="font-bold">
-                  {{ value ? 'Yes' : 'No' }}
-             </span>
-        </template>
-        <!-- Custom cell rendering for 'actions' -->
-        <template #cell(actions)="{ item }">
-             <button @click="openEditUserModal(item)" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded text-xs mr-2">Edit</button>
-             <button @click="handleDeleteUser(item)" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs">Delete</button>
-        </template>
-      </BaseDataTable>
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Manage Users</h1>
+    
+    <div class="mb-4 flex justify-between">
+      <input 
+        type="text" 
+        v-model="searchQuery" 
+        placeholder="Search users..." 
+        class="border rounded p-2 w-1/3"
+      >
+      <button @click="openCreateModal" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+        Create User
+      </button>
     </div>
 
-    <!-- User Edit/Add Modal (no changes) -->
-    <Modal :show="isModalOpen" @close="closeModal">
-      <template #header><h2 class="text-2xl font-bold">{{ modalMode === 'add' ? 'Add New User' : 'Edit User' }}</h2></template>
-      <template #body><UserForm :initial-data="currentUser" @submit="handleFormSubmit" @cancel="closeModal"/></template>
-      <template #footer><div></div></template>
+    <div v-if="usersStore.isLoading" class="text-center">Loading...</div>
+    <div v-if="usersStore.error" class="text-red-500 bg-red-100 p-4 rounded">{{ usersStore.error }}</div>
+
+    <BaseDataTable
+      v-if="!usersStore.isLoading && filteredUsers.length"
+      :headers="headers"
+      :items="filteredUsers"
+    >
+      <template #item-is_active="{ item }">
+        <span :class="item.is_active ? 'text-green-500' : 'text-red-500'">
+          {{ item.is_active ? 'Yes' : 'No' }}
+        </span>
+      </template>
+      <template #item-is_frozen="{ item }">
+        <span :class="item.is_frozen ? 'text-blue-500' : 'text-gray-500'">
+          {{ item.is_frozen ? 'Yes' : 'No' }}
+        </span>
+      </template>
+      <template #item-actions="{ item }">
+        <button @click="openEditModal(item)" class="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+        <button @click="toggleFreeze(item)" class="mr-4" :class="item.is_frozen ? 'text-green-600 hover:text-green-900' : 'text-blue-600 hover:text-blue-900'">
+            {{ item.is_frozen ? 'Unfreeze' : 'Freeze' }}
+        </button>
+        <button @click="confirmDelete(item)" class="text-red-600 hover:text-red-900">Delete</button>
+      </template>
+    </BaseDataTable>
+    <div v-if="!usersStore.isLoading && !filteredUsers.length" class="text-center text-gray-500 mt-4">
+        No users found.
+    </div>
+
+    <!-- Modal for Create/Edit -->
+    <Modal :is-open="isModalOpen" @close="closeModal">
+        <h2 class="text-xl font-bold mb-4">{{ isEditing ? 'Edit User' : 'Create User' }}</h2>
+        <UserForm 
+            :user="selectedUser" 
+            @save="handleSave"
+            @cancel="closeModal"
+        />
     </Modal>
-  </AdminLayout>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useAdminUserStore } from '../../stores/adminUsers';
-import { useAdminNotificationStore } from '../../stores/adminNotifications';
+import { ref, onMounted, computed } from 'vue';
+import { useAdminUsersStore } from '@/js/stores/adminUsers';
+import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
+import Modal from '@/js/admin/components/Modal.vue';
+import UserForm from '@/js/admin/components/UserForm.vue';
 
-import AdminLayout from '../components/AdminLayout.vue';
-import BaseDataTable from '../components/ui/BaseDataTable.vue';
-import Modal from '../components/Modal.vue';
-import UserForm from '../components/UserForm.vue';
+const usersStore = useAdminUsersStore();
 
-const userStore = useAdminUserStore();
-const notificationStore = useAdminNotificationStore();
-
+const searchQuery = ref('');
 const isModalOpen = ref(false);
-const modalMode = ref('add');
-const currentUser = ref({});
+const isEditing = ref(false);
+const selectedUser = ref(null);
 
-const userColumns = [
-    { key: 'id', label: 'ID' },
-    { key: 'email', label: 'Email' },
-    { key: 'first_name', label: 'First Name' },
-    { key: 'role', label: 'Role' },
-    { key: 'is_verified', label: 'Verified'},
-    { key: 'actions', label: 'Actions', cellClass: 'text-right' },
+const headers = [
+  { text: 'Email', value: 'email' },
+  { text: 'Role', value: 'role.name' },
+  { text: 'Active', value: 'is_active' },
+  { text: 'Frozen', value: 'is_frozen' },
+  { text: 'Actions', value: 'actions', sortable: false },
 ];
 
-onMounted(() => { userStore.fetchUsers(); });
+onMounted(() => {
+  usersStore.fetchUsers();
+});
 
-const openAddUserModal = () => { /* ... no changes ... */ };
-const openEditUserModal = (user) => { /* ... no changes ... */ };
-const closeModal = () => { /* ... no changes ... */ };
-
-const handleFormSubmit = async (userData) => {
-  const isEdit = !!userData.id;
-  const success = isEdit
-    ? await userStore.updateUser(userData.id, userData)
-    : await userStore.createUser(userData);
-  
-  if (success) {
-    closeModal();
-    notificationStore.addNotification({
-        type: 'success',
-        title: `User ${isEdit ? 'Updated' : 'Created'}`,
-        message: `User ${userData.email} has been saved successfully.`,
-    });
-  } else {
-     notificationStore.addNotification({
-        type: 'error',
-        title: 'Save Failed',
-        message: userStore.error,
-    });
+const filteredUsers = computed(() => {
+  if (!searchQuery.value) {
+    return usersStore.users;
   }
+  return usersStore.users.filter(user => 
+    user.email.toLowerCase().includes(searchQuery.value.toLowerCase())
+  );
+});
+
+const openCreateModal = () => {
+    isEditing.value = false;
+    selectedUser.value = { email: '', password: '', role_id: null, is_active: true, is_frozen: false };
+    isModalOpen.value = true;
 };
 
-const handleDeleteUser = async (user) => {
-  if (confirm(`Are you sure you want to delete user ${user.email}?`)) {
-    const success = await userStore.deleteUser(user.id);
-    if(success) {
-        notificationStore.addNotification({ type: 'success', title: 'User Deleted', message: `User ${user.email} has been removed.`});
+const openEditModal = (user) => {
+    isEditing.value = true;
+    selectedUser.value = { ...user };
+    isModalOpen.value = true;
+};
+
+const closeModal = () => {
+    isModalOpen.value = false;
+    selectedUser.value = null;
+};
+
+const handleSave = async (userData) => {
+    if (isEditing.value) {
+        await usersStore.updateUser(userData.id, userData);
     } else {
-        notificationStore.addNotification({ type: 'error', title: 'Delete Failed', message: userStore.error });
+        await usersStore.createUser(userData);
     }
-  }
+    closeModal();
 };
+
+const toggleFreeze = (user) => {
+    if (user.is_frozen) {
+        usersStore.unfreezeUser(user.id);
+    } else {
+        usersStore.freezeUser(user.id);
+    }
+};
+
+const confirmDelete = (user) => {
+    if (window.confirm(`Are you sure you want to delete ${user.email}?`)) {
+        usersStore.deleteUser(user.id);
+    }
+};
+
 </script>
