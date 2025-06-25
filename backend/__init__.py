@@ -10,7 +10,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 from argon2 import PasswordHasher
-from .middleware import setup_middleware, RequestLoggingMiddleware, register_middleware
+from .middleware import setup_middleware, RequestLoggingMiddleware, check_staff_session
 from .inputsanitizer import InputSanitizer
 from backend.logger_and_error_handler import setup_logging, register_error_handlers
 from flask_login import user_logged_in, user_login_failed
@@ -83,7 +83,7 @@ def create_app(config_class=Config):
     register_error_handlers(app)
 
     # Register session management middleware
-    register_middleware(app)
+    check_staff_session(app)
 
     # Import and register blueprints
     from .routes.webhooks import webhooks_bp
