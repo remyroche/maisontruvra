@@ -12,7 +12,7 @@ import os
 from argon2 import PasswordHasher
 from .middleware import setup_middleware, RequestLoggingMiddleware
 from .inputsanitizer import InputSanitizer
-from .logger_and_error_handler import logging_and_error_handling
+from backend.logger_and_error_handler import setup_logging, register_error_handlers
 from flask_login import user_logged_in, user_login_failed
 from flask import request
 
@@ -80,7 +80,8 @@ def create_app(config_class=Config):
     
     # Loggin
     app.wsgi_app = RequestLoggingMiddleware(app.wsgi_app)
-    logging_and_error_handling(app)
+    setup_logging(app)
+    register_error_handlers(app)
     
     # Import and register blueprints
     from .routes.webhooks import webhooks_bp
