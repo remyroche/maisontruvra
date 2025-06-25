@@ -1,5 +1,6 @@
 from backend.database import db
 from .base import BaseModel
+from datetime import datetime
 
 class Inventory(BaseModel):
     __tablename__ = 'inventories'

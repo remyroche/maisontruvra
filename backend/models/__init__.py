@@ -7,13 +7,13 @@ from .product_models import Product, Category, Collection, Review, ProductImage
 from .order_models import Order, OrderItem, Invoice
 from .cart_models import Cart, CartItem
 from .b2b_models import B2BUser, B2BPartnershipRequest
-from .b2b_loyalty_models import LoyaltyTier # Corrected: Import LoyaltyTier
+from .b2b_loyalty_models import LoyaltyTier
 from .passport_models import ProductPassport, PassportEntry
 from .blog_models import BlogPost, BlogCategory
-from .newsletter_models import NewsletterSubscription
+from .newsletter_models import NewsletterSubscriber # Corrected: Import NewsletterSubscriber
 from .inventory_models import Inventory
 from .auth_models import TokenBlocklist
-from .audit_models import AuditLog
+from backend.services.audit_log_service import AuditLogService
 from .referral_models import B2BReferral
 from .request_models import GenericRequest
 from .utility_models import Setting
