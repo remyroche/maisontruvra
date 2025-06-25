@@ -1,15 +1,18 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.b2b_service import B2BService
+from backend.services.invoice_service import InvoiceService # Assuming this service exists
 from backend.auth.permissions import b2b_user_required
+import io
 from io import BytesIO
 from utils.sanitization import sanitize_input
 
-b2b_invoice_bp = Blueprint('b2b_invoice_bp', __name__, url_prefix='/api/b2b/invoices')
+invoice_bp = Blueprint('admin_invoice_routes', __name__, url_prefix='/api/admin/invoices')
 
 # GET a list of invoices for the current B2B user
-@b2b_invoice_bp.route('/', methods=['GET'])
+@invoice_bp.route('/', methods=['GET'])
 @b2b_user_required
+@roles_required ('Admin', 'Manager', 'Support')
 def get_invoices():
     """
     Get a paginated list of invoices for the currently authenticated B2B user.
@@ -36,6 +39,7 @@ def get_invoices():
 # GET a single invoice by ID
 @b2b_invoice_bp.route('/<int:invoice_id>', methods=['GET'])
 @b2b_user_required
+@roles_required ('Admin', 'Manager', 'Support')
 def get_invoice(invoice_id):
     """
     Get a single invoice by its ID.
