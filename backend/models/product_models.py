@@ -17,6 +17,7 @@ class Product(BaseModel, SoftDeleteMixin):
     reviews = db.relationship('Review', back_populates='product', cascade="all, delete-orphan")
     inventory = db.relationship('Inventory', back_populates='product', uselist=False, cascade="all, delete-orphan")
     passport = db.relationship('ProductPassport', back_populates='product', uselist=False, cascade="all, delete-orphan")
+    is_published = db.Column(db.Boolean, default=False, nullable=False)
 
     def to_public_dict(self, include_variants=False, include_reviews=False):
         """Public view of a product."""
