@@ -31,6 +31,7 @@ const ArchiveIcon = { template: `<svg fill="none" viewBox="0 0 24 24" stroke="cu
 const PhotographIcon = { template: `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>`};
 const TerminalIcon = { template: `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>`};
 
+  
 const navStructure = [
     { title: 'Main', links: [ 
         { name: 'Dashboard', path: '/admin', icon: HomeIcon },
@@ -52,6 +53,7 @@ const navStructure = [
         { name: 'Blog', path: '/admin/blog', icon: NewspaperIcon },
         { name: 'Newsletter', path: '/admin/newsletter', icon: MailIcon },
         { name: 'Loyalty', path: '/admin/loyalty', icon: GiftIcon },
+        { name: 'Blog', path: '/admin/blog', icon: GiftIcon },
     ]},
     { title: 'Accounts', links: [
         { name: 'B2C Users', path: '/admin/users', icon: UsersIcon },
@@ -63,7 +65,7 @@ const navStructure = [
         { name: 'Active Sessions', path: '/admin/sessions', icon: TerminalIcon },
         { name: 'Assets', path: '/admin/assets', icon: PhotographIcon },
         { name: 'Site Settings', path: '/admin/settings', icon: CogIcon },
-        { name: 'Audit Log', path: '/admin/audit-log', icon: FingerPrintIcon },
+        { name: 'Audit Log', path: '/admin/audit-log', icon: FingerPrintIcon },      
     ]}
 ];
 </script>
