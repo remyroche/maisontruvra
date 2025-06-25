@@ -21,11 +21,7 @@ class AuditLogService:
         :param details: A more detailed description of the event (e.g., 'Deleted user with email a@b.com').
         """
         try:
-            log_entry = AdminAuditLog(
-                admin_user_id=admin_user_id,
-                action=action,
-                details=details
-            )
+            log_entry = AdminAuditLog(admin_user_id=staff_user_id, action=action, details=details)
             db.session.add(log_entry)
             db.session.commit()
             current_app.logger.info(f"Audit log created: Admin {admin_user_id} -> {action}")
@@ -35,26 +31,35 @@ class AuditLogService:
 
 
     @staticmethod
-    def get_logs(admin_id=None):
+    def get_logs(page=1, per_page=20, date_filter=None):
         """
-        Retrieves audit log entries, optionally filtering by admin user.
-
-        :param admin_id: Optional ID of an admin to filter logs by.
-        :return: A list of audit log entries.
+        Retrieves paginated audit log entries, optionally filtering by date.
         """
         try:
             query = AdminAuditLog.query.join(User, AdminAuditLog.admin_user_id == User.id)\
                                      .options(db.joinedload(AdminAuditLog.admin_user))\
                                      .order_by(AdminAuditLog.timestamp.desc())
 
-            if admin_id:
-                query = query.filter(AdminAuditLog.admin_user_id == admin_id)
+            if date_filter:
+                try:
+                    # Expecting date in 'YYYY-MM-DD' format
+                    filter_date = datetime.strptime(date_filter, '%Y-%m-%d').date()
+                    query = query.filter(db.func.date(AdminAuditLog.timestamp) == filter_date)
+                except ValueError:
+                    # Ignore invalid date formats
+                    pass
 
-            logs = query.all()
-            return [log.to_dict() for log in logs]
+            paginated_logs = query.paginate(page=page, per_page=per_page, error_out=False)
+            
+            return {
+                "logs": [log.to_dict() for log in paginated_logs.items],
+                "total": paginated_logs.total,
+                "pages": paginated_logs.pages,
+                "current_page": paginated_logs.page,
+                "has_next": paginated_logs.has_next,
+                "has_prev": paginated_logs.has_prev,
+            }
         except Exception as e:
             current_app.logger.error(f"Failed to retrieve audit logs: {e}")
-            return []
-
-
+            return {"logs": [], "total": 0, "pages": 0}
 
