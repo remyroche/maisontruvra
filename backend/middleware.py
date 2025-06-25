@@ -1,10 +1,12 @@
 from functools import wraps
 from flask import request, jsonify, g, session, current_app, redirect, Flask # Added redirect, Flask type hint
-from flask_login import current_user # Used for payload size limit
 from flask_jwt_extended import get_jwt_identity # For JWT identity if needed in early middleware
 import logging
 import uuid
-import time # For reauthentication logic
+from datetime import datetime, timedelta
+from functools import wraps
+from flask_login import current_user, logout_user
+
 
 # New imports for middleware functionality
 from flask_limiter import Limiter
@@ -38,6 +40,53 @@ compress = Compress()
 
 
 # --- Middleware Definition Functions ---
+
+
+def register_middleware(app):
+    """Register middleware functions with the Flask app."""
+
+    @app.before_request
+    def before_request_session_check():
+        """
+        Checks session validity before each request for authenticated users.
+        - Checks for inactivity timeout based on role.
+        - Checks for maximum session lifetime.
+        """
+        if current_user.is_authenticated:
+            now = datetime.utcnow()
+            
+            # Check for last activity timestamp in session
+            last_activity_str = session.get('last_activity_time')
+            if last_activity_str:
+                last_activity = datetime.fromisoformat(last_activity_str)
+                
+                # Determine the appropriate timeout duration
+                if current_user.role.name.lower() == 'admin':
+                    timeout_duration = current_app.config['ADMIN_INACTIVITY_TIMEOUT']
+                else:
+                    timeout_duration = current_app.config['STAFF_INACTIVITY_TIMEOUT']
+
+                # Check for inactivity
+                if now - last_activity > timeout_duration:
+                    logout_user()
+                    return jsonify({"error": "Session timed out due to inactivity."}), 401
+
+            # Check for maximum session lifetime (re-authentication)
+            login_time_str = session.get('login_time')
+            if login_time_str:
+                login_time = datetime.fromisoformat(login_time_str)
+                max_lifetime = current_app.config['SESSION_MAX_LIFETIME']
+                
+                if now - login_time > max_lifetime:
+                    logout_user()
+                    return jsonify({"error": "Session has expired. Please log in again."}), 401
+            else:
+                # If there's no login time, set it now
+                session['login_time'] = now.isoformat()
+
+            # Update last activity time for the current request
+            session['last_activity_time'] = now.isoformat()
+
 
 def mfa_check_middleware(app):
     """
