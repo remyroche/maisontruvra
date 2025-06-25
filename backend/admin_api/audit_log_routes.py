@@ -10,9 +10,9 @@ audit_log_bp = Blueprint('admin_audit_log_routes', __name__, url_prefix='/api/ad
 @roles_required ('Admin', 'Dev', 'Manager')
 @admin_required
 def get_audit_logs():
-    """
-    Retrieves audit log entries with optional filtering.
-    """
-    admin_id = request.args.get('admin_id')
-    logs = AuditLogService.get_logs(admin_id=admin_id)
-    return jsonify([log.to_dict() for log in logs])
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    date_filter = request.args.get('date', None, type=str)
+    
+    logs_data = AuditLogService.get_logs(page=page, per_page=per_page, date_filter=date_filter)
+    return jsonify(logs_data)
