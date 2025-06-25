@@ -11,6 +11,27 @@ from flask import current_app
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
 
+def _validate_password(password):
+    """
+    Validates a password against the policy defined in the config.
+    Raises InvalidPasswordException if the policy is not met.
+    """
+    errors = []
+    if len(password) < current_app.config.get('PASSWORD_MIN_LENGTH', 8):
+        errors.append(f"Password must be at least {current_app.config['PASSWORD_MIN_LENGTH']} characters long.")
+    if current_app.config.get('PASSWORD_REQUIRE_LOWERCASE') and not re.search(r'[a-z]', password):
+        errors.append("Password must contain at least one lowercase letter.")
+    if current_app.config.get('PASSWORD_REQUIRE_UPPERCASE') and not re.search(r'[A-Z]', password):
+        errors.append("Password must contain at least one uppercase letter.")
+    if current_app.config.get('PASSWORD_REQUIRE_DIGIT') and not re.search(r'\d', password):
+        errors.append("Password must contain at least one digit.")
+    if current_app.config.get('PASSWORD_REQUIRE_SPECIAL') and not re.search(r'[\W_]', password):
+        errors.append("Password must contain at least one special character.")
+
+    if errors:
+        # We join errors into a single string for the exception message.
+        raise InvalidPasswordException("Password validation failed: " + " ".join(errors))
+
 class AuthService:
     @staticmethod
     def get_token_serializer(salt='default'):
@@ -69,6 +90,7 @@ class AuthService:
         if not user or not new_password:
             raise ServiceError("User and new password are required.")
         try:
+            _validate_password(new_password)
             user.set_password(new_password)
             db.session.commit()
             current_app.logger.info(f"Password reset successfully for user {user.email}")
@@ -105,7 +127,9 @@ class AuthService:
         # Check if user exists
         if User.query.filter_by(email=email).first():
             raise ValidationException("User with this email already exists")
-            
+
+        _validate_password(user_data['password'])
+
         # Create user
         user = User(
             email=email,
