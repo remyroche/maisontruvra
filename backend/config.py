@@ -24,6 +24,18 @@ class Config:
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
     USE_JSON_LOGS = os.environ.get('USE_JSON_LOGS', 'false').lower() in ['true', '1']
 
+    # --- IMPLEMENTATION: File Upload Validation ---
+    # Max file size: 25 MB
+    MAX_CONTENT_LENGTH = 25 * 1024 * 1024
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf'}
+
+    # --- IMPLEMENTATION: Password Policy ---
+    PASSWORD_MIN_LENGTH = 8
+    PASSWORD_REQUIRE_UPPERCASE = True
+    PASSWORD_REQUIRE_LOWERCASE = True
+    PASSWORD_REQUIRE_DIGIT = True
+    PASSWORD_REQUIRE_SPECIAL = False
+
     # --- Celery Configuration ---
     # The broker URL specifies the connection to your message broker instance (Redis).
     # Celery uses this to send and receive messages for background tasks.
