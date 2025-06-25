@@ -1,30 +1,25 @@
-/*
- * FILENAME: website/js/stores/adminAuditLog.js
- * DESCRIPTION: Pinia store for viewing the admin audit log.
- * UPDATED: Fully implemented with a fetch action.
- */
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import adminApiClient from '../common/adminApiClient';
+import apiClient from '@/js/common/adminApiClient';
 
-export const useAdminAuditLogStore = defineStore('adminAuditLog', () => {
-    const logs = ref([]);
-    const isLoading = ref(false);
-    const error = ref(null);
-
-    async function fetchLogs() {
-        isLoading.value = true;
-        error.value = null;
-        try {
-            const response = await adminApiClient.get('/audit-log');
-            logs.value = response.data.logs;
-        } catch (err) {
-            error.value = 'Failed to fetch audit logs.';
-            console.error(err);
-        } finally {
-            isLoading.value = false;
-        }
-    }
-    
-    return { logs, isLoading, error, fetchLogs };
+export const useAdminAuditLogStore = defineStore('adminAuditLog', {
+  state: () => ({
+    logs: [],
+    isLoading: false,
+    error: null,
+  }),
+  actions: {
+    async fetchLogs(filters = {}) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const response = await apiClient.get('/audit-log', { params: filters });
+        this.logs = response.data;
+      } catch (e) {
+        this.error = 'Failed to fetch audit logs.';
+        console.error(this.error, e);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+  },
 });
