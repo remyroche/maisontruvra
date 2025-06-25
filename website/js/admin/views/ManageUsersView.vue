@@ -97,7 +97,7 @@ const filteredUsers = computed(() => {
 
 const openCreateModal = () => {
     isEditing.value = false;
-    selectedUser.value = { email: '', password: '', role_id: null, is_active: true, is_frozen: false };
+    selectedUser.value = { email: '', password: '', role_id: null, is_active: true };
     isModalOpen.value = true;
 };
 
@@ -113,24 +113,12 @@ const closeModal = () => {
 };
 
 const handleSave = async (userData) => {
-    const originalFrozenState = selectedUser.value?.is_frozen;
-
     if (isEditing.value) {
         await usersStore.updateUser(userData.id, userData);
-        // If the frozen state was changed in the form, call the specific endpoint
-        if (userData.is_frozen !== originalFrozenState) {
-            if (userData.is_frozen) {
-                await usersStore.freezeUser(userData.id);
-            } else {
-                await usersStore.unfreezeUser(userData.id);
-            }
-        }
     } else {
         await usersStore.createUser(userData);
     }
     closeModal();
-    // Refresh the entire list to get the latest state
-    await usersStore.fetchUsers();
 };
 
 const toggleFreeze = (user) => {
