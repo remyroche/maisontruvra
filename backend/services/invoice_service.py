@@ -13,6 +13,66 @@ class InvoiceService:
     A unified service to handle invoice generation for both B2B and B2C orders.
     """
 
+class InvoiceService:
+    @staticmethod
+    def generate_pdf(order_id):
+        """
+        Generates a PDF for a given order by passing a full context
+        dictionary to the relevant B2C or B2B template.
+        """
+        logger.info(f"Starting PDF generation for order_id: {order_id}")
+        
+        order = Order.query.options(db.joinedload(Order.user)).get(order_id)
+        if not order:
+            logger.error(f"Could not generate invoice: Order {order_id} not found.")
+            raise ValueError(f"Order {order_id} not found")
+
+        invoice = Invoice.query.filter_by(order_id=order.id).first()
+        if not invoice:
+            logger.error(f"Could not generate invoice: Invoice record for Order {order_id} not found.")
+            raise ValueError(f"Invoice for Order {order_id} not found")
+
+        # --- IMPLEMENTATION: Build a comprehensive context dictionary ---
+        template_name = 'non-email/b2c_invoice.html'
+        context = {
+            'order': order,
+            'invoice': invoice,
+            'customer_name': f"{order.user.first_name} {order.user.last_name}",
+            'billing_address': order.billing_address, # Assuming this relationship exists
+            'shipping_address': order.shipping_address # Assuming this relationship exists
+        }
+
+        # If the user is B2B, add B2B-specific details to the context
+        if order.user.is_b2b:
+            template_name = 'non-email/b2b_invoice.html'
+            b2b_profile = B2BProfile.query.filter_by(user_id=order.user.id).first()
+            if b2b_profile:
+                context['company_name'] = b2b_profile.company_name
+                context['vat_number'] = b2b_profile.vat_number
+
+        try:
+            # Render the correct template with the full context
+            html_string = render_template(template_name, **context)
+            
+            # Use a library like WeasyPrint to convert the HTML to PDF
+            pdf_file = HTML(string=html_string).write_pdf()
+            
+            # Save the PDF (e.g., to a cloud storage bucket)
+            filename = f"invoices/invoice-{invoice.invoice_number}.pdf"
+            # cloud_storage.save(pdf_file, filename) # Real implementation
+            
+            invoice.pdf_url = filename
+            invoice.status = 'generated'
+            db.session.commit()
+
+            logger.info(f"PDF generation for invoice {invoice.invoice_number} completed. Saved to {filename}")
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"An error occurred during PDF generation for order {order_id}: {e}", exc_info=True)
+            raise
+
     @staticmethod
     def _generate_invoice_number(prefix: str = "INV") -> str:
         """Generates a unique invoice number with a given prefix (e.g., INV or RCT)."""
