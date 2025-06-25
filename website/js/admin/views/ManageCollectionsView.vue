@@ -1,116 +1,64 @@
-<!--
- * FILENAME: website/js/admin/views/ManageCollectionsView.vue
- * DESCRIPTION: View for managing product collections, now fully implemented.
--->
 <template>
-  <AdminLayout>
-    <div class="space-y-6">
-      <header class="flex justify-between items-center">
-        <h1 class="text-3xl font-bold text-gray-800">Manage Collections</h1>
-        <button @click="openAddModal" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
-          + Add Collection
-        </button>
-      </header>
-
-      <div v-if="collectionStore.isLoading && !collectionStore.collections.length" class="text-center py-10">Loading collections...</div>
-      <div v-else-if="collectionStore.error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" role="alert">
-        {{ collectionStore.error }}
+  <div>
+    <h1 class="text-2xl font-bold mb-4">Manage Product Collections</h1>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div class="md:col-span-2">
+         <BaseDataTable :headers="headers" :items="collectionsStore.collections">
+             <template #item-actions="{ item }">
+                 <button @click="openModal(item)" class="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+                 <button @click="deleteCollection(item.id)" class="text-red-600 hover:text-red-900">Delete</button>
+             </template>
+        </BaseDataTable>
       </div>
-      
-      <BaseDataTable v-else :columns="columns" :data="collectionStore.collections">
-        <template #cell(is_active)="{ value }">
-             <span :class="value ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" 
-                   class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
-                  {{ value ? 'Active' : 'Inactive' }}
-             </span>
-        </template>
-        <template #cell(actions)="{ item }">
-             <button @click="openEditModal(item)" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded text-xs mr-2">Edit</button>
-             <button @click="handleDelete(item)" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs">Delete</button>
-        </template>
-      </BaseDataTable>
+      <div>
+        <h2 class="text-xl font-bold mb-4">{{ isEditing ? 'Edit Collection' : 'New Collection' }}</h2>
+        <div class="bg-white p-4 rounded shadow">
+          <CollectionForm :collection="selectedCollection" @save="saveCollection" :key="formKey" />
+        </div>
+      </div>
     </div>
-
-    <!-- Add/Edit Modal -->
-    <Modal :show="isModalOpen" @close="closeModal">
-      <template #header>
-        <h2 class="text-2xl font-bold">{{ isEditing ? 'Edit Collection' : 'Add New Collection' }}</h2>
-      </template>
-      <template #body>
-        <CollectionForm :initial-data="currentItem" @submit="handleSubmit" @cancel="closeModal" />
-      </template>
-      <template #footer><div></div></template>
-    </Modal>
-  </AdminLayout>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { useAdminCollectionStore } from '../../stores/adminCollections';
-import { useAdminNotificationStore } from '../../stores/adminNotifications';
+import { ref, onMounted } from 'vue';
+import { useAdminCollectionsStore } from '@/js/stores/adminCollections';
+import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
+import CollectionForm from '@/js/admin/components/CollectionForm.vue';
 
-import AdminLayout from '../components/AdminLayout.vue';
-import BaseDataTable from '../components/ui/BaseDataTable.vue';
-import Modal from '../components/Modal.vue';
-import CollectionForm from '../components/CollectionForm.vue';
+const collectionsStore = useAdminCollectionsStore();
+const isEditing = ref(false);
+const selectedCollection = ref({ name: '', description: '' });
+const formKey = ref(0);
 
-const collectionStore = useAdminCollectionStore();
-const notificationStore = useAdminNotificationStore();
-
-const isModalOpen = ref(false);
-const currentItem = ref({});
-const isEditing = computed(() => !!currentItem.value.id);
-
-const columns = [
-    { key: 'id', label: 'ID' },
-    { key: 'name', label: 'Name' },
-    { key: 'description', label: 'Description' },
-    { key: 'is_active', label: 'Status' },
-    { key: 'actions', label: 'Actions', cellClass: 'text-right' },
+const headers = [
+    { text: 'Name', value: 'name' },
+    { text: 'Description', value: 'description' },
+    { text: 'Actions', value: 'actions' },
 ];
 
-onMounted(() => {
-  collectionStore.fetchCollections();
-});
+onMounted(() => collectionsStore.fetchCollections());
 
-const openAddModal = () => {
-  currentItem.value = { name: '', description: '', is_active: true };
-  isModalOpen.value = true;
+const openModal = (collection) => {
+    isEditing.value = true;
+    selectedCollection.value = { ...collection };
+    formKey.value++;
 };
 
-const openEditModal = (item) => {
-  currentItem.value = JSON.parse(JSON.stringify(item));
-  isModalOpen.value = true;
-};
-
-const closeModal = () => {
-  isModalOpen.value = false;
-};
-
-const handleSubmit = async (data) => {
-  const success = isEditing.value
-    ? await collectionStore.updateCollection(data.id, data)
-    : await collectionStore.createCollection(data);
-  
-  if (success) {
-    closeModal();
-    notificationStore.addNotification({
-        type: 'success',
-        title: `Collection ${isEditing.value ? 'Updated' : 'Created'}`,
-    });
-  } else {
-     notificationStore.addNotification({ type: 'error', title: 'Save Failed', message: collectionStore.error });
-  }
-};
-
-const handleDelete = async (item) => {
-  if (confirm(`Are you sure you want to delete collection "${item.name}"?`)) {
-    const success = await collectionStore.deleteCollection(item.id);
-    if(success) {
-        notificationStore.addNotification({ type: 'success', title: 'Collection Deleted' });
+const saveCollection = async (data) => {
+    if(isEditing.value) {
+        await collectionsStore.updateCollection(selectedCollection.value.id, data);
     } else {
-        notificationStore.addNotification({ type: 'error', title: 'Delete Failed', message: collectionStore.error });
+        await collectionsStore.createCollection(data);
     }
-  }
+    isEditing.value = false;
+    selectedCollection.value = { name: '', description: '' };
+    formKey.value++;
+};
+
+const deleteCollection = (id) => {
+    if(confirm('Are you sure? This will not delete the products within it.')) {
+        collectionsStore.deleteCollection(id);
+    }
 };
 </script>
