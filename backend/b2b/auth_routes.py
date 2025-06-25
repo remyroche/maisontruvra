@@ -4,8 +4,34 @@ from backend.utils.sanitization import sanitize_input
 from ..services.auth_service import AuthService
 from ..services.exceptions import ServiceError
 from ..models import db, User
+from backend.auth.permissions import admin_required, staff_required
+from ..utils.decorators import log_admin_action
 
 b2b_auth_bp = Blueprint('b2b_auth_bp', __name__, url_prefix='/api/b2b/auth')
+
+
+@admin_auth_bp.route('/reauthenticate', methods=['POST'])
+@staff_required
+@admin_required # Ensures a user must exist to even attempt re-auth
+def reauthenticate():
+    """
+    Re-authenticates an existing session after a timeout.
+    """
+    data = request.get_json()
+    password = data.get('password')
+    
+    # Verify password against the currently logged-in user
+    if not current_user.check_password(password):
+        return jsonify({"error": "Invalid password"}), 401
+
+    # On success, reset the session timers
+    now = datetime.utcnow()
+    session['login_time'] = now.isoformat()
+    session['last_activity_time'] = now.isoformat()
+    session.pop('reauth_needed', None) # Remove the re-auth flag
+    
+    return jsonify({"message": "Re-authentication successful."})
+
 
 @b2b_auth_bp.route('/forgot-password', methods=['POST'])
 def b2b_forgot_password():
