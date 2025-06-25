@@ -1,12 +1,12 @@
 <template>
   <div>
-    <h1 class="text-2xl font-bold mb-4">Manage Users</h1>
+    <h1 class="text-2xl font-bold mb-4">Manage Products</h1>
     
     <div class="mb-4 flex justify-between items-center">
       <input 
         type="text" 
         v-model="searchQuery" 
-        placeholder="Search users by email..." 
+        placeholder="Search by name or SKU..." 
         class="border rounded p-2 w-1/3"
       >
       <div class="flex items-center space-x-4">
@@ -15,18 +15,18 @@
             Show Deleted
         </label>
         <button @click="openCreateModal" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
-          Create User
+          Add Product
         </button>
       </div>
     </div>
 
-    <div v-if="usersStore.isLoading" class="text-center p-4">Loading users...</div>
-    <div v-if="usersStore.error" class="text-red-500 bg-red-100 p-4 rounded">{{ usersStore.error }}</div>
+    <div v-if="productsStore.isLoading" class="text-center p-4">Loading products...</div>
+    <div v-if="productsStore.error" class="text-red-500 bg-red-100 p-4 rounded">{{ productsStore.error }}</div>
 
     <BaseDataTable
-      v-if="!usersStore.isLoading && filteredUsers.length"
+      v-if="!productsStore.isLoading && filteredProducts.length"
       :headers="headers"
-      :items="filteredUsers"
+      :items="filteredProducts"
     >
         <template #row="{ item, children }">
             <tr :class="{ 'bg-red-50 text-gray-500 italic': item.is_deleted }">
@@ -36,75 +36,77 @@
             </tr>
         </template>
         
-        <template #item-email="{ item }">
-            <span>{{ item.email }}</span>
+        <template #item-price="{ item }">
+            <span>${{ item.price.toFixed(2) }}</span>
+        </template>
+        <template #item-is_published="{ item }">
+            <span :class="item.is_published ? 'text-green-500' : 'text-gray-500'">
+            {{ item.is_published ? 'Published' : 'Draft' }}
+            </span>
             <span v-if="item.is_deleted" class="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-red-200 text-red-800">Deleted</span>
         </template>
-
         <template #item-actions="{ item }">
             <div class="flex items-center space-x-2">
                 <button v-if="!item.is_deleted" @click="openEditModal(item)" class="text-indigo-600 hover:text-indigo-900 text-sm">Edit</button>
                 <button v-if="!item.is_deleted" @click="confirmDelete(item, 'soft')" class="text-yellow-600 hover:text-yellow-900 text-sm">Soft Delete</button>
-                <button v-if="item.is_deleted" @click="restoreUser(item.id)" class="text-green-600 hover:text-green-900 text-sm">Restore</button>
-                <button v-if="canHardDelete" @click="confirmDelete(item, 'hard')" class="text-red-600 hover:text-red-900 text-sm">Hard Delete</button>
+                <button v-if="item.is_deleted" @click="restoreProduct(item.id)" class="text-green-600 hover:text-green-900 text-sm">Restore</button>
+                <button @click="confirmDelete(item, 'hard')" class="text-red-600 hover:text-red-900 text-sm">Hard Delete</button>
             </div>
         </template>
     </BaseDataTable>
-    
-    <div v-if="!usersStore.isLoading && !filteredUsers.length" class="text-center text-gray-500 mt-8">
-        No users found.
+    <div v-if="!productsStore.isLoading && !filteredProducts.length" class="text-center text-gray-500 mt-8">
+        No products found.
     </div>
 
     <Modal :is-open="isModalOpen" @close="closeModal">
-      <h2 class="text-xl font-bold mb-4">{{ isEditing ? 'Edit User' : 'Create User' }}</h2>
-      <UserForm :user="selectedUser" @save="handleSave" @cancel="closeModal"/>
+        <h2 class="text-xl font-bold mb-4">{{ isEditing ? 'Edit Product' : 'Create New Product' }}</h2>
+        <ProductForm 
+            :product="selectedProduct" 
+            @save="handleSaveProduct"
+            @cancel="closeModal"
+        />
     </Modal>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { useAdminUsersStore } from '@/js/stores/adminUsers';
-import { useAdminAuthStore } from '@/js/stores/adminAuth';
+import { useAdminProductsStore } from '@/js/stores/adminProducts';
 import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
 import Modal from '@/js/admin/components/Modal.vue';
-import UserForm from '@/js/admin/components/UserForm.vue';
+import ProductForm from '@/js/admin/components/ProductForm.vue';
 
-const usersStore = useAdminUsersStore();
-const authStore = useAdminAuthStore();
+const productsStore = useAdminProductsStore();
 
 const searchQuery = ref('');
 const includeDeleted = ref(false);
 const isModalOpen = ref(false);
 const isEditing = ref(false);
-const selectedUser = ref(null);
+const selectedProduct = ref(null);
 
 const headers = [
-  { text: 'Email', value: 'email' },
-  { text: 'Role', value: 'role.name' },
-  { text: 'Active', value: 'is_active' },
-  { text: 'Frozen', value: 'is_frozen' },
+  { text: 'Name', value: 'name' },
+  { text: 'SKU', value: 'sku' },
+  { text: 'Price', value: 'price' },
+  { text: 'Category', value: 'category.name' },
+  { text: 'Status', value: 'is_published' },
   { text: 'Actions', value: 'actions', sortable: false },
 ];
 
-const canHardDelete = computed(() => {
-  if (!authStore.user || !authStore.user.roles) return false;
-  const userRoles = authStore.user.roles.map(r => r.name);
-  return userRoles.includes('Admin') || userRoles.includes('Deleter');
-});
-
 const fetchData = () => {
-  usersStore.fetchUsers({ include_deleted: includeDeleted.value });
+    productsStore.fetchProducts({ include_deleted: includeDeleted.value });
 };
 
 onMounted(fetchData);
 
-const filteredUsers = computed(() => {
+const filteredProducts = computed(() => {
   if (!searchQuery.value) {
-    return usersStore.users;
+    return productsStore.products;
   }
-  return usersStore.users.filter(user => 
-    user.email.toLowerCase().includes(searchQuery.value.toLowerCase())
+  const lowerCaseQuery = searchQuery.value.toLowerCase();
+  return productsStore.products.filter(product => 
+    product.name.toLowerCase().includes(lowerCaseQuery) ||
+    (product.sku && product.sku.toLowerCase().includes(lowerCaseQuery))
   );
 });
 
@@ -113,43 +115,43 @@ const getNestedValue = (item, path) => {
 }
 
 const openCreateModal = () => {
-  isEditing.value = false;
-  selectedUser.value = { email: '', password: '', role_id: null, is_active: true };
-  isModalOpen.value = true;
+    isEditing.value = false;
+    selectedProduct.value = { name: '', description: '', price: 0, sku: '', category_id: null, collection_id: null, is_published: true, images: [] };
+    isModalOpen.value = true;
 };
 
-const openEditModal = (user) => {
-  isEditing.value = true;
-  selectedUser.value = { ...user };
-  isModalOpen.value = true;
+const openEditModal = (product) => {
+    isEditing.value = true;
+    selectedProduct.value = { ...product };
+    isModalOpen.value = true;
 };
 
 const closeModal = () => {
-  isModalOpen.value = false;
-  selectedUser.value = null;
+    isModalOpen.value = false;
+    selectedProduct.value = null;
 };
 
-const handleSave = async (userData) => {
-  if (isEditing.value) {
-    await usersStore.updateUser(userData.id, userData);
-  } else {
-    await usersStore.createUser(userData);
-  }
-  closeModal();
-  fetchData();
+const handleSaveProduct = async (productData) => {
+    if (isEditing.value) {
+        await productsStore.updateProduct(productData.id, productData);
+    } else {
+        await productsStore.createProduct(productData);
+    }
+    closeModal();
+    fetchData();
 };
 
-const confirmDelete = (user, type) => {
-  const action = type === 'soft' ? 'soft-delete' : 'PERMANENTLY DELETE';
-  if (window.confirm(`Are you sure you want to ${action} ${user.email}?`)) {
-    const deleteAction = type === 'soft' ? usersStore.softDeleteUser : usersStore.hardDeleteUser;
-    deleteAction(user.id).then(fetchData);
-  }
+const confirmDelete = (product, type) => {
+    const action = type === 'soft' ? 'soft-delete' : 'PERMANENTLY DELETE';
+    if (window.confirm(`Are you sure you want to ${action} the product "${product.name}"?`)) {
+        const deleteAction = type === 'soft' ? productsStore.softDeleteProduct : productsStore.hardDeleteProduct;
+        deleteAction(product.id).then(fetchData);
+    }
 };
 
-const restoreUser = (userId) => {
-  if (window.confirm('Are you sure you want to restore this user?')) {
-    usersStore.restoreUser(userId).then(fetchData);
-  }
+const restoreProduct = (productId) => {
+    if (window.confirm('Are you sure you want to restore this product?')) {
+        productsStore.restoreProduct(productId).then(fetchData);
+    }
 };
 </script>
