@@ -4,8 +4,7 @@ from backend.utils.sanitization import sanitize_input
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 
-
-product_management_bp = Blueprint('product_management_bp', __name__, url_prefix='/admin/products')
+product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
 
 # CREATE a new product
 @product_management_bp.route('/', methods=['POST'])
@@ -38,8 +37,9 @@ def create_product():
         return jsonify(status="error", message="An internal error occurred while creating the product."), 500
 
 @admin_api_bp.route('/inventory/<int:inventory_id>', methods=['PUT'])
+@permissions_required('MANAGE_PRODUCTS')
 @log_admin_action
-@roles_required ('Admin', 'Manager')
+@roles_required ('Admin', 'Manager', 'Farmer')
 @admin_required
 def update_inventory(inventory_id):
     """
@@ -82,7 +82,7 @@ def update_inventory(inventory_id):
 @product_management_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
 @log_admin_action
-@roles_required ('Admin', 'Manager', 'Support')
+@roles_required ('Admin', 'Staff')
 @admin_required
 def get_products():
     """
@@ -165,4 +165,92 @@ def delete_product(product_id):
     except Exception as e:
         # Log the error e
         return jsonify(status="error", message="An internal error occurred while deleting the product."), 500
+
+
+
+# Product Category Routes
+@product_management_bp.route('/product-categories', methods=['GET'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Staff')
+@admin_required
+def get_product_categories():
+    categories = ProductService.get_all_categories()
+    return jsonify([category.to_dict() for category in categories])
+
+@product_management_bp.route('/product-categories', methods=['POST'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def create_product_category():
+    data = request.get_json()
+    category = ProductService.create_category(data)
+    return jsonify(category.to_dict()), 201
+
+@product_management_bp.route('/product-categories/<int:category_id>', methods=['PUT'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def update_product_category(category_id):
+    data = request.get_json()
+    category = ProductService.update_category(category_id, data)
+    if not category:
+        return jsonify({"error": "Product category not found"}), 404
+    return jsonify(category.to_dict())
+
+@product_management_bp.route('/product-categories/<int:category_id>', methods=['DELETE'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def delete_product_category(category_id):
+    if ProductService.delete_category(category_id):
+        return jsonify({"message": "Product category deleted successfully"})
+    return jsonify({"error": "Product category not found"}), 404
+
+
+
+# Product Collection Routes
+@product_management_bp.route('/product-collections', methods=['GET'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Staff')
+@admin_required
+def get_product_collections():
+    collections = ProductService.get_all_collections()
+    return jsonify([collection.to_dict() for collection in collections])
+
+@product_management_bp.route('/product-collections', methods=['POST'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def create_product_collection():
+    data = request.get_json()
+    collection = ProductService.create_collection(data)
+    return jsonify(collection.to_dict()), 201
+
+@product_management_bp.route('/product-collections/<int:collection_id>', methods=['PUT'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def update_product_collection(collection_id):
+    data = request.get_json()
+    collection = ProductService.update_collection(collection_id, data)
+    if not collection:
+        return jsonify({"error": "Product collection not found"}), 404
+    return jsonify(collection.to_dict())
+
+@product_management_bp.route('/product-collections/<int:collection_id>', methods=['DELETE'])
+@permissions_required('MANAGE_PRODUCTS')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def delete_product_collection(collection_id):
+    if ProductService.delete_collection(collection_id):
+        return jsonify({"message": "Product collection deleted successfully"})
+    return jsonify({"error": "Product collection not found"}), 404
 
