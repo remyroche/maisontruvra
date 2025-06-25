@@ -10,7 +10,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 from argon2 import PasswordHasher
-from .middleware import setup_middleware, RequestLoggingMiddleware
+from .middleware import setup_middleware, RequestLoggingMiddleware, register_middleware
 from .inputsanitizer import InputSanitizer
 from backend.logger_and_error_handler import setup_logging, register_error_handlers
 from flask_login import user_logged_in, user_login_failed
@@ -77,12 +77,14 @@ def create_app(config_class=Config):
         security_logger.warning(f"Unauthorized access attempt to a protected endpoint from IP: {request.remote_addr}")
 
 
-    
     # Loggin
     app.wsgi_app = RequestLoggingMiddleware(app.wsgi_app)
     setup_logging(app)
     register_error_handlers(app)
-    
+
+    # Register session management middleware
+    register_middleware(app)
+
     # Import and register blueprints
     from .routes.webhooks import webhooks_bp
     app.register_blueprint(webhooks_bp, url_prefix='/api/webhooks')
@@ -206,5 +208,9 @@ def create_app(config_class=Config):
     # Security at middleware level: CSRF, sanitization, HTTPS, ...
     setup_middleware(app)
     init_app_middleware(app)
-    
+
+    @app.before_request
+    def make_session_permanent():
+        session.permanent = True
+
     return app
