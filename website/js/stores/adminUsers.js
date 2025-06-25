@@ -1,19 +1,5 @@
-/*
- * FILENAME: website/js/stores/adminUsers.js
- * DESCRIPTION: Pinia store for managing user data in the Admin Portal.
- *
- * This store handles all state and operations for the 'Manage Users' page,
- * including fetching the user list and performing CRUD operations. It demonstrates
- * loading and error state management for a specific feature.
- *
- * UPDATED: Added `createUser` and `deleteUser` actions to complete the
- * CRUD functionality for the user management feature.
- */
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import adminApiClient from '../common/adminApiClient';
-import { useAdminAuthStore } from './adminAuth';
-
+import apiClient from '@/js/common/adminApiClient';
 
 export const useAdminUsersStore = defineStore('adminUsers', {
   state: () => ({
@@ -96,28 +82,38 @@ export const useAdminUsersStore = defineStore('adminUsers', {
         }
     },
 
-    // These actions are now in the adminSystem store, but we can keep wrappers for convenience
     async freezeUser(userId) {
-        const systemStore = useAdminSystemStore();
-        await systemStore.freezeUser(userId);
-        await this.fetchUsers();
+        this.isLoading = true;
+        this.error = null;
+        try {
+            // This now calls the correct endpoint directly
+            await apiClient.post(`/sessions/user/${userId}/freeze`);
+            // Update the user's state in the list without a full refetch for better UX
+            const user = this.users.find(u => u.id === userId);
+            if (user) user.is_frozen = true;
+        } catch (error) {
+            this.error = 'Failed to freeze user.';
+            console.error(this.error, error);
+        } finally {
+            this.isLoading = false;
+        }
     },
 
     async unfreezeUser(userId) {
-        const systemStore = useAdminSystemStore();
-        await systemStore.unfreezeUser(userId);
-        await this.fetchUsers();
+        this.isLoading = true;
+        this.error = null;
+        try {
+            // This now calls the correct endpoint directly
+            await apiClient.post(`/sessions/user/${userId}/unfreeze`);
+            // Update the user's state in the list
+            const user = this.users.find(u => u.id === userId);
+            if (user) user.is_frozen = false;
+        } catch (error) {
+            this.error = 'Failed to unfreeze user.';
+            console.error(this.error, error);
+        } finally {
+            this.isLoading = false;
+        }
     }
   },
-});
-
-  return {
-    users,
-    isLoading,
-    error,
-    fetchUsers,
-    createUser,
-    updateUser,
-    deleteUser,
-  };
 });
