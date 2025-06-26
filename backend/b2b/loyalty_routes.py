@@ -42,6 +42,7 @@ def get_points_breakdown():
 
 @b2b_loyalty_bp.route('/program-details', methods=['GET'])
 @b2b_user_required
+@cache.cached(timeout=21600)
 def get_loyalty_program_details():
     """
     Get all necessary information for the loyalty page.
