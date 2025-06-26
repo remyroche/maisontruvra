@@ -129,10 +129,24 @@ def expire_loyalty_points_task(self):
 
 
 @scheduled_task
-def update_all_b2b_loyalty_tiers(self):
-    """Scheduled task to recalculate all B2B user loyalty tiers via LoyaltyService."""
-    logger.info("Starting scheduled task: update_all_b2b_loyalty_tiers")
-    count = LoyaltyService.update_user_tiers_task()
-    logger.info(f"Finished scheduled task: Updated loyalty tiers for {count} active B2B users.")
-    return f"Updated {count} B2B loyalty tiers."
+@celery.task(name='tasks.update_all_b2b_user_tiers')
+def update_all_b2b_user_tiers():
+    """
+    A periodic task that calls the loyalty service to recalculate and update 
+    the loyalty tier for all B2B users.
+    This should be run daily.
+    """
+    # Use the application context to access the database and services
+    with current_app.app_context():
+        current_app.logger.info("Starting scheduled B2B tier recalculation task.")
+        try:
+            loyalty_service = LoyaltyService(db.session)
+            # Call the existing service method to perform the update
+            result_message = loyalty_service.update_user_tiers_task()
+            current_app.logger.info(f"Finished B2B tier recalculation task. Result: {result_message}")
+            return result_message
+        except Exception as e:
+            current_app.logger.error(f"An error occurred during the scheduled tier recalculation: {e}")
+            # We re-raise the exception so Celery can log it as a task failure
+            raise
 
