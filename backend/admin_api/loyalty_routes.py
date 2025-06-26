@@ -12,7 +12,8 @@ loyalty_bp = Blueprint('admin_loyalty_routes', __name__, url_prefix='/api/admin/
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
 @log_admin_action
 @roles_required ('Admin', 'Staff')
-@admin_requireddef get_tiers():
+@admin_requireddef 
+get_tiers():
     tiers = LoyaltyService.get_all_tiers()
     return jsonify([tier.to_dict() for tier in tiers])
 
@@ -29,6 +30,7 @@ def create_tier():
             min_points=data['min_points'],
             multiplier=data.get('multiplier', 1.0)
         )
+        cache.delete('view//b2b/loyalty/program-details')
         return jsonify(tier.to_dict()), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -41,6 +43,7 @@ def create_tier():
 def update_tier(tier_id):
     data = request.get_json()
     tier = LoyaltyService.update_tier(tier_id, data)
+    cache.delete('view//b2b/loyalty/program-details')
     if not tier:
         return jsonify({"error": "Tier not found"}), 404
     return jsonify(tier.to_dict())
