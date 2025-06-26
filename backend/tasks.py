@@ -8,6 +8,7 @@ from backend.services.loyalty_service import LoyaltyService
 from backend.services.invoice_service import InvoiceService
 from backend.services.passport_service import PassportService
 from backend.services.order_service import OrderService # Import the new service
+from backend.extensions import cache
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,21 @@ scheduled_task = celery.task(
 
 
 # --- Task Definitions ---
+
+# Called by celery_worker.py on a regular basis
+@celery.task(name='tasks.clear_application_cache')
+def clear_application_cache():
+    """
+    A periodic task to clear the entire Flask cache as a safety net.
+    """
+    with current_app.app_context():
+        try:
+            cache.clear()
+            current_app.logger.info("Successfully cleared the application cache.")
+            return "Cache cleared successfully."
+        except Exception as e:
+            current_app.logger.error(f"Failed to clear application cache: {e}")
+            raise
 
 @resilient_task
 def send_email_task(self, recipient, subject, template_name, context):
