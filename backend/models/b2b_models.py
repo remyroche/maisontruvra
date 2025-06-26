@@ -24,7 +24,8 @@ class B2BUser(db.Model):
     
     # Foreign Key to the parent B2BAccount
     account_id = db.Column(db.Integer, db.ForeignKey('b2b_account.id'), nullable=False)
-    
+    language = db.Column(db.String(10), default='fr', nullable=False)
+
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
