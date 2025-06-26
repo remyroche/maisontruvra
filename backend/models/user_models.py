@@ -22,6 +22,7 @@ class User(db.Model, UserMixin):
     is_b2b = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     role = db.Column(db.String(80), default='user', nullable=False)
+    language = db.Column(db.String(10), default='fr', nullable=False)
 
     addresses = db.relationship('Address', backref='user', lazy=True, cascade="all, delete-orphan")
     orders = db.relationship('Order', backref='user', lazy=True)
