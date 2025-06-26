@@ -77,7 +77,7 @@ class InvoiceService:
                     browser.close()
     
                 # Save the PDF (e.g., to a cloud storage bucket)
-                filename = f"invoices/invoice-{invoice.invoice_number}.pdf"
+                filename = f"invoices/invoice-{invoice.company_name.invoice_number}.pdf"
                 # cloud_storage.save(pdf_file, filename) # Real implementation
                 
                 invoice.pdf_url = filename
