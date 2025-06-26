@@ -6,7 +6,13 @@ from backend.auth.permissions import b2b_user_required
 import io
 from io import BytesIO
 from utils.sanitization import sanitize_input
+from backend.database import db
+from backend.models.b2b_models import B2BUser
+from backend.models.invoice_models import Quote, Invoice
+from backend.services.invoice_service import InvoiceService
 
+b2b_invoice_bp = Blueprint('b2b_invoice_bp', __name__, url_prefix='/api/b2b')
+invoice_service = InvoiceService(db.session)
 invoice_bp = Blueprint('admin_invoice_routes', __name__, url_prefix='/api/admin/invoices')
 
 # GET a list of invoices for the current B2B user
@@ -35,6 +41,42 @@ def get_invoices():
     except Exception as e:
         # Log error e
         return jsonify(status="error", message="An internal error occurred while fetching invoices."), 500
+
+@b2b_invoice_bp.route('/quotes', methods=['POST'])
+@b2b_login_required
+def submit_quote_request():
+    data = request.get_json()
+    b2b_user_id = session.get('b2b_user_id')
+    current_user = db.session.get(B2BUser, b2b_user_id)
+    
+    try:
+        quote = invoice_service.create_quote(
+            b2b_account_id=current_user.account_id,
+            user_request=data['request_details']
+        )
+        return jsonify({"message": "Quote request submitted successfully.", "quote_id": quote.id}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@b2b_invoice_bp.route('/invoices/<int:invoice_id>/sign', methods=['POST'])
+@b2b_login_required
+def sign_invoice(invoice_id):
+    data = request.get_json()
+    signature_data = data.get('signature_data')
+
+    b2b_user_id = session.get('b2b_user_id')
+    current_user = db.session.get(B2BUser, b2b_user_id)
+    invoice = db.session.get(Invoice, invoice_id)
+
+    if not invoice or invoice.b2b_account_id != current_user.account_id:
+        return jsonify({"error": "Invoice not found."}), 404
+        
+    try:
+        invoice_service.sign_invoice(invoice_id, signature_data)
+        return jsonify({"message": "Invoice signed successfully."}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
 
 # GET a single invoice by ID
 @b2b_invoice_bp.route('/<int:invoice_id>', methods=['GET'])
