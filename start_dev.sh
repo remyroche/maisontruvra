@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # A simple script to start the development environment for Maison Trüvra.
+# Updated to use Playwright for PDF generation to avoid Homebrew issues on pre-release macOS.
 
 # --- Configuration ---
 FLASK_APP_PATH="manage.py"
@@ -31,9 +32,9 @@ check_command() {
     if ! command -v $1 &> /dev/null
     then
         echo "Error: Command '$1' is not found."
-        echo "Please ensure it is installed in your virtual environment and try again."
+        echo "Please ensure it is installed and in your PATH."
         if [ "$1" == "python3" ]; then
-            echo "To install dependencies, run: pip install -r backend/requirements.txt"
+            echo "To install Python dependencies, run: pip install -r backend/requirements.txt"
         fi
         exit 1
     fi
@@ -49,29 +50,22 @@ start_flask_backend() {
     echo "   Flask backend started with PID: $FLASK_PID"
 }
 
-install_weasyprint_deps() {
-    # This check is specific to macOS users with Homebrew.
-    if [[ "$OSTYPE" != "darwin"* ]]; then
-        echo "-> Skipping WeasyPrint macOS dependency check (not on macOS)."
-        return
-    fi
+# This function replaces the previous WeasyPrint/Homebrew installation.
+# Playwright downloads its own self-contained browser binaries, avoiding system dependencies.
+install_playwright_deps() {
+    echo "-> Checking and installing Playwright browser binaries..."
+    echo "   (This might take a moment on the first run...)"
 
-    echo "-> Checking for WeasyPrint system dependencies (macOS/Homebrew)..."
-    if ! command -v brew &> /dev/null; then
-        echo "   [ERROR] Homebrew is not installed, but it's required for WeasyPrint dependencies on macOS."
-        echo "   Please install Homebrew from https://brew.sh/ and run this script again."
-        exit 1
-    fi
-
-    echo "   Homebrew found. Installing/updating WeasyPrint dependencies..."
-    # brew install is idempotent; it will only install missing packages.
-    brew install cairo pango gdk-pixbuf libffi glib gobject-introspection
+    # This command downloads the necessary browser binaries (e.g., Chromium).
+    # It is run via 'python3 -m' to use the Playwright version from the virtual environment.
+    # Make sure 'playwright' is listed in your backend/requirements.txt
+    python3 -m playwright install --with-deps
     if [ $? -ne 0 ]; then
-        echo "   [ERROR] Failed to install WeasyPrint dependencies via Homebrew."
-        echo "   Please check the Homebrew output above for errors and try to resolve them."
+        echo "   [ERROR] Failed to install Playwright browsers."
+        echo "   Please check the output above for errors and ensure 'playwright' is in requirements.txt."
         exit 1
     else
-        echo "   WeasyPrint dependencies are installed."
+        echo "   Playwright browsers are installed."
     fi
 }
 
@@ -115,6 +109,7 @@ check_command npm
 
 # Install/update dependencies
 echo "-> Installing/updating backend dependencies..."
+echo "   NOTE: Ensure 'playwright' is in backend/requirements.txt and 'weasyprint' is removed."
 if [ -d "$VENV_PATH" ]; then
     # If venv exists and was activated, 'pip' will be the correct one from the PATH.
     pip install -r backend/requirements.txt
@@ -127,9 +122,8 @@ fi
 # Trap SIGINT (Ctrl+C) and call cleanup
 trap cleanup SIGINT
 
-# Install WeasyPrint system dependencies (if on macOS with Homebrew)
-install_weasyprint_deps
-
+# Install Playwright browser dependencies.
+install_playwright_deps
 
 # Start servers
 start_flask_backend
@@ -143,3 +137,4 @@ echo "Press Ctrl+C to stop both servers."
 
 # Wait indefinitely until script is interrupted
 wait
+
