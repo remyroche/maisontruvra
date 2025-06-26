@@ -7,6 +7,18 @@
       <div class="mt-4 p-4 border rounded-lg">
         <h4 class="font-medium">Authentification à deux facteurs (A2F)</h4>
 
+          <!-- Language Settings -->
+          <div class="mt-8">
+            <h3 class="text-xl font-semibold">Préférences</h3>
+            <div class="mt-4 p-4 border rounded-lg">
+              <label for="language-select" class="block text-sm font-medium text-gray-700">Langue</label>
+              <select id="language-select" v-model="selectedLanguage" @change="updateLanguage" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+              </select>
+            </div>
+          </div>
+
         <!-- State: 2FA is Disabled -->
         <div v-if="!userStore.user.two_factor_enabled">
           <p class="text-gray-600 my-2">Ajoutez une couche de sécurité supplémentaire à votre compte.</p>
@@ -53,12 +65,48 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useUserStore } from '@/stores/user';
+import { useI18n } from 'vue-i18n';
 
 const userStore = useUserStore();
+const { locale } = useI18n();
+const selectedLanguage = ref('en');
 const totpCode = ref('');
 
+
+// This function will be called when the component is first created
+// and also after the user data is fetched or updated.
+function setLanguageFromStore() {
+    const userLang = userStore.user?.language;
+    if (userLang && ['en', 'fr'].includes(userLang)) {
+        selectedLanguage.value = userLang;
+        locale.value = userLang;
+    }
+}
+
+onMounted(async () => {
+  if (!userStore.user) {
+    await userStore.fetchUser();
+  }
+  setLanguageFromStore();
+});
+
+// Watch for changes in the user store (e.g., after a profile update)
+watch(() => userStore.user, setLanguageFromStore, { deep: true });
+
+async function updateLanguage() {
+  const result = await userStore.updateLanguage(selectedLanguage.value);
+  if (result.success) {
+    locale.value = selectedLanguage.value;
+    // Optionally show a success notification
+  } else {
+    // Revert the select box to the original language if the update fails
+    selectedLanguage.value = userStore.user.language;
+    // Optionally show an error notification
+  }
+}
+  
 onMounted(() => {
   // Fetch user data when component is mounted to get 2FA status
   if (!userStore.user) {
