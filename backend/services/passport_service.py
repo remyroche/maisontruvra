@@ -6,6 +6,7 @@ from backend.database import db
 from backend.models.product_models import Product
 from backend.models.passport_models import ProductPassport
 from .exceptions import ServiceError, NotFoundException
+from playwright.sync_api import sync_playwright
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,32 @@ class PassportService:
             # 3. Render an HTML template with the context
             html_string = render_template(template_name, **context)
 
-            # 4. Use a library like WeasyPrint to convert the HTML to PDF
-            # pdf_file = HTML(string=html_string).write_pdf()
-
+            # 4. Use a library  to convert the HTML to PDF
+            pdf_file = None # Initialize variable
+            with sync_playwright() as p:
+                # Launch a headless Chromium browser instance.
+                # The first time this runs, it might feel slow as it starts the browser process.
+                browser = p.chromium.launch()
+                
+                # Create a new page (like a new tab).
+                page = browser.new_page()
+                
+                # Set the content of the page to your HTML string.
+                # Playwright's browser engine will render this exactly like Chrome would.
+                page.set_content(html_string)
+                
+                # Generate the PDF from the rendered page.
+                # This returns the PDF content as bytes, which we store in the `pdf_file` variable.
+                # This is efficient as it all happens in memory without writing temporary files.
+                pdf_file = page.pdf(
+                    format='A4',              # Standard page size
+                    print_background=True,    # Ensures CSS backgrounds are included
+                    margin={'top': '20mm', 'bottom': '20mm', 'left': '15mm', 'right': '15mm'}
+                )
+                
+                # Close the browser instance to free up resources.
+                browser.close()
+                
             # 5. Save the PDF (e.g., to a cloud storage bucket) and update the passport record
             filename = f"passports/passport-{passport.id}-{passport.product.sku}.pdf"
             # cloud_storage.save(pdf_file, filename) # Real implementation
