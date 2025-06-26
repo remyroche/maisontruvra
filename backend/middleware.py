@@ -129,16 +129,38 @@ def mfa_check_middleware(app: Flask):
                 }), 403
 
 
-# Placeholder for RBACService if it's not defined elsewhere
-# In a real application, this would be in backend/services/rbac_service.py
 class RBACService:
+    """
+    Role-Based Access Control service to check user permissions.
+    """
     @staticmethod
     def user_is_staff(user_id):
-        # This is a placeholder. Implement actual logic to check if a user is staff.
-        # This might involve querying the database or checking user roles.
-        # For now, we'll return True for demonstration purposes if a user_id is provided.
-        # You should replace this with your actual RBAC logic.
-        return user_id is not None # Simple placeholder: any authenticated user is "staff" for this check
+        """
+        Checks if a user has staff privileges by querying the database.
+
+        This method provides a centralized way to determine if a user belongs
+        to the staff, based on the `is_staff` attribute in the User model.
+
+        Args:
+            user_id: The ID of the user to check.
+
+        Returns:
+            bool: True if the user exists and has the 'is_staff' flag set to True,
+                  otherwise False.
+        """
+        if not user_id:
+            return False
+        
+        try:
+            user = User.query.get(user_id)
+            if user and user.is_staff:
+                return True
+            else:
+                return False
+        except Exception as e:
+            logger.error(f"Error during RBAC staff status check for user_id {user_id}: {e}", 
+                         extra={'request_id': getattr(g, 'request_id', 'unknown')})
+            return False
 
 
 # --- Main Middleware Setup Function ---
