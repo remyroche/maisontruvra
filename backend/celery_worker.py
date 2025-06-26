@@ -44,17 +44,19 @@ def setup_periodic_tasks(sender, **kwargs):
     """
     Sets up the schedule for all periodic background tasks.
     """
-    # --- Daily B2B Tier Recalculation Task ---
-    # This ensures that user tiers are updated every day at midnight.
+    # Daily B2B Tier Recalculation Task
     sender.add_periodic_task(
         crontab(hour=0, minute=0), # Executes daily at midnight
-        'tasks.recalculate_b2b_tiers',
-        name='Recalculate B2B loyalty tiers daily'
+        'tasks.update_all_b2b_user_tiers',
+        name='Update B2B loyalty tiers daily'
     )
     
-    # --- Other Periodic Tasks Can Be Added Below ---
-    # Example: A task that runs every 30 minutes
-    # sender.add_periodic_task(1800.0, 'tasks.some_other_task', name='Another periodic task')
+    # --- NEW: Periodic Cache Clear Task (Safety Net) ---
+    sender.add_periodic_task(
+        crontab(hour='*/24'), # Executes every 24 hours
+        'tasks.clear_application_cache',
+        name='Clear application cache every 24 hours'
+    )
 
 # The following lines are necessary to run the worker from the command line.
 # It creates a Flask app instance to provide context for Celery.
