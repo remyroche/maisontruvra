@@ -12,6 +12,7 @@ blog_category_schema = BlogCategorySchema()
 
 
 @blog_bp.route('/articles', methods=['GET'])
+@cache.cached(timeout=21600)
 def get_public_articles():
     """Public endpoint to get all published blog articles."""
     try:
@@ -27,6 +28,7 @@ def get_public_articles():
 
 
 @blog_bp.route('/articles/<string:slug>', methods=['GET'])
+@cache.cached(timeout=21600)
 def get_public_article_by_slug(slug):
     """Public endpoint to get a single published blog article by slug."""
     try:
@@ -42,6 +44,7 @@ def get_public_article_by_slug(slug):
 
 
 @blog_bp.route('/categories', methods=['GET'])
+@cache.cached(timeout=21600)
 def get_public_categories():
     """Public endpoint to get all blog categories."""
     try:
