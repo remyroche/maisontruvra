@@ -1,7 +1,7 @@
 from backend import create_app, celery
 from celery import Celery
 from flask import render_template
-import weasyprint
+from playwright.sync_api import sync_playwright
 import datetime
 import logging
 
@@ -85,7 +85,20 @@ def generate_invoice(order_id):
         html_string = render_template(invoice_template_path, **context)
 
         # 4. Generate the PDF from the rendered HTML.
-        pdf_bytes = weasyprint.HTML(string=html_string).write_pdf()
+        pdf_bytes = None # Initialize variable
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            
+            # Load the rendered HTML into the headless browser page
+            page.set_content(html_string)
+            
+            # Generate the PDF and store its content (in bytes) in the variable
+            pdf_bytes = page.pdf(
+                format='A4',
+                print_background=True
+            )
+            browser.close()
 
         # 5. Save the PDF to a secure storage (placeholder - implement storage service)
         invoice_number = f"INV-{order_details.created_at.year}-{order_id}"
