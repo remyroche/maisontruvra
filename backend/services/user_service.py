@@ -55,6 +55,8 @@ class UserService:
         if User.query.filter_by(email=user_data['email']).first():
             raise ValidationException("User with this email already exists")
 
+            browser_lang = request.accept_languages.best_match(['en', 'fr'], default='en')
+
         try:
             user = User(
                 email=user_data['email'],
@@ -62,6 +64,7 @@ class UserService:
                 last_name=user_data['last_name'],
                 role=user_data.get('role', UserRole.B2C),
                 is_active=user_data.get('is_active', True)
+                language=browser_lang
             )
             user.set_password(user_data['password'])
 
@@ -85,6 +88,21 @@ class UserService:
             logger.error(f"Failed to create user: {str(e)}")
             raise ValidationException(f"Failed to create user: {str(e)}")
 
+    def update_user_language(self, user_id, language, user_type='b2c'):
+        if user_type == 'b2c':
+            user = self.session.get(User, user_id)
+        else:
+            user = self.session.get(B2BUser, user_id)
+            
+        if not user:
+            raise ValueError("User not found")
+        if language not in ['en', 'fr']:
+            raise ValueError("Unsupported language")
+            
+        user.language = language
+        self.session.commit()
+        return user
+    
     @staticmethod
     def update_user(user_id: int, update_data: dict):
         """Update user with proper validation and logging."""
