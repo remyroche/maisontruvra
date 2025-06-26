@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -17,9 +17,10 @@ from backend.services.order_service import OrderService # For order_service
 from backend.admin_api.user_management_routes import admin_user_management_bp
 from backend.products.routes import products_bp
 from backend.orders.routes import orders_bp
+from backend.services.user_service import UserService
 
 
-account_bp = Blueprint('account', __name__)
+account_bp = Blueprint('account_bp', __name__)
 user_service = UserService()
 
 mfa_service = MfaService() # Corrected instantiation
@@ -34,6 +35,24 @@ order_service = OrderService() # Instantiation
 @login_required
 def get_account_details():
     return jsonify(current_user.to_user_dict())
+
+
+@account_bp.route('/api/account/language', methods=['PUT'])
+@login_required
+def update_language():
+    user_id = session.get('user_id') or session.get('b2b_user_id')
+    user_type = session.get('user_type')
+    data = request.get_json()
+    language = data.get('language')
+
+    if not language:
+        return jsonify({"error": "Language is required"}), 400
+
+    try:
+        user_service.update_user_language(user_id, language, user_type)
+        return jsonify({"message": "Language updated successfully"}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
 @account_bp.route('/update', methods=['POST'])
 @login_required
