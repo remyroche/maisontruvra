@@ -1,3 +1,4 @@
+# celery_worker.py
 from backend import create_app, celery
 from celery import Celery
 from flask import render_template
