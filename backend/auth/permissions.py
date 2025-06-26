@@ -491,6 +491,52 @@ def rbac_check(required_role):
         return decorated_function
     return decorator
 
+class Permissions:
+    """
+    Defines constants for all permissions in the system to avoid magic strings.
+    """
+    # General Admin Access
+    ADMIN_ACCESS = 'ADMIN_ACCESS'
+
+    # User Management
+    VIEW_USERS = 'VIEW_USERS'
+    MANAGE_USERS = 'MANAGE_USERS'
+
+    # B2B Management
+    VIEW_B2B_ACCOUNTS = 'VIEW_B2B_ACCOUNTS'
+    MANAGE_B2B_ACCOUNTS = 'MANAGE_B2B_ACCOUNTS'
+
+    # Product Management
+    VIEW_PRODUCTS = 'VIEW_PRODUCTS'
+    MANAGE_PRODUCTS = 'MANAGE_PRODUCTS'
+    
+    # Order Management
+    VIEW_ORDERS = 'VIEW_ORDERS'
+    MANAGE_ORDERS = 'MANAGE_ORDERS'
+
+    # Blog Management
+    MANAGE_BLOG = 'MANAGE_BLOG'
+    
+    # Site Settings
+    MANAGE_SITE_SETTINGS = 'MANAGE_SITE_SETTINGS'
+
+    # Loyalty Program
+    MANAGE_LOYALTY = 'MANAGE_LOYALTY'
+    
+    # Invoices & Quotes
+    MANAGE_INVOICES = 'MANAGE_INVOICES'
+
+    # View Audit Logs
+    VIEW_AUDIT_LOGS = 'VIEW_AUDIT_LOGS'
+
+    # All permissions grouped for convenience
+    ALL = [
+        ADMIN_ACCESS, VIEW_USERS, MANAGE_USERS, VIEW_B2B_ACCOUNTS,
+        MANAGE_B2B_ACCOUNTS, VIEW_PRODUCTS, MANAGE_PRODUCTS, VIEW_ORDERS,
+        MANAGE_ORDERS, MANAGE_BLOG, MANAGE_SITE_SETTINGS, MANAGE_LOYALTY,
+        MANAGE_INVOICES, VIEW_AUDIT_LOGS
+    ]
+
 
 # Configure basic logging (usually done in your main app.py or config)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
