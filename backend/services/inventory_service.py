@@ -36,6 +36,9 @@ class InventoryService:
             db.session.commit()
             current_app.logger.info(f"Added {quantity_to_add} units to inventory for product {inventory_item.product_id}. {quantity_to_add} passports created.")
 
+            cache.delete('view//api/products/{}'.format(product_id)) 
+            cache.delete('view//api/products')
+            
         except Exception as e:
             # If any part fails (e.g., file write error), roll back everything.
             # No quantity will be updated, and no passports will be saved.
