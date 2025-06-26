@@ -29,6 +29,7 @@ def create_product():
 
     try:
         new_product = ProductService.create_product(sanitized_data)
+        call cache.delete('view//api/products')
         return jsonify(status="success", data=new_product.to_dict()), 201
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400
@@ -56,6 +57,8 @@ def update_inventory(inventory_id):
 
     try:
         new_quantity = int(data['quantity'])
+        cache.delete('view//api/products')
+        cache.delete('view//api/products/{}'.format(product_id))
     except ValueError:
         return jsonify({"error": "Invalid quantity format"}), 400
 
@@ -84,6 +87,7 @@ def update_inventory(inventory_id):
 @log_admin_action
 @roles_required ('Admin', 'Staff')
 @admin_required
+@cache.cached(timeout=21600)
 def get_products():
     """
     Get a paginated list of all products.
@@ -110,6 +114,7 @@ def get_products():
 @log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
 @admin_required
+@cache.cached(timeout=21600)
 def get_product(product_id):
     """
     Get a single product by their ID.
@@ -143,6 +148,8 @@ def update_product(product_id):
         return jsonify(status="success", data=updated_product.to_dict()), 200
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400
+        cache.delete('view//api/products') 
+        cache.delete('view//api/products/{}'.format(product_id))
     except Exception as e:
         # Log the error e
         return jsonify(status="error", message="An internal error occurred while updating the product."), 500
@@ -158,6 +165,8 @@ def delete_product(product_id):
     Delete a product.
     """
     hard_delete = request.args.get('hard', 'false').lower() == 'true'
+    cache.delete('view//api/products') 
+    cache.delete('view//api/products/{}'.format(product_id))
     if hard_delete:
         if ProductService.hard_delete_product(product_id):
             return jsonify(status="success", message="Product permanently deleted")
@@ -179,6 +188,7 @@ def restore_product(product_id):
 
 
 # Product Category Routes
+@cache.cached(timeout=21600)
 @product_management_bp.route('/product-categories', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
 @log_admin_action
@@ -238,6 +248,7 @@ def restore_product_category(category_id):
 
 
 # Product Collection Routes
+@cache.cached(timeout=21600)
 @product_management_bp.route('/product-collections', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
 @log_admin_action
