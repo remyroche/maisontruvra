@@ -54,6 +54,34 @@ def generate_passport_pdf_task(self, passport_id):
     PassportService.generate_pdf(passport_id)
     logger.info(f"Successfully generated passport for {passport_id}")
 
+@celery.task(name='tasks.recalculate_b2b_tiers')
+def recalculate_b2b_tiers():
+    """
+    A periodic task to recalculate and update the loyalty tier for all B2B users.
+    This should be run daily to ensure tiers are up-to-date.
+    """
+    # Use the application context to access the database and services
+    with current_app.app_context():
+        loyalty_service = LoyaltyService(db.session)
+        
+        # Get all B2B users
+        b2b_users = B2BUser.query.all()
+        
+        current_app.logger.info(f"Starting B2B tier recalculation for {len(b2b_users)} users.")
+        
+        updated_count = 0
+        for user in b2b_users:
+            try:
+                # The LoyaltyService will handle the logic of calculating points and determining the new tier
+                tier_updated = loyalty_service.update_user_tier(user)
+                if tier_updated:
+                    updated_count += 1
+                    current_app.logger.info(f"Updated tier for user {user.email} to {user.loyalty_tier.name}.")
+            except Exception as e:
+                current_app.logger.error(f"Failed to update tier for user {user.email}: {e}")
+
+        current_app.logger.info(f"Finished B2B tier recalculation. Updated {updated_count} users.")
+        return f"Recalculated tiers for {len(b2b_users)} users. {updated_count} were updated."
 
 @resilient_task
 def finalize_order_task(self, order_id):
