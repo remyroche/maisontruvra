@@ -180,6 +180,41 @@ class LoyaltyService:
         ).scalar()
         return balance or 0
 
+    def get_points_breakdown(self, user_id):
+        """
+        Calculates the breakdown of active loyalty points from purchases vs. referrals.
+        """
+        now = datetime.utcnow()
+        
+        # Calculate points from own purchases (reason does not start with 'Referral')
+        purchase_points_query = self.session.query(func.sum(LoyaltyPoints.points)).filter(
+            LoyaltyPoints.b2b_user_id == user_id,
+            LoyaltyPoints.expires_at > now,
+            ~LoyaltyPoints.reason.like('Referral bonus%')
+        )
+        purchase_points = purchase_points_query.scalar() or 0
+
+        # Calculate points from referrals
+        referral_points_query = self.session.query(func.sum(LoyaltyPoints.points)).filter(
+            LoyaltyPoints.b2b_user_id == user_id,
+            LoyaltyPoints.expires_at > now,
+            LoyaltyPoints.reason.like('Referral bonus%')
+        )
+        referral_points = referral_points_query.scalar() or 0
+        
+        total_points = purchase_points + referral_points
+
+        return {
+            'total': round(total_points, 2),
+            'from_purchases': round(purchase_points, 2),
+            'from_referrals': round(referral_points, 2)
+        }
+        
+    def get_tier_for_points(self, points):
+        """Finds the highest tier a user qualifies for based on their points."""
+        return LoyaltyTier.query.filter(LoyaltyTier.points_required <= points).order_by(LoyaltyTier.points_required.desc()).first()
+
+    
     @staticmethod
     def get_tier_and_discount(user_id: int) -> dict:
         """
