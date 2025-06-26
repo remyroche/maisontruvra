@@ -4,6 +4,8 @@ import logging
 
 # Set up logger for this module
 logger = logging.getLogger(__name__)
+flask_app = create_app()
+celery = flask_app.celery
 
 def init_celery(app):
     """
@@ -35,6 +37,24 @@ def init_celery(app):
     celery.autodiscover_tasks(['backend.tasks'])
 
     return celery
+
+
+@celery.on_after_configure.connect
+def setup_periodic_tasks(sender, **kwargs):
+    """
+    Sets up the schedule for all periodic background tasks.
+    """
+    # --- Daily B2B Tier Recalculation Task ---
+    # This ensures that user tiers are updated every day at midnight.
+    sender.add_periodic_task(
+        crontab(hour=0, minute=0), # Executes daily at midnight
+        'tasks.recalculate_b2b_tiers',
+        name='Recalculate B2B loyalty tiers daily'
+    )
+    
+    # --- Other Periodic Tasks Can Be Added Below ---
+    # Example: A task that runs every 30 minutes
+    # sender.add_periodic_task(1800.0, 'tasks.some_other_task', name='Another periodic task')
 
 # The following lines are necessary to run the worker from the command line.
 # It creates a Flask app instance to provide context for Celery.
