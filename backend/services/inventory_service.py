@@ -132,6 +132,31 @@ class InventoryService:
         db.session.commit()
 
     @staticmethod
+    def release_all_reservations_for_user(user_id: int):
+        """
+        Deletes all inventory reservations associated with a specific user.
+        This is called by CartService when a user's cart is cleared.
+        This method expects to be part of a larger transaction managed by the calling service.
+        """
+        if not user_id:
+            raise ServiceError("A valid user ID is required to release all reservations.", 400)
+            
+        try:
+            # Use synchronize_session=False for a more efficient bulk delete,
+            # as the session is being managed by the calling service (CartService).
+            num_deleted = InventoryReservation.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+            
+            # This does not commit the session; the calling service is responsible for the commit.
+            current_app.logger.info(f"Released {num_deleted} total reservations for user {user_id} as part of a larger transaction.")
+
+        except Exception as e:
+            # The calling service should handle rollback.
+            current_app.logger.error(f"Error releasing all reservations for user {user_id}: {str(e)}", exc_info=True)
+            # Re-raise the exception to ensure the calling service's transaction fails.
+            raise ServiceError(f"Could not release all inventory reservations for user {user_id}.")
+
+
+    @staticmethod
     def release_expired_reservations():
         """
         A cleanup function to be run periodically by a background task.
