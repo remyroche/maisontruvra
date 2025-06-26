@@ -4,6 +4,8 @@ import { defineRule, configure } from 'vee-validate';
 import { required, email, min, confirmed, max } from '@vee-validate/rules';
 import { localize } from '@vee-validate/i18n';
 import fr from '@vee-validate/i18n/dist/locale/fr.json';
+import { createPinia } from 'pinia'
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 
 import App from '../vue/App.vue';
 import router from './router';
@@ -37,6 +39,7 @@ configure({
 // --- End VeeValidate Configuration ---
 
 
+
 // 1. Create the Vue application instance
 const app = createApp(App);
 
@@ -61,6 +64,7 @@ app.config.errorHandler = (err, instance, info) => {
 
 // 2. Create the Pinia instance for state management
 const pinia = createPinia();
+pinia.use(piniaPluginPersistedstate)
 
 // 3. Use Pinia and the Router
 app.use(pinia);
