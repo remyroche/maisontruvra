@@ -4,6 +4,7 @@ from flask_login import LoginManager
 from flask_cors import CORS
 from flask_mail import Mail
 from celery import Celery
+from .extensions import cache
 from . import config # Use relative import for config
 from datetime import datetime
 import os
@@ -224,6 +225,9 @@ def create_app(config_class=config.Config):
     from .admin_api.session_routes import admin_session_bp
     app.register_blueprint(admin_session_bp, url_prefix='/api/admin/sessions')
 
+    # Caching
+    cache.init_app(app)
+ 
     # Security at middleware level: CSRF, sanitization, HTTPS, ...
     setup_middleware(app)
     mfa_check_middleware(app)
