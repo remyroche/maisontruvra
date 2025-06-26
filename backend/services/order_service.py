@@ -9,6 +9,14 @@ from backend.services.loyalty_service import LoyaltyService
 from backend.services.invoice_service import InvoiceService
 from .exceptions import ServiceError, NotFoundException
 from sqlalchemy.orm import joinedload, subqueryload
+from backend.models.user_models import User
+from backend.models.b2b_models import B2BUser
+from backend.services.inventory_service import InventoryService
+from backend.services.referral_service import ReferralService
+from backend.services.email_service import EmailService
+from backend.services.pdf_service import PDFService
+from flask import current_app
+
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +28,8 @@ class OrderService:
         self.session = session
         self.inventory_service = InventoryService(session)
         self.referral_service = ReferralService(session) # Instantiate ReferralService
+        self.email_service = EmailService()
+        self.pdf_service = PDFService()
 
     @staticmethod
     def get_orders_by_user(user_id, page=1, per_page=10):
@@ -51,6 +61,7 @@ class OrderService:
         Creates a final order from a user's cart, processes payment,
         and hooks into the LoyaltyService to award points.
         """
+        cart = self.session.query(Cart).filter_by(id=cart_id).first()
         if not cart or not cart.items:
             raise ValueError("The cart is empty.")
 
@@ -84,19 +95,78 @@ class OrderService:
 
             # Clear the user's cart
             # CartService.clear_cart(user_id=user_id)
-    
-            if user_type == 'b2b':
-                try:
-                    # The order total should be in euros for the calculation
-                    awarded_points = self.referral_service.reward_referrer_for_order(
-                        referee_id=user_id,
-                        order_total_euros=order.total_amount # Assuming total_amount is in euros
-                    )
-                    if awarded_points > 0:
-                        print(f"Awarded {awarded_points} referral points.")
 
-            db.session.commit()
-            return new_order
+        if user_type == 'b2c':
+            user = self.session.get(User, user_id)
+            order = Order(
+                user_id=user_id,
+                user_type=user_type,
+                total_amount=total_amount,
+                creator_ip_address=creator_ip
+                shipping_address=shipping_address_id,
+                billing_address=billing_address_id,
+                status=status 
+            )
+        else: # b2b
+            user = self.session.get(B2BUser, user_id)
+            order = Order(
+                b2b_account_id=user.account_id,
+                created_by_user_id=user.id,
+                user_type=user_type,
+                total_amount=total_amount,
+                creator_ip_address=creator_ip
+                shipping_address=shipping_address_id,
+                billing_address=billing_address_id,
+                status=status
+            )
+            The order total should be in euros for the calculation
+            awarded_points = self.referral_service.reward_referrer_for_order(
+                referee_id=user_id,
+                order_total_euros=order.total_amount # Assuming total_amount is in euros
+            )
+            if awarded_points > 0:
+                print(f"Awarded {awarded_points} referral points.")
+
+        self.session.add(order)
+        self.session.flush() # Flush to get the order ID before creating items
+
+        for item in cart.items:
+            order_item = OrderItem(
+                order_id=order.id,
+                product_id=item.product_id,
+                quantity=item.quantity,
+                price=item.product.price
+            )
+            self.session.add(order_item)
+            self.inventory_service.decrease_stock(item.product_id, item.quantity)
+            
+        # Clear the cart
+        self.session.delete(cart)
+
+        self.session.commit()
+
+        # --- Trigger Email with PDF Invoice ---
+        try:
+            # 1. Generate the PDF invoice from the committed order object
+            invoice_pdf = self.pdf_service.generate_invoice_pdf(order)
+            
+            # 2. Send the confirmation email with the invoice attached
+            self.email_service.send_order_confirmation_with_invoice(user, order, invoice_pdf)
+            current_app.logger.info(f"Successfully sent order confirmation for order {order.id}")
+
+        except Exception as e:
+            # Log the error but don't fail the transaction as the order is already placed
+            current_app.logger.error(f"Failed to send order confirmation email for order {order.id}: {e}")
+            # You might want to add this to a retry queue
+        
+        # --- Handle Referral Logic ---
+        if user_type == 'b2b':
+            try:
+                self.referral_service.reward_referrer_for_order(user_id, total_amount)
+            except Exception as e:
+                 current_app.logger.error(f"Failed to process referral for order {order.id}: {e}")
+
+        return order
         except Exception as e:
             db.session.rollback()
             logger.error(f"Failed to create order from cart for user {user_id}: {str(e)}", exc_info=True)
