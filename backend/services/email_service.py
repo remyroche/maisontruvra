@@ -4,9 +4,7 @@ from flask_mail import Message
 from threading import Thread
 from backend.extensions import mail
 from backend.tasks import send_email_task
-
-from flask import render_template
-from backend.tasks import send_email_task
+from flask import render_template, current_app
 
 class EmailService:
     @staticmethod
@@ -111,6 +109,7 @@ class EmailService:
             template="b2b_newsletter_confirmation.html"
         )
 
+    
     # --- Order Emails (B2C & B2B) ---
     @staticmethod
     def send_order_confirmation_email(order):
@@ -126,6 +125,33 @@ class EmailService:
         
         EmailService.send_email(subject=subject, recipients=[user.email], template=template, order=order)
 
+
+    def send_order_confirmation_with_invoice(self, user, order, invoice_pdf_bytes):
+        """
+        Prepares and sends the order confirmation email with the invoice PDF attached.
+        """
+        if order.user_type == 'b2c':
+            subject = f"Confirmation de votre commande Maison Trüvra #{order.id}"
+            template = 'b2c_order_confirmation.html'
+        else: # b2b
+            subject = f"Confirmation de votre commande B2B Maison Trüvra #{order.id}"
+            template = 'b2b_order_confirmation.html'
+
+        # Render the email body
+        html_body = render_template(template, user=user, order=order)
+
+        # Prepare the attachment
+        attachments = [
+            {
+                "filename": f"facture-maison-truvra-{order.id}.pdf",
+                "content_type": "application/pdf",
+                "data": invoice_pdf_bytes
+            }
+        ]
+        
+        self.send_email(user.email, subject, html_body, attachments=attachments)
+
+    
     @staticmethod
     def send_order_shipped_email(order, tracking_link, tracking_number):
         """Notifies a user that their order has shipped."""
