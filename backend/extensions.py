@@ -10,7 +10,7 @@ from argon2 import PasswordHasher
 # Initialize extensions
 db = SQLAlchemy()
 migrate = Migrate()
-password_hasher = PasswordHasher()  # Using Argon2 instead of Bcrypt
+password_hasher = PasswordHasher() 
 login_manager = LoginManager()
 mail = Mail()
 cors = CORS()
