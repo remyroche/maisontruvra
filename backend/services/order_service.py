@@ -16,6 +16,10 @@ class OrderService:
     """
     Handles business logic related to order processing, creation, and fulfillment.
     """
+    def __init__(self, session):
+        self.session = session
+        self.inventory_service = InventoryService(session)
+        self.referral_service = ReferralService(session) # Instantiate ReferralService
 
     @staticmethod
     def get_orders_by_user(user_id, page=1, per_page=10):
@@ -80,6 +84,16 @@ class OrderService:
 
             # Clear the user's cart
             # CartService.clear_cart(user_id=user_id)
+    
+            if user_type == 'b2b':
+                try:
+                    # The order total should be in euros for the calculation
+                    awarded_points = self.referral_service.reward_referrer_for_order(
+                        referee_id=user_id,
+                        order_total_euros=order.total_amount # Assuming total_amount is in euros
+                    )
+                    if awarded_points > 0:
+                        print(f"Awarded {awarded_points} referral points.")
 
             db.session.commit()
             return new_order
