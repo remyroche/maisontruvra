@@ -14,7 +14,15 @@ class Order(BaseModel, SoftDeleteMixin):
     status = db.Column(db.Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
     shipping_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'), nullable=True)
     
-    user = db.relationship('User', back_populates='orders')
+    # Link to the B2B Account instead of the individual user
+    b2b_account_id = db.Column(db.Integer, db.ForeignKey('b2b_account.id'), nullable=True)
+    
+    # Store the specific user who created the order
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('b2b_user.id'), nullable=True)
+    creator_ip_address = db.Column(db.String(45), nullable=True)
+    b2b_account = db.relationship('B2BAccount', backref=db.backref('orders', lazy=True))
+    created_by = db.relationship('B2BUser', backref=db.backref('orders_created', lazy=True))
+
     items = db.relationship('OrderItem', back_populates='order', cascade="all, delete-orphan")
     shipping_address = db.relationship('Address')
     invoice = db.relationship('Invoice', back_populates='order', uselist=False)
