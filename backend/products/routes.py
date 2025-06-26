@@ -9,6 +9,7 @@ products_bp = Blueprint('products_bp', __name__, url_prefix='/api/products')
 logger = logging.getLogger(__name__)
 
 # READ all products with filtering, searching, and pagination
+@cache.cached(timeout=21600)
 @products_bp.route('/', methods=['GET'])
 def get_products():
     """
@@ -42,6 +43,7 @@ def get_products():
 
 # READ a single product by its slug
 @products_bp.route('/<string:slug>', methods=['GET'])
+@cache.cached(timeout=21600)
 def get_product_by_slug(slug):
     """
     Get detailed information for a single product by its slug.
@@ -55,6 +57,7 @@ def get_product_by_slug(slug):
 
 # READ all product categories
 @products_bp.route('/categories', methods=['GET'])
+@cache.cached(timeout=21600)
 def get_product_categories():
     """
     Get a list of all product categories.
@@ -68,6 +71,7 @@ def get_product_categories():
 
 # READ reviews for a specific product
 @products_bp.route('/<int:product_id>/reviews', methods=['GET'])
+@cache.cached(timeout=21600)
 def get_product_reviews(product_id):
     """
     Get all approved reviews for a specific product.
