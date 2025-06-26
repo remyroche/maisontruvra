@@ -20,6 +20,7 @@ def get_posts():
 def create_post():
     data = request.get_json()
     post = BlogService.create_post(data)
+    cache.delete('view//api/blog/posts')
     return jsonify(post.to_dict()), 201
 
 @blog_management_bp.route('/posts/<int:post_id>', methods=['PUT'])
@@ -28,6 +29,8 @@ def create_post():
 def update_post(post_id):
     data = request.get_json()
     post = BlogService.update_post(post_id, data)
+    cache.delete('view//api/blog/posts') 
+    cache.delete('view//api/blog/posts/{}'.format(slug))
     if not post:
         return jsonify({"error": "Blog post not found"}), 404
     return jsonify(post.to_dict())
@@ -37,6 +40,7 @@ def update_post(post_id):
 @roles_required('Admin', 'Manager', 'Editor')
 def delete_post(post_id):
     hard_delete = request.args.get('hard', 'false').lower() == 'true'
+    cache.delete('view//api/blog/posts')
     if hard_delete:
         if BlogService.hard_delete_post(post_id):
             return jsonify({"message": "Blog post permanently deleted"})
