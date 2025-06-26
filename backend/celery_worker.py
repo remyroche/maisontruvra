@@ -53,9 +53,9 @@ def setup_periodic_tasks(sender, **kwargs):
     
     # --- NEW: Periodic Cache Clear Task (Safety Net) ---
     sender.add_periodic_task(
-        crontab(hour='*/6'), # Executes every 24 hours
+        crontab(hour='*/6'), # Executes every 6 hours
         'tasks.clear_application_cache',
-        name='Clear application cache every 24 hours'
+        name='Clear application cache every 6 hours'
     )
 
 # The following lines are necessary to run the worker from the command line.
