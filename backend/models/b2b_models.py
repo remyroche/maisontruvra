@@ -2,31 +2,52 @@ from backend.database import db
 from .base import BaseModel
 from .enums import B2BRequestStatus
 
-class B2BUser(BaseModel):
-    """
-    Represents a B2B partner account, linked to a regular User.
-    """
-    __tablename__ = 'b2b_users'
-    
+
+# Represents the parent company account
+class B2BAccount(db.Model):
+    __tablename__ = 'b2b_account'
     id = db.Column(db.Integer, primary_key=True)
     company_name = db.Column(db.String(120), nullable=False)
-    vat_number = db.Column(db.String(50), nullable=True, unique=True)
+    siret = db.Column(db.String(14), unique=True, nullable=False)
+    status = db.Column(db.String(50), default='pending', nullable=False) # pending, approved, rejected
     
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
-    tier_id = db.Column(db.Integer, db.ForeignKey('b2b_loyalty_tiers.id'), nullable=True)
+    # Relationship to all users under this company
+    users = db.relationship('B2BUser', back_populates='account')
+    
+    def __repr__(self):
+        return f'<B2BAccount {self.company_name}>'
 
-    user = db.relationship('User', back_populates='b2b_account')
-    tier = db.relationship('B2BLoyaltyTier', back_populates='b2b_users')
+# Represents an individual user belonging to a company
+class B2BUser(db.Model):
+    __tablename__ = 'b2b_user'
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Foreign Key to the parent B2BAccount
+    account_id = db.Column(db.Integer, db.ForeignKey('b2b_account.id'), nullable=False)
+    
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    
+    # Role to distinguish permissions within the account
+    role = db.Column(db.String(50), default='member', nullable=False) # 'admin' or 'member'
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'company_name': self.company_name,
-            'vat_number': self.vat_number,
-            'user_id': self.user_id,
-            'email': self.user.email,
-            'tier': self.tier.name if self.tier else 'No Tier'
-        }
+    mfa_secret = db.Column(EncryptedType(db.String, Config.SECRET_KEY), nullable=True)
+    mfa_enabled = db.Column(db.Boolean, default=False)
+
+    # Relationship back to the parent account
+    account = db.relationship('B2BAccount', back_populates='users')
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f'<B2BUser {self.email}>'
+
 
 class B2BPartnershipRequest(BaseModel):
     """
