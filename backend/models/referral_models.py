@@ -1,23 +1,42 @@
 from backend.database import db
 from .base import BaseModel
 
-class Referral(BaseModel):
-    """
-    Tracks the relationship between a referrer and a referred user.
-    """
-    __tablename__ = 'referrals'
-    
+class Referral(db.Model):
+    __tablename__ = 'referral'
     id = db.Column(db.Integer, primary_key=True)
     
-    # The user who was referred
-    referred_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
+    # The B2B user who made the referral
+    referrer_id = db.Column(db.Integer, db.ForeignKey('b2b_user.id'), nullable=False)
     
-    # The user who did the referring
-    referrer_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    # The new B2B user who was referred
+    referee_id = db.Column(db.Integer, db.ForeignKey('b2b_user.id'), nullable=False, unique=True)
     
-    # The user who was referred
-    referred = db.relationship('User', foreign_keys=[referred_user_id], backref=db.backref('referral_entry', uselist=False))
+    # Simplified status: 'active' once the link is made. No more 'pending' or 'completed'.
+    status = db.Column(db.String(50), default='active', nullable=False) 
     
-    # The user who did the referring
-    referrer = db.relationship('User', foreign_keys=[referrer_user_id], backref='referrals_made')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Relationships
+    referrer = db.relationship('B2BUser', foreign_keys=[referrer_id])
+    referee = db.relationship('B2BUser', foreign_keys=[referee_id])
+
+
+class ReferralReward(db.Model):
+    """
+    A log to track each time a referrer is rewarded.
+    """
+    __tablename__ = 'referral_reward'
+    id = db.Column(db.Integer, primary_key=True)
+    referral_id = db.Column(db.Integer, db.ForeignKey('referral.id'), nullable=False)
+    
+    # The user who received the reward (the referrer)
+    rewarded_user_id = db.Column(db.Integer, db.ForeignKey('b2b_user.id'), nullable=False)
+    
+    points_awarded = db.Column(db.Float, nullable=False)
+    
+    # Optional: Link to the specific order that triggered the reward
+    triggering_order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    referral = db.relationship('Referral', backref=db.backref('rewards', lazy=True))
