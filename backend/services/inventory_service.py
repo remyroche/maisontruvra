@@ -82,7 +82,10 @@ class InventoryService:
                 expires_at=datetime.utcnow() + timedelta(minutes=RESERVATION_LIFETIME_MINUTES)
             )
             db.session.add(reservation)
-        
+                    
+        cache.delete('view//api/products/{}'.format(product_id)) 
+        cache.delete('view//api/products') 
+
         db.session.commit()
         return reservation
 
@@ -107,6 +110,10 @@ class InventoryService:
             reservation.quantity -= quantity_to_release
             if reservation.quantity <= 0:
                 db.session.delete(reservation)
+
+            cache.delete('view//api/products/{}'.format(product_id)) 
+            cache.delete('view//api/products') 
+
             db.session.commit()
 
     @staticmethod
@@ -152,6 +159,9 @@ class InventoryService:
             # This does not commit the session; the calling service is responsible for the commit.
             current_app.logger.info(f"Released {num_deleted} total reservations for user {user_id} as part of a larger transaction.")
 
+        cache.delete('view//api/products/{}'.format(product_id)) 
+        cache.delete('view//api/products') 
+
         except Exception as e:
             # The calling service should handle rollback.
             current_app.logger.error(f"Error releasing all reservations for user {user_id}: {str(e)}", exc_info=True)
@@ -169,4 +179,8 @@ class InventoryService:
         db.session.commit()
         if expired_count > 0:
             current_app.logger.info(f"Released {expired_count} expired inventory reservations.")
+
+        cache.delete('view//api/products/{}'.format(product_id)) 
+        cache.delete('view//api/products') 
+
         return expired_count
