@@ -6,6 +6,78 @@ from backend.auth.permissions import b2b_user_required
 
 b2b_profile_bp = Blueprint('b2b_profile_bp', __name__, url_prefix='/api/b2b/profile')
 
+@b2b_bp.route('/api/b2b/users', methods=['GET'])
+@b2b_login_required
+def get_b2b_users():
+    """Fetches all users associated with the current user's company account."""
+    b2b_user_id = session.get('b2b_user_id')
+    current_user = db.session.get(B2BUser, b2b_user_id)
+    
+    users = B2BUser.query.filter_by(account_id=current_user.account_id).all()
+    user_list = [{
+        'id': user.id, 
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'email': user.email, 
+        'role': user.role
+    } for user in users]
+    
+    return jsonify(user_list)
+
+@b2b_bp.route('/api/b2b/users/add', methods=['POST'])
+@b2b_admin_required # Only admins of the company can add new users
+def add_b2b_user():
+    """Adds a new user to the company account."""
+    data = request.get_json()
+    b2b_user_id = session.get('b2b_user_id')
+    current_user = db.session.get(B2BUser, b2b_user_id)
+    
+    # Check for existing user with the same email
+    existing_user = B2BUser.query.filter_by(email=data['email']).first()
+    if existing_user:
+        return jsonify({"error": "User with this email already exists."}), 409
+
+    new_user = B2BUser(
+        account_id=current_user.account_id,
+        first_name=data['first_name'],
+        last_name=data['last_name'],
+        email=data['email'],
+        role=data.get('role', 'member') # Default to 'member' role
+    )
+    new_user.set_password(data['password'])
+    
+    db.session.add(new_user)
+    db.session.commit()
+    
+    # TODO: Send an invitation/welcome email to the new user.
+    
+    return jsonify({"message": "User added successfully.", "user_id": new_user.id}), 201
+
+@b2b_bp.route('/api/b2b/users/remove', methods=['POST'])
+@b2b_admin_required
+def remove_b2b_user():
+    """Removes a user from the company account."""
+    data = request.get_json()
+    user_to_remove_id = data.get('user_id')
+    
+    b2b_user_id = session.get('b2b_user_id')
+    current_user = db.session.get(B2BUser, b2b_user_id)
+
+    user_to_remove = db.session.get(B2BUser, user_to_remove_id)
+    
+    # Ensure the user exists and belongs to the same company
+    if not user_to_remove or user_to_remove.account_id != current_user.account_id:
+        return jsonify({"error": "User not found or not part of this account."}), 404
+        
+    # Prevent the admin from removing themselves
+    if user_to_remove.id == current_user.id:
+        return jsonify({"error": "You cannot remove yourself from the account."}), 403
+
+    db.session.delete(user_to_remove)
+    db.session.commit()
+    
+    return jsonify({"message": "User removed successfully."}), 200
+    
 # GET the B2B user's company profile
 @b2b_profile_bp.route('/', methods=['GET'])
 @b2b_user_required
