@@ -1,48 +1,73 @@
-from backend.models.user_models import User
-from backend.models.referral_models import Referral
+from backend.models.b2b_models import B2BUser
+from backend.models.referral_models import Referral, ReferralReward
+from backend.services.loyalty_service import LoyaltyService
 from backend.database import db
+from datetime import datetime, timedelta
 
 class ReferralService:
-    @staticmethod
-    def get_referrer_for_user(user_id: int) -> User | None:
-        """
-        Finds and returns the user who referred the given user.
-        """
-        referral_entry = Referral.query.filter_by(referred_user_id=user_id).first()
-        return referral_entry.referrer if referral_entry else None
+    def __init__(self, session):
+        self.session = session
+        self.loyalty_service = LoyaltyService(session)
 
-    @staticmethod
-    def create_referral(referrer_code: str, referred_user_id: int):
+    def create_referral_link(self, referrer_id, referee_id):
         """
-        Creates a referral link between two users based on a referral code.
-        This should be called during the registration process of the new user.
+        Creates a permanent link between a referrer and a referee
+        without any initial rewards.
         """
-        if not referrer_code:
-            # No referral code provided, so we do nothing.
-            return None
+        # Check if the referrer exists and is a valid B2B user
+        referrer = self.session.query(B2BUser).filter_by(id=referrer_id).first()
+        if not referrer:
+            raise ValueError("Referrer not found.")
 
-        # Assuming the referral code is the referrer's user ID for simplicity
-        try:
-            referrer_id = int(referrer_code)
-            referrer = User.query.get(referrer_id)
-            if not referrer:
-                raise ValueError("Le code de parrainage est invalide.")
-        except (ValueError, TypeError):
-            raise ValueError("Le format du code de parrainage est invalide.")
-
-        # Ensure the referred user doesn't already have a referrer
-        existing_referral = Referral.query.filter_by(referred_user_id=referred_user_id).first()
+        # Check if the referee has already been referred
+        existing_referral = self.session.query(Referral).filter_by(referee_id=referee_id).first()
         if existing_referral:
-            # It's better to raise an error to let the caller know, rather than failing silently.
-            # The API route can choose to ignore this specific error if needed.
-            raise ValueError("Cet utilisateur a déjà été parrainé.")
+            raise ValueError("This user has already been referred.")
 
-        new_referral = Referral(
-            referrer_user_id=referrer.id,
-            referred_user_id=referred_user_id
+        referral = Referral(
+            referrer_id=referrer_id,
+            referee_id=referee_id,
+            status='active'  # The link is now immediately active
         )
-        db.session.add(new_referral)
+        self.session.add(referral)
+        self.session.commit()
+        return referral
+
+    def reward_referrer_for_order(self, referee_id, order_total_euros):
+        """
+        Awards loyalty points to a referrer based on their referee's order.
+        This is called by the OrderService upon successful order completion.
+        """
+        referral = self.session.query(Referral).filter_by(referee_id=referee_id, status='active').first()
         
-        # The calling function (e.g., AuthService.register_user) is responsible 
-        # for the db.session.commit() call to ensure an atomic transaction.
-        return new_referral
+        # If the user was referred, calculate and award points to the referrer
+        if referral:
+            # Calculate points: 0.1 point per 1€ spent
+            points_to_award = round(order_total_euros * 0.1, 2)
+            
+            if points_to_award > 0:
+                self.loyalty_service.add_points(
+                    user_id=referral.referrer_id,
+                    user_type='b2b',
+                    points=points_to_award,
+                    reason=f"Referral bonus from order by user {referee_id}",
+                    # Points expire one year from the date they are awarded
+                    expires_at=datetime.utcnow() + timedelta(days=365)
+                )
+                
+                # Optionally, create a reward record for tracking
+                reward_record = ReferralReward(
+                    referral_id=referral.id,
+                    rewarded_user_id=referral.referrer_id,
+                    points_awarded=points_to_award,
+                    triggering_order_id=None # You can add the order ID here if available
+                )
+                self.session.add(reward_record)
+                self.session.commit()
+                
+                # TODO: Trigger an email notification to the referrer
+                # email_service.send_referral_reward_notification(referral.referrer_id, points_to_award)
+
+                return points_to_award
+        
+        return 0
