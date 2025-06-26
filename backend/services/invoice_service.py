@@ -7,12 +7,92 @@ from backend.models.order_models import Order
 from backend.models.invoice_models import Invoice # Create this new model
 from backend.tasks import generate_invoice_pdf_task
 import logging
-from backend.models.b2b_models import Invoice, B2BProfile
+from backend.models.b2b_models import Invoice, B2BProfile, B2BAccount
+from backend.models.invoice_models import Quote, Invoice, InvoiceItem
+from datetime import datetime
+
+
 
 class InvoiceService:
     """
     A unified service to handle invoice generation for both B2B and B2C orders.
     """
+
+    def __init__(self, session):
+        self.session = session
+
+    def create_quote(self, b2b_account_id, user_request):
+        """Creates a new quote request for a B2B account."""
+        account = self.session.get(B2BAccount, b2b_account_id)
+        if not account:
+            raise ValueError("B2B account not found.")
+
+        quote = Quote(
+            b2b_account_id=b2b_account_id,
+            user_request=user_request,
+            status='pending'
+        )
+        self.session.add(quote)
+        self.session.commit()
+        return quote
+
+    def convert_quote_to_invoice(self, quote_id, items, due_date_str=None):
+        """Converts a quote into a draft invoice."""
+        quote = self.session.get(Quote, quote_id)
+        if not quote or quote.status != 'pending':
+            raise ValueError("Quote not found or has already been processed.")
+
+        total_amount = sum(item['quantity'] * item['unit_price'] for item in items)
+        
+        due_date = datetime.fromisoformat(due_date_str) if due_date_str else None
+
+        invoice = Invoice(
+            b2b_account_id=quote.b2b_account_id,
+            quote_id=quote.id,
+            total_amount=total_amount,
+            status='draft',
+            due_date=due_date
+        )
+        self.session.add(invoice)
+
+        for item_data in items:
+            invoice_item = InvoiceItem(
+                invoice=invoice,
+                description=item_data['description'],
+                quantity=item_data['quantity'],
+                unit_price=item_data['unit_price'],
+                total_price=item_data['quantity'] * item_data['unit_price']
+            )
+            self.session.add(invoice_item)
+            
+        quote.status = 'converted'
+        self.session.commit()
+        return invoice
+
+    def sign_invoice(self, invoice_id, signature_data):
+        """Applies a digital signature to an invoice."""
+        invoice = self.session.get(Invoice, invoice_id)
+        if not invoice or invoice.status != 'pending_signature':
+            raise ValueError("Invoice cannot be signed at this time.")
+            
+        invoice.signature_data = signature_data
+        invoice.status = 'signed'
+        self.session.commit()
+        
+        # TODO: Trigger email to admin and user that invoice is signed and ready for payment
+        
+        return invoice
+        
+    def update_invoice_status(self, invoice_id, new_status):
+        """Updates the status of an invoice (e.g., to 'paid', 'void')."""
+        invoice = self.session.get(Invoice, invoice_id)
+        if not invoice:
+            raise ValueError("Invoice not found.")
+        
+        # Add logic here to validate status transitions if needed
+        invoice.status = new_status
+        self.session.commit()
+        return invoice
 
 class InvoiceService:
     @staticmethod
