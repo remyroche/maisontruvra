@@ -1,8 +1,7 @@
 import os
 from datetime import datetime
 from flask import render_template, current_app
-from weasyprint import HTML
-
+from playwright.sync_api import sync_playwright
 from backend.database import db
 from backend.models.order_models import Order
 from backend.models.invoice_models import Invoice # Create this new model
@@ -60,25 +59,34 @@ class InvoiceService:
             if b2b_profile:
                 context['company_name'] = b2b_profile.company_name
                 context['vat_number'] = b2b_profile.vat_number
-
-        try:
-            # Render the correct template with the full context
-            html_string = render_template(template_name, **context)
-            
-            # Use a library like WeasyPrint to convert the HTML to PDF
-            pdf_file = HTML(string=html_string).write_pdf()
-            
-            # Save the PDF (e.g., to a cloud storage bucket)
-            filename = f"invoices/invoice-{invoice.invoice_number}.pdf"
-            # cloud_storage.save(pdf_file, filename) # Real implementation
-            
-            invoice.pdf_url = filename
-            invoice.status = 'generated'
-            db.session.commit()
-
-            logger.info(f"PDF generation for invoice {invoice.invoice_number} completed. Saved to {filename}")
-            return True
-            
+            try:
+                # Render the correct template with the full context
+                html_string = render_template(template_name, **context)
+                
+                # Use Playwright to convert the HTML to PDF
+                pdf_file = None # Initialize variable
+                with sync_playwright() as p:
+                    browser = p.chromium.launch()
+                    page = browser.new_page()
+                    page.set_content(html_string)
+                    pdf_file = page.pdf(
+                        format='A4',
+                        print_background=True,
+                        margin={'top': '20mm', 'bottom': '20mm', 'left': '15mm', 'right': '15mm'}
+                    )
+                    browser.close()
+    
+                # Save the PDF (e.g., to a cloud storage bucket)
+                filename = f"invoices/invoice-{invoice.invoice_number}.pdf"
+                # cloud_storage.save(pdf_file, filename) # Real implementation
+                
+                invoice.pdf_url = filename
+                invoice.status = 'generated'
+                db.session.commit()
+    
+                logger.info(f"PDF generation for invoice {invoice.invoice_number} completed. Saved to {filename}")
+                return True
+                
         except Exception as e:
             db.session.rollback()
             logger.error(f"An error occurred during PDF generation for order {order_id}: {e}", exc_info=True)
