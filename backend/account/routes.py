@@ -18,6 +18,7 @@ from backend.admin_api.user_management_routes import admin_user_management_bp
 from backend.products.routes import products_bp
 from backend.orders.routes import orders_bp
 from backend.services.user_service import UserService
+from ..services.dashboard_service import DashboardService
 
 
 account_bp = Blueprint('account_bp', __name__)
@@ -36,7 +37,16 @@ order_service = OrderService() # Instantiation
 def get_account_details():
     return jsonify(current_user.to_user_dict())
 
-
+@account_bp.route('/dashboard', methods=['GET'])
+@jwt_required()
+def get_dashboard_data():
+    """Aggregates and returns all data needed for the user dashboard."""
+    user_id = get_jwt_identity()
+    # You would need a way to determine user_type (b2c/b2b) from the JWT or user model
+    user_type = 'b2c' # Placeholder
+    dashboard_data = DashboardService.get_dashboard_data(user_id, user_type)
+    return jsonify(dashboard_data)
+    
 @account_bp.route('/api/account/language', methods=['PUT'])
 @login_required
 def update_language():
