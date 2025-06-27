@@ -4,6 +4,8 @@ from .exceptions import ServiceError
 from flask import session, current_app
 from datetime import datetime, timedelta
 from .passport_service import PassportService
+from .notification_service import NotificationService
+
 
 # Updated reservation lifetime to 1 hour (60 minutes)
 RESERVATION_LIFETIME_MINUTES = 60
@@ -11,7 +13,7 @@ RESERVATION_LIFETIME_MINUTES = 60
 class InventoryService:
 
     @staticmethod
-    def add_stock(inventory_id: int, quantity_to_add: int):
+    def increase_stock(inventory_id: int, quantity_to_add: int):
         """
         Adds a specific quantity of stock to an inventory item and generates
         a new product passport for each individual item added.
@@ -38,6 +40,8 @@ class InventoryService:
 
             cache.delete('view//api/products/{}'.format(product_id)) 
             cache.delete('view//api/products')
+            NotificationService.trigger_back_in_stock_notifications.delay(product_id)
+
             
         except Exception as e:
             # If any part fails (e.g., file write error), roll back everything.
