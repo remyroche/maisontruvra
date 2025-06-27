@@ -12,6 +12,7 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignat
 import logging
 from flask import current_app, session # Added: For session
 from flask_login import login_user # Added: For login_user
+from ..extensions import socketio
 
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
@@ -135,6 +136,7 @@ class AuthService:
         )
         db.session.add(user)
         db.session.commit()
+        socketio.emit('new_user', user.to_admin_dict(), namespace='/admin')
         return user
 
         
