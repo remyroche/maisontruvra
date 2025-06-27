@@ -48,3 +48,74 @@ CREATE TABLE "product_items" (
     FOREIGN KEY ("product_variant_id") REFERENCES "product_variants"("id")
 );
 
+
+CREATE TABLE loyalty_tiers (
+    id UUID PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    min_spend FLOAT NOT NULL,
+    points_per_euro FLOAT NOT NULL,
+    benefits TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE user_loyalty (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+    tier_id UUID NOT NULL REFERENCES loyalty_tiers(id) ON DELETE RESTRICT,
+    points INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE loyalty_point_logs (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    points_change INTEGER NOT NULL,
+    reason VARCHAR(255) NOT NULL,
+    order_id UUID REFERENCES orders(id),
+    changed_by_admin_id UUID REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE referrals (
+    id UUID PRIMARY KEY,
+    referrer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    referred_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    referral_code VARCHAR(50) NOT NULL UNIQUE,
+    status VARCHAR(50) DEFAULT 'pending',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE referral_rewards (
+    id UUID PRIMARY KEY,
+    referral_count INTEGER NOT NULL UNIQUE,
+    reward_description VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE point_vouchers (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    voucher_code VARCHAR(50) NOT NULL UNIQUE,
+    points_cost INTEGER NOT NULL,
+    discount_amount FLOAT NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE exclusive_rewards (
+    id UUID PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    points_cost INTEGER NOT NULL,
+    reward_type VARCHAR(50) NOT NULL,
+    tier_id UUID NOT NULL REFERENCES loyalty_tiers(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
