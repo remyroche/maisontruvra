@@ -18,20 +18,19 @@
               <h3 class="text-sm font-semibold leading-6 text-gray-900">Professionnels</h3>
               <ul role="list" class="mt-6 space-y-4">
                 <li><a href="/professionnels" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Espace Pro</a></li>
-                <li><a href="/pro/register" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Devenir Partenaire</a></li>
-                <li><a href="/pro/contact" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Contact Pro</a></li>
               </ul>
             </div>
           </div>
           <div class="md:grid md:grid-cols-2 md:gap-8">
-            <div>
-              <h3 class="text-sm font-semibold leading-6 text-gray-900">Aide</h3>
-              <ul role="list" class="mt-6 space-y-4">
-                <li><a href="/contact" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Contact</a></li>
-                <li><a href="/faq" class="text-sm leading-6 text-gray-600 hover:text-gray-900">FAQ</a></li>
-                <li><a href="/livraison" class="text-sm leading-6 text-gray-600 hover:text-gray-900">Livraison & Retours</a></li>
-              </ul>
-            </div>
+            <div class="md:grid md:grid-cols-2 md:gap-8">
+              <div>
+                <h3 class="text-sm font-semibold text-gray-400 tracking-wider uppercase">{{ $t('footer.sections.support') }}</h3>
+                <ul class="mt-4 space-y-4">
+                  <li><a href="/contact" class="text-base text-gray-300 hover:text-white">{{ $t('footer.links.contact') }}</a></li>
+                  <!-- Add the link to the new FAQ page -->
+                  <li><router-link to="/faq" class="text-base text-gray-300 hover:text-white">{{ $t('footer.links.faq') }}</router-link></li>
+                </ul>
+              </div>
             <div class="mt-10 md:mt-0">
               <h3 class="text-sm font-semibold leading-6 text-gray-900">Légal</h3>
               <ul role="list" class="mt-6 space-y-4">
