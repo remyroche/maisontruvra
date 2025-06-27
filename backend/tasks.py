@@ -50,6 +50,23 @@ def generate_invoice_pdf_task(self, order_id):
         InvoiceService.generate_pdf(order_id)
     logger.info(f"Successfully generated invoice for order {order_id}")
 
+@celery.task(name='tasks.send_back_in_stock_notifications')
+def send_back_in_stock_email_task(user_ids, product_id):
+    """Sends notification emails to a list of users for a specific product."""
+    with current_app.app_context():
+        product = Product.query.get(product_id)
+        if not product:
+            return
+
+        users = User.query.filter(User.id.in_(user_ids)).all()
+        for user in users:
+            context = {"user_name": user.first_name, "product_name": product.name, "product_url": f"/products/{product.slug}"}
+            EmailService.send_email_immediately(
+                recipient=user.email,
+                subject=f"It's Back! {product.name} is now in stock",
+                template_name='emails/back_in_stock_notification.html',
+                context=context
+            )
 
 @resilient_task
 def generate_passport_pdf_task(self, passport_id):
