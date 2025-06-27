@@ -33,7 +33,9 @@ class CartItem(BaseModel):
 
     cart = db.relationship('Cart', back_populates='items')
     product = db.relationship('Product')
+    is_reward = db.Column(db.Boolean, default=False, nullable=False)
 
+        
     def to_dict(self):
         return {
             'id': self.id,
@@ -41,6 +43,7 @@ class CartItem(BaseModel):
             'quantity': self.quantity,
             'product_name': self.product.name,
             'price': self.product.price
+            'data': self.is_reward
         }
 
 # Add the one-to-one relationship from User to Cart
