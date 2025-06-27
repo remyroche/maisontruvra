@@ -7,6 +7,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from argon2 import PasswordHasher
 from flask_caching import Cache
+from flask_redis import FlaskRedis
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -15,6 +16,7 @@ password_hasher = PasswordHasher()
 login_manager = LoginManager()
 mail = Mail()
 cors = CORS()
-limiter = Limiter(key_func=get_remote_address)
 cache = Cache()
-
+jwt = JWTManager()
+limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
+redis_client = FlaskRedis() 
