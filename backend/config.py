@@ -40,7 +40,7 @@ class Config:
     PASSWORD_REQUIRE_SPECIAL = False
 
     # Caching
-    CACHE_TYPE = 'RedisCache'
+    CACHE_TYPE = 'redis'
     CACHE_DEFAULT_TIMEOUT = 3600 # Cache for 1 hour by default
     CACHE_REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
     
