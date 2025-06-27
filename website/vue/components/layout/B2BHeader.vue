@@ -26,6 +26,10 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
+           <LanguageSwitcher />
+           <button @click="logout" class="p-2 hover:text-primary">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+
           </button>
         </div>
       </div>
@@ -40,7 +44,6 @@ import { useB2BSearchStore } from '../../../js/stores/b2bSearch';
 
 const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
-const b2bSearchStore = useB2BSearchStore();
 
 const logout = async () => {
   try {
@@ -52,4 +55,17 @@ const logout = async () => {
     notificationStore.showNotification(error.data?.message || 'La déconnexion a échoué.', 'error');
   }
 };
+import B2BSearchOverlay from '../search/B2BSearchOverlay.vue';
+import MiniCart from '../MiniCart.vue';
+import LanguageSwitcher from './LanguageSwitcher.vue'; // Import the new component
+import { useI18n } from 'vue-i18n';
+import { useB2BPortalStore } from '../../../js/stores/b2b-portal';
+
+const { t } = useI18n();
+const b2bPortalStore = useB2BPortalStore();
+
 </script>
+
+</script>
+
+
