@@ -52,7 +52,15 @@
         <div class="mt-10 lg:mt-0">
           <OrderSummary />
           <div class="mt-6">
-              <button type="button" class="w-full btn-primary" @click="proceedToPayment">Proceed to Payment</button>
+              <button 
+                type="button" 
+                class="w-full btn-primary" 
+                @click="proceedToPayment"
+                :disabled="checkoutStore.isSubmitting"
+              >
+                <span v-if="checkoutStore.isSubmitting">Placing Order...</span>
+                <span v-else>Proceed to Payment</span>
+              </button>
           </div>
         </div>
       </div>
@@ -113,10 +121,7 @@ function onLoginSuccess() {
 }
 
 function proceedToPayment() {
-    // This function will gather all the selected data from the checkoutStore,
-    // userStore (for address), and cartStore, then call the appropriate API endpoint.
-    const checkoutData = checkoutStore.getCheckoutData();
-    console.log("Proceeding to payment with data:", checkoutData);
-    alert('Proceeding to payment...');
+    // The core logic is now in the store for better separation of concerns
+    checkoutStore.submitOrder();
 }
 </script>
