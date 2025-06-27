@@ -40,6 +40,21 @@ def create_app(config_class=config.Config):
     
     app.config.from_object(config_class)
 
+    # --- Content Security Policy (CSP) ---
+    # This policy allows content (scripts, styles, etc.) from the app's own domain
+    # and a placeholder for your future CDN. It's a critical security feature.
+    csp = {
+        'default-src': [
+            '\'self\'',
+            '*.your-cdn.com'  # Replace with your actual CDN domain
+        ],
+        'script-src': [
+            '\'self\'',
+            '\'unsafe-inline\'' # Required for some Vue patterns, can be tightened
+        ]
+    }
+    Talisman(app, content_security_policy=csp)
+
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
