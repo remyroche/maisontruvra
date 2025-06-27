@@ -6,7 +6,6 @@ from backend.models.product_models import ProductItem, Product
 from backend.models.cart_models import Cart
 from backend.models.user_models import Address
 from backend.services.loyalty_service import LoyaltyService
-from backend.services.invoice_service import InvoiceService
 from .exceptions import ServiceError, NotFoundException
 from sqlalchemy.orm import joinedload, subqueryload
 from backend.models.user_models import User
@@ -16,6 +15,9 @@ from backend.services.referral_service import ReferralService
 from backend.services.email_service import EmailService
 from backend.services.pdf_service import PDFService
 from flask import current_app
+from .notification_service import NotificationService
+from .pdf_service import PDFService
+
 
 
 logger = logging.getLogger(__name__)
@@ -40,137 +42,147 @@ class OrderService:
             subqueryload(Order.items).joinedload(OrderItem.product),
             joinedload(Order.shipping_address)
         ).order_by(Order.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-
-    @staticmethod
-    def get_order_by_id(order_id, user_id=None):
-        """
-        Gets a single order for a user, eagerly loading its details.
-        """
-        query = Order.query.filter_by(id=order_id)
-        if user_id:
-            query = query.filter_by(user_id=user_id)
         
-        return query.options(
-            subqueryload(Order.items).joinedload(OrderItem.product),
-            joinedload(Order.shipping_address)
-        ).first()
+    @staticmethod
+    def get_order_by_id(order_id, user_id):
+        """
+        Gets a single order by its ID, ensuring it belongs to the specified user.
+        Prevents IDOR attacks.
+        Uses joinedload to prevent N+1 queries for user and items.
+        """
+        return Order.query.options(
+            joinedload(Order.user),
+            joinedload(Order.items).joinedload(OrderItem.product)
+        ).filter_by(id=order_id, user_id=user_id).first()
 
     @staticmethod
-    def create_order_from_cart(cart: Cart, user_id: int, checkout_data: dict) -> Order:
+    def get_all_orders_for_user(user_id):
+        """Gets all orders for a specific user, optimized to prevent N+1."""
+        return Order.query.options(
+            joinedload(Order.items).joinedload(OrderItem.product)
+        ).filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
+
+    @staticmethod
+    def create_order_from_cart(user_id, user_type, checkout_data):
         """
-        Creates a final order from a user's cart, processes payment,
-        and hooks into the LoyaltyService to award points.
+        Creates a final order from a user's cart, processes payment, updates inventory,
+        and hooks into loyalty/referral services.
+        Handles both B2C and B2B users.
         """
-        cart = self.session.query(Cart).filter_by(id=cart_id).first()
+        cart = Cart.query.filter_by(user_id=user_id).first()
         if not cart or not cart.items:
-            raise ValueError("The cart is empty.")
+            raise ValidationException("Cannot create an order from an empty cart.")
+
+        # --- Data from checkout form ---
+        shipping_address_id = checkout_data.get('shipping_address_id')
+        billing_address_id = checkout_data.get('billing_address_id')
+        payment_token = checkout_data.get('payment_token') # From payment gateway (e.g., Stripe)
+        creator_ip = checkout_data.get('creator_ip_address')
 
         try:
-            # Create the order and order items from the cart
-            new_order = Order(
-                user_id=user_id,
-                total=cart.calculate_total(), # Assumes cart has a total calculation method
-                shipping_address=checkout_data['shipping_address'],
-            )
-            db.session.add(new_order)
+            # The entire process is wrapped in a transaction
+            with db.session.begin_nested():
+                # 1. Lock inventory rows for products in the cart to prevent race conditions
+                product_ids = [item.product_id for item in cart.items]
+                products = Product.query.filter(Product.id.in_(product_ids)).with_for_update().all()
+                product_map = {p.id: p for p in products}
+
+                # 2. Check stock availability
+                for item in cart.items:
+                    product = product_map.get(item.product_id)
+                    if not product or product.stock < item.quantity:
+                        raise ValidationException(f"Not enough stock for {product.name}.")
+
+                # 3. Create the Order record, handling B2C vs B2B
+                new_order_data = {
+                    "user_type": user_type,
+                    "shipping_address_id": shipping_address_id,
+                    "billing_address_id": billing_address_id,
+                    "creator_ip_address": creator_ip,
+                    "status": "pending_payment" 
+                }
+                if user_type == 'b2b':
+                    b2b_user = B2BUser.query.get(user_id)
+                    if not b2b_user:
+                        raise NotFoundException("B2B user not found.")
+                    new_order_data['b2b_account_id'] = b2b_user.account_id
+                    new_order_data['created_by_user_id'] = b2b_user.id
+                else: # b2c
+                    new_order_data['user_id'] = user_id
+                
+                new_order = Order(**new_order_data)
+                db.session.add(new_order)
+                
+                # 4. Create OrderItems, calculate total, and decrease stock
+                total_amount = 0
+                for item in cart.items:
+                    product = product_map[item.product_id]
+                    order_item = OrderItem(
+                        order=new_order,
+                        product_id=product.id,
+                        quantity=item.quantity,
+                        price_at_purchase=product.price
+                    )
+                    InventoryService.decrease_stock(product.id, item.quantity)
+                    total_amount += order_item.price_at_purchase * order_item.quantity
+                    db.session.add(order_item)
+
+                new_order.total_amount = total_amount
+                
+                # 5. Process Payment (placeholder for payment gateway integration)
+                # payment_successful = PaymentGateway.charge(payment_token, new_order.total_amount)
+                # if not payment_successful:
+                #     raise ServiceError("Payment processing failed.")
+                new_order.status = "processing" # Assume payment is successful for now
+
+                # 6. Clear the user's cart
+                for item in cart.items:
+                    db.session.delete(item)
+                db.session.delete(cart)
+
+            # 7. Commit the transaction
+            db.session.commit()
             
-            # (Loop through cart.items to create OrderItem records...)
+            # --- Post-Transaction Tasks (safe to run after commit) ---
             
-            # Process payment via a payment gateway
-            # payment_successful = PaymentGateway.charge(checkout_data['payment_token'], new_order.total)
-            # if not payment_successful:
-            #     raise ValueError("Payment failed.")
-
-            db.session.flush()
-
-            # Award loyalty points
-            LoyaltyService.add_points_for_purchase(
-                user_id=user_id,
-                order_total=new_order.total,
-                order_id=new_order.id
-            )
-
-            # Create an invoice for the order
-            InvoiceService.create_invoice_for_order(new_order)
-
-            # Clear the user's cart
-            # CartService.clear_cart(user_id=user_id)
-
-        if user_type == 'b2c':
-            user = self.session.get(User, user_id)
-            order = Order(
-                user_id=user_id,
-                user_type=user_type,
-                total_amount=total_amount,
-                creator_ip_address=creator_ip
-                shipping_address=shipping_address_id,
-                billing_address=billing_address_id,
-                status=status 
-            )
-        else: # b2b
-            user = self.session.get(B2BUser, user_id)
-            order = Order(
-                b2b_account_id=user.account_id,
-                created_by_user_id=user.id,
-                user_type=user_type,
-                total_amount=total_amount,
-                creator_ip_address=creator_ip
-                shipping_address=shipping_address_id,
-                billing_address=billing_address_id,
-                status=status
-            )
-            The order total should be in euros for the calculation
-            awarded_points = self.referral_service.reward_referrer_for_order(
-                referee_id=user_id,
-                order_total_euros=order.total_amount # Assuming total_amount is in euros
-            )
-            if awarded_points > 0:
-                print(f"Awarded {awarded_points} referral points.")
-
-        self.session.add(order)
-        self.session.flush() # Flush to get the order ID before creating items
-
-        for item in cart.items:
-            order_item = OrderItem(
-                order_id=order.id,
-                product_id=item.product_id,
-                quantity=item.quantity,
-                price=item.product.price
-            )
-            self.session.add(order_item)
-            self.inventory_service.decrease_stock(item.product_id, item.quantity)
-            
-        # Clear the cart
-        self.session.delete(cart)
-
-        self.session.commit()
-
-        # --- Trigger Email with PDF Invoice ---
-        try:
-            # 1. Generate the PDF invoice from the committed order object
-            invoice_pdf = self.pdf_service.generate_invoice_pdf(order)
-            
-            # 2. Send the confirmation email with the invoice attached
-            self.email_service.send_order_confirmation_with_invoice(user, order, invoice_pdf)
-            current_app.logger.info(f"Successfully sent order confirmation for order {order.id}")
-
-        except Exception as e:
-            # Log the error but don't fail the transaction as the order is already placed
-            current_app.logger.error(f"Failed to send order confirmation email for order {order.id}: {e}")
-            # You might want to add this to a retry queue
-        
-        # --- Handle Referral Logic ---
-        if user_type == 'b2b':
+            # 8. Award loyalty points for the purchase
             try:
-                self.referral_service.reward_referrer_for_order(user_id, total_amount)
+                LoyaltyService.add_points_for_purchase(
+                    user_id=user_id,
+                    order_total=new_order.total_amount,
+                    order_id=new_order.id
+                )
             except Exception as e:
-                 current_app.logger.error(f"Failed to process referral for order {order.id}: {e}")
+                current_app.logger.error(f"Failed to award loyalty points for order {new_order.id}: {e}")
 
-        return order
+            # 9. Handle referral logic for the new user's first order
+            try:
+                LoyaltyService.reward_referrer_for_order(
+                    referee_id=user_id,
+                    order_total_euros=new_order.total_amount
+                )
+            except Exception as e:
+                 current_app.logger.error(f"Failed to process referral for order {new_order.id}: {e}")
+
+            # 10. Offload PDF and Email generation to Celery
+            try:
+                InvoiceService.create_invoice_for_order.delay(new_order.id)
+                NotificationService.send_order_confirmation_email.delay(new_order.id)
+                current_app.logger.info(f"Successfully queued post-order tasks for order {new_order.id}")
+            except Exception as e:
+                current_app.logger.error(f"Failed to queue post-order tasks for order {new_order.id}: {e}")
+
+            return new_order
+
+        except (ValidationException, NotFoundException) as e:
+            db.session.rollback()
+            current_app.logger.warning(f"Order creation failed for user {user_id}: {str(e)}")
+            raise e
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to create order from cart for user {user_id}: {str(e)}", exc_info=True)
-            raise ServiceError("Could not create order.")
+            current_app.logger.error(f"Failed to create order from cart for user {user_id}: {str(e)}", exc_info=True)
+            raise ServiceError("Could not create order due to an unexpected error.")
+
 
     @staticmethod
     def get_all_orders_paginated(page, per_page, status=None, sort_by='created_at', sort_direction='desc'):
