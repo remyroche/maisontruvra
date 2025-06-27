@@ -228,7 +228,8 @@ def create_app(config_class=config.Config):
     # Caching
     cache.init_app(app)
     limiter.init_app(app)
-    redis_client.init_app(app) # Initialize redis_client with the app
+    redis_client.init_app(app) 
+    socketio.init_app(app, async_mode='eventlet')
 
     # === JWT Blocklist Implementation ===
     # This callback checks if a JWT has been revoked.
