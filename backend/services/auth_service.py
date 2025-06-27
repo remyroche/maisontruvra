@@ -137,8 +137,29 @@ class AuthService:
         db.session.add(user)
         db.session.commit()
         socketio.emit('new_user', user.to_admin_dict(), namespace='/admin')
+        AuthService.send_verification_email(user.email)
         return user
 
+    @staticmethod
+    def send_verification_email(email):
+        """Generates a token and sends a verification email."""
+        serializer = AuthService._get_serializer()
+        token = serializer.dumps(email, salt='email-confirm-salt')
+        EmailService.send_verification_email.delay(email, token)
+
+    @staticmethod
+    def confirm_email_verification(token, max_age=3600):
+        """Verifies the email confirmation token."""
+        serializer = AuthService._get_serializer()
+        try:
+            email = serializer.loads(token, salt='email-confirm-salt', max_age=max_age)
+            user = User.query.filter_by(email=email).first()
+            if user and not user.is_email_verified:
+                user.is_email_verified = True
+                db.session.commit()
+            return True
+        except Exception:
+            return False
         
     @staticmethod
     def login(email, password, is_b2b=False, is_admin=False):
