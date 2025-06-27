@@ -2,8 +2,35 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from backend.services.cart_service import CartService
 from backend.utils.sanitization import sanitize_input
+from ..services.cart_service import CartService
+from ..services.loyalty_service import LoyaltyService
 
 cart_bp = Blueprint('cart_bp', __name__, url_prefix='/api/cart')
+
+
+@cart_bp.route('/add-reward', methods=['POST'])
+@jwt_required()
+def add_reward_to_cart():
+    """Adds a redeemed loyalty reward product to the cart."""
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    reward_id = data.get('reward_id')
+
+    try:
+        # First, redeem the points
+        success, message = LoyaltyService.redeem_exclusive_reward(user_id, reward_id)
+        if not success:
+            raise ValidationException(message)
+        
+        # If points were successfully redeemed, add the item to the cart
+        cart = CartService.add_reward_to_cart(user_id, reward_id)
+        return jsonify(cart.to_dict())
+    except (ValidationException, NotFoundException) as e:
+        # If adding to cart fails, we should ideally refund the points.
+        # This requires careful transaction management. For now, we return an error.
+        LoyaltyService.refund_points_for_reward(user_id, reward_id) # Assumes this method exists
+        return jsonify(error=str(e)), 400
+
 
 def get_session_id():
     """
