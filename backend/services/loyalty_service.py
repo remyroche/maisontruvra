@@ -40,6 +40,50 @@ class LoyaltyService:
             return True
         return False
 
+    @staticmethod
+    def add_points_for_purchase(user_id, order_total, order_id):
+        """Adds loyalty points to a user's account after a purchase."""
+        user_loyalty = LoyaltyService.get_user_loyalty_status(user_id)
+        if not user_loyalty:
+            return
+
+        # Determine points per euro based on the user's current tier
+        points_per_euro = user_loyalty.tier.points_per_euro
+        points_earned = int(order_total * points_per_euro)
+
+        if points_earned > 0:
+            reason = f"Points earned from order #{str(order_id)[:8]}"
+            LoyaltyService.adjust_points(user_id, points_earned, reason, order_id=order_id)
+
+    @staticmethod
+    def reward_referrer_for_order(referee_id, order_total_euros):
+        """
+        If the purchasing user (referee) was referred, award points to the referrer.
+        This should only apply to the referee's first completed order.
+        """
+        # Check if this is the referee's first completed order
+        order_count = Order.query.filter_by(user_id=referee_id, status='completed').count()
+        if order_count > 1:
+            return # Only reward for the first order
+
+        # Find if the referee was referred by someone
+        referral_record = Referral.query.filter_by(referred_id=referee_id).first()
+        if not referral_record or referral_record.status == 'completed':
+            return
+
+        referrer_id = referral_record.referrer_id
+        
+        # Define referral reward logic (e.g., 5 points for every €10 spent by the referee)
+        points_to_award = int((order_total_euros / 10) * 5)
+
+        if points_to_award > 0:
+            reason = f"Referral bonus from user {str(referee_id)[:8]}"
+            LoyaltyService.adjust_points(referrer_id, points_to_award, reason)
+            
+            # Mark the referral as completed to prevent future rewards from this pair
+            referral_record.status = 'completed'
+            db.session.commit()
+
 
     @staticmethod
     def get_all_tiers():
