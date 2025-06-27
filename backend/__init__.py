@@ -227,7 +227,18 @@ def create_app(config_class=config.Config):
 
     # Caching
     cache.init_app(app)
- 
+    limiter.init_app(app)
+    redis_client.init_app(app) # Initialize redis_client with the app
+
+    # === JWT Blocklist Implementation ===
+    # This callback checks if a JWT has been revoked.
+    @jwt.token_in_blocklist_loader
+    def check_if_token_in_blocklist(jwt_header, jwt_payload):
+        jti = jwt_payload["jti"]
+        # Checks if the jti (JWT ID) exists in the Redis blocklist set
+        token_is_revoked = redis_client.get(jti)
+        return token_is_revoked is not None
+
     # Security at middleware level: CSRF, sanitization, HTTPS, ...
     setup_middleware(app)
     mfa_check_middleware(app)
