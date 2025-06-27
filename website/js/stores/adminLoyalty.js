@@ -1,54 +1,56 @@
 import { defineStore } from 'pinia';
-import apiClient from '@/js/common/adminApiClient';
+import { apiClient } from '../common/adminApiClient';
 
 export const useAdminLoyaltyStore = defineStore('adminLoyalty', {
   state: () => ({
     tiers: [],
+    referralTiers: [],
     isLoading: false,
-    error: null,
   }),
   actions: {
-    async fetchTiers() {
+    async fetchLoyaltyTiers() {
       this.isLoading = true;
-      this.error = null;
       try {
         const response = await apiClient.get('/loyalty/tiers');
         this.tiers = response.data;
-      } catch (e) {
-        this.error = 'Failed to fetch loyalty tiers.';
-        console.error(this.error, e);
+      } catch (error) {
+        console.error("Failed to fetch loyalty tiers:", error);
       } finally {
         this.isLoading = false;
       }
     },
     async createTier(tierData) {
-      try {
         await apiClient.post('/loyalty/tiers', tierData);
-        await this.fetchTiers();
-      } catch (e) {
-        this.error = 'Failed to create tier.';
-        console.error(this.error, e);
-        throw e;
+        await this.fetchLoyaltyTiers();
+    },
+    async updateTier(tierId, tierData) {
+        await apiClient.put(`/loyalty/tiers/${tierId}`, tierData);
+        await this.fetchLoyaltyTiers();
+    },
+    async deleteTier(tierId) {
+        await apiClient.delete(`/loyalty/tiers/${tierId}`);
+        await this.fetchLoyaltyTiers();
+    },
+    
+    // Actions for Referral Reward Tiers
+    async fetchReferralTiers() {
+      this.isLoading = true;
+      try {
+        const response = await apiClient.get('/loyalty/referral-rewards');
+        this.referralTiers = response.data;
+      } catch (error) {
+        console.error("Failed to fetch referral tiers:", error);
+      } finally {
+        this.isLoading = false;
       }
     },
-    async updateTier(id, tierData) {
-      try {
-        await apiClient.put(`/loyalty/tiers/${id}`, tierData);
-        await this.fetchTiers();
-      } catch (e) {
-        this.error = 'Failed to update tier.';
-        console.error(this.error, e);
-        throw e;
-      }
+    async createReferralTier(tierData) {
+        await apiClient.post('/loyalty/referral-rewards', tierData);
+        await this.fetchReferralTiers();
     },
-    async deleteTier(id) {
-      try {
-        await apiClient.delete(`/loyalty/tiers/${id}`);
-        await this.fetchTiers();
-      } catch (e) {
-        this.error = 'Failed to delete tier.';
-        console.error(this.error, e);
-      }
+    async deleteReferralTier(tierId) {
+        await apiClient.delete(`/loyalty/referral-rewards/${tierId}`);
+        await this.fetchReferralTiers();
     },
   },
 });
