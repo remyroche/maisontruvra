@@ -17,6 +17,9 @@ from backend.services.pdf_service import PDFService
 from flask import current_app
 from .notification_service import NotificationService
 from .pdf_service import PDFService
+from ..extensions import socketio
+
+
 
 
 
@@ -144,6 +147,7 @@ class OrderService:
             db.session.commit()
             
             # --- Post-Transaction Tasks (safe to run after commit) ---
+            socketio.emit('new_order', new_order.to_dict(), namespace='/admin')
             
             # 8. Award loyalty points for the purchase
             try:
