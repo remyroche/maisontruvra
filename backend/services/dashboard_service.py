@@ -6,6 +6,19 @@ from backend.services.loyalty_service import LoyaltyService
 
 class DashboardService:
     @staticmethod
+
+    @staticmethod
+    def get_dashboard_data(user_id, user_type):
+        """Aggregates all necessary data for the B2C user dashboard."""
+        user_loyalty = LoyaltyService.get_user_loyalty_status(user_id)
+        recent_orders = OrderService.get_all_orders_for_user(user_id, user_type, limit=3)
+        
+        return {
+            "loyaltyStatus": user_loyalty.to_dict() if user_loyalty else None,
+            "recentOrders": [order.to_dict() for order in recent_orders]
+        }
+
+
     def get_dashboard_stats(user_id: int) -> dict:
         """
         Aggregates and returns key statistics for a B2B user's dashboard.
