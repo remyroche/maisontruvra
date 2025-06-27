@@ -1,8 +1,8 @@
-
+from sqlalchemy import func
 from backend.database import db
-from backend.models.product_models import Product, ProductVariant, ProductCategory
+from backend.models.product_models import Product, ProductVariant, ProductCategory, LoyaltyTier, OrderItem
 from backend.models.inventory_models import ProductItem
-from backend.services.exceptions import NotFoundException, ValidationException
+from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
 from backend.utils.sanitization import sanitize_input
 from backend.services.audit_log_service import AuditLogService
 from flask import current_app
@@ -11,6 +11,46 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ProductService:
+
+    @staticmethod
+    def get_all_products(user=None):
+        """
+        Gets all products, filtering based on the user's role and loyalty tier.
+        """
+        query = Product.query
+        
+        if user:
+            # Filter by B2C/B2B visibility
+            if hasattr(user, 'is_b2b') and user.is_b2b:
+                query = query.filter(Product.is_b2b_visible == True)
+            else:
+                query = query.filter(Product.is_b2c_visible == True)
+
+            # Handle tier-specific restrictions
+            # A subquery finds products that have *any* tier restrictions
+            products_with_restrictions = db.session.query(Product.id).join(
+                'restricted_to_tiers'
+            ).distinct()
+            
+            # Filter products: either they have no restrictions, OR the user's tier is in their allowed list
+            if hasattr(user, 'loyalty') and user.loyalty:
+                query = query.filter(
+                    ~Product.id.in_(products_with_restrictions) |
+                    (Product.id.in_(
+                        db.session.query(Product.id).join('restricted_to_tiers').filter(LoyaltyTier.id == user.loyalty.tier_id)
+                    ))
+                )
+            else:
+                # If user has no loyalty info, they can only see non-restricted items
+                query = query.filter(~Product.id.in_(products_with_restrictions))
+        else:
+            # For non-logged-in users, only show public B2C products with no tier restrictions
+            query = query.filter(Product.is_b2c_visible == True)
+            # Find products that have any tier restrictions and exclude them
+            products_with_restrictions = db.session.query(Product.id).join('restricted_to_tiers').distinct()
+            query = query.filter(~Product.id.in_(products_with_restrictions))
+            
+        return query.all()
 
     @staticmethod
     def search_products(query, limit=10):
@@ -101,7 +141,7 @@ class ProductService:
                 
                 # Create an inventory record for the new variant
                 initial_stock = int(variant_data.get('stock', 0))
-                inventory = Inventory(variant=new_variant, quantity=initial_stock)
+                inventory = ProductItem(variant=new_variant, quantity=initial_stock, status='in_stock') # Assuming ProductItem is your inventory model
                 db.session.add(inventory)
                 
                 new_product.variants.append(new_variant)
