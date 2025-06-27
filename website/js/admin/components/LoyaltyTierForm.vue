@@ -1,72 +1,65 @@
 <template>
-  <div>
-    <h1 class="text-2xl font-bold mb-4">Manage Product Reviews</h1>
+  <Form @submit="handleSubmit" :validation-schema="loyaltyTierSchema" :initial-values="form" v-slot="{ errors }">
+    <div class="space-y-4">
+      <div>
+        <label for="name" class="block text-sm font-medium text-gray-700">Tier Name</label>
+        <Field name="name" type="text" id="name" v-model="form.name"
+               class="mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none sm:text-sm"
+               :class="{'border-red-500': errors.name, 'border-gray-300': !errors.name}" />
+        <ErrorMessage name="name" class="text-red-500 text-sm mt-1" />
+      </div>
 
-    <div class="mb-4">
-        <select v-model="statusFilter" @change="applyFilters" class="border rounded p-2">
-            <option value="">All Reviews</option>
-            <option v-for="status in reviewsStore.statuses" :key="status" :value="status">{{ status }}</option>
-        </select>
+      <div>
+        <label for="min_spend" class="block text-sm font-medium text-gray-700">Minimum Spend (€)</label>
+        <Field name="min_spend" type="number" id="min_spend" v-model="form.min_spend"
+               class="mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none sm:text-sm"
+               :class="{'border-red-500': errors.min_spend, 'border-gray-300': !errors.min_spend}" />
+        <ErrorMessage name="min_spend" class="text-red-500 text-sm mt-1" />
+      </div>
+
+      <div>
+        <label for="points_per_euro" class="block text-sm font-medium text-gray-700">Points per Euro</label>
+        <Field name="points_per_euro" type="number" step="0.1" id="points_per_euro" v-model="form.points_per_euro"
+               class="mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none sm:text-sm"
+               :class="{'border-red-500': errors.points_per_euro, 'border-gray-300': !errors.points_per_euro}" />
+        <ErrorMessage name="points_per_euro" class="text-red-500 text-sm mt-1" />
+      </div>
+
+      <div>
+        <label for="benefits" class="block text-sm font-medium text-gray-700">Benefits (comma-separated)</label>
+        <Field name="benefits" as="textarea" id="benefits" v-model="form.benefits" rows="3"
+               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none sm:text-sm" />
+      </div>
     </div>
-
-    <div v-if="reviewsStore.isLoading" class="text-center p-4">Loading reviews...</div>
-    <div v-if="reviewsStore.error" class="text-red-500 bg-red-100 p-4 rounded">{{ reviewsStore.error }}</div>
-
-    <div v-if="!reviewsStore.isLoading" class="space-y-4">
-        <div v-for="review in reviewsStore.reviews" :key="review.id" class="bg-white p-4 rounded-lg shadow">
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="font-semibold">{{ review.product_name }}</p>
-                    <p class="text-sm text-gray-600">by {{ review.user_name }}</p>
-                    <StarRating :rating="review.rating" class="mt-1" />
-                </div>
-                <div class="text-right">
-                     <span class="px-2 py-1 text-xs font-semibold rounded-full" :class="statusClass(review.status)">
-                        {{ review.status }}
-                    </span>
-                    <p class="text-xs text-gray-500 mt-1">{{ new Date(review.created_at).toLocaleDateString() }}</p>
-                </div>
-            </div>
-            <p class="mt-2 text-gray-700">{{ review.comment }}</p>
-            <div class="mt-4 flex justify-end space-x-2">
-                <button v-if="review.status === 'pending'" @click="approveReview(review.id)" class="bg-green-500 text-white px-3 py-1 text-sm rounded">Approve</button>
-                <button @click="deleteReview(review.id)" class="bg-red-500 text-white px-3 py-1 text-sm rounded">Delete</button>
-            </div>
-        </div>
-        <div v-if="!reviewsStore.reviews.length" class="text-center text-gray-500 py-8">
-            No reviews found for this filter.
-        </div>
+    <div class="mt-6">
+      <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+        Save Tier
+      </button>
     </div>
-  </div>
+  </Form>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useAdminReviewsStore } from '@/js/stores/adminReviews';
-import StarRating from '@/js/admin/components/ui/StarRating.vue';
+import { ref, watch } from 'vue';
+import { Form, Field, ErrorMessage } from 'vee-validate';
+import { loyaltyTierSchema } from '../../validation/schemas';
 
-const reviewsStore = useAdminReviewsStore();
-const statusFilter = ref('');
-
-onMounted(() => {
-    reviewsStore.fetchReviews();
+const props = defineProps({
+  tier: {
+    type: Object,
+    default: () => ({ name: '', min_spend: 0, points_per_euro: 1.0, benefits: '' })
+  }
 });
 
-const applyFilters = () => {
-    reviewsStore.fetchReviews({ status: statusFilter.value });
-};
+const emit = defineEmits(['save']);
 
-const approveReview = (id) => {
-    reviewsStore.approveReview(id);
-};
+const form = ref({ ...props.tier });
 
-const deleteReview = (id) => {
-    if (confirm('Are you sure you want to delete this review permanently?')) {
-        reviewsStore.deleteReview(id);
-    }
-};
+watch(() => props.tier, (newTier) => {
+  form.value = { ...newTier };
+}, { deep: true });
 
-const statusClass = (status) => {
-  return status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
+const handleSubmit = (values) => {
+  emit('save', values);
 };
 </script>
