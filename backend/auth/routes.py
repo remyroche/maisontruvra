@@ -1,160 +1,140 @@
-from flask import Blueprint, request, jsonify
-from backend.services.auth_service import AuthService
-from backend.services.mfa_service import MfaService
-from backend.services.email_service import EmailService
-from backend.utils.sanitization import sanitize_input
-from backend.utils.csrf_protection import csrf_required
-from backend.services.exceptions import ValidationException, UnauthorizedException, NotFoundException
-from flask_jwt_extended import create_access_token, set_access_cookies, unset_jwt_cookies
-import logging
 
-auth_bp = Blueprint('auth', __name__)
-mfa_service = MfaService()
-email_service = EmailService()
+import logging
+from flask import Blueprint, request, jsonify
+from flask_jwt_extended import (
+    create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+)
+from ..services.auth_service import AuthService
+from ..services.user_service import UserService
+from ..utils.sanitization import sanitize_input
+from ..utils.rate_limiter import rate_limiter
+from ..services.exceptions import ValidationException, UnauthorizedException, NotFoundException
+
+auth_bp = Blueprint('auth_bp', __name__, url_prefix='/api/auth')
 security_logger = logging.getLogger('security')
 
-
-# User Registration
 @auth_bp.route('/register', methods=['POST'])
-@csrf_required
+@rate_limiter(limit=5, per=300) # 5 requests per 5 minutes
 def register():
-    """
-    Register a new user account.
-    """
-    data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid JSON"), 400
-
-    sanitized_data = sanitize_input(data)
+    """Registers a new user and sends a verification email."""
+    data = sanitize_input(request.get_json())
     
     required_fields = ['email', 'password', 'first_name', 'last_name']
-    if not all(field in sanitized_data for field in required_fields):
-        return jsonify(status="error", message="Missing required fields"), 400
-
-    try:
-        # The AuthService handles user creation, password hashing, and validation
-        user = AuthService.register_user(sanitized_data)
-        token = AuthService.generate_email_confirmation_token(user)
-        EmailService.send_verification_email(user, token)
-        security_logger.info(f"New user registered: {user.email} (ID: {user.id}) from IP: {request.remote_addr}")
+    if not all(field in data for field in required_fields):
+        return jsonify(error="Missing required fields"), 400
         
-        return jsonify(status="success", message="User registered successfully.", data=user.to_dict()), 201
-
+    try:
+        user = AuthService.register_user(data)
+        AuthService.send_verification_email(user.email)
+        security_logger.info(f"New user registered: {user.email} (ID: {user.id}) from IP: {request.remote_addr}")
+        return jsonify(message="Registration successful. Please check your email to verify your account."), 201
     except ValidationException as e:
-        return jsonify(status="error", message=str(e)), 400
+        return jsonify(error=str(e)), 400
     except Exception as e:
         security_logger.error(f"Registration error: {str(e)}")
-        return jsonify(status="error", message="An internal server error occurred."), 500
+        return jsonify(error="An internal server error occurred."), 500
 
-# User Login
 @auth_bp.route('/login', methods=['POST'])
-@csrf_required
+@rate_limiter(limit=10, per=60) # 10 requests per minute
 def login():
-    """
-    Authenticate a user and return JWT tokens.
-    Handles the first step of MFA if enabled.
-    """
-    data = request.get_json()
-    if not data or 'email' not in data or 'password' not in data:
-        return jsonify(status="error", message="Email and password are required."), 400
+    """Authenticates a user, handling the first step of MFA if enabled."""
+    data = sanitize_input(request.get_json())
+    email = data.get('email')
+    password = data.get('password')
 
-    email = sanitize_input(data['email'])
-    password = data['password'] # Do not sanitize password
-    
+    if not email or not password:
+        return jsonify(error="Email and password are required."), 400
+
     try:
-        # AuthService returns a dictionary with tokens and MFA status
         result = AuthService.login_user(email, password)
         
         if result.get('requires_mfa'):
-            return jsonify(status="success", message="MFA required", requires_mfa=True, user_id=result['user_id']), 200
+            return jsonify(requires_mfa=True, user_id=result['user_id']), 200
         else:
             access_token = create_access_token(identity=result['user_id'])
-            response = jsonify(status="success", message="Login successful.")
-            set_access_cookies(response, access_token)
-            return response, 200
+            refresh_token = create_refresh_token(identity=result['user_id'])
+            return jsonify(access_token=access_token, refresh_token=refresh_token), 200
             
-    except (UnauthorizedException, ValidationException) as e:
-        return jsonify(status="error", message=str(e)), 401
+    except UnauthorizedException as e:
+        security_logger.warning(f"Failed login attempt for email: {email} from IP: {request.remote_addr}")
+        return jsonify(error=str(e)), 401
     except Exception as e:
-        security_logger.error(f"Login error: {str(e)}")
-        return jsonify(status="error", message="An internal server error occurred."), 500
+        security_logger.error(f"Login error for {email}: {str(e)}")
+        return jsonify(error="An internal server error occurred."), 500
 
-@auth_bp.route('/logout', methods=['POST'])
-def logout():
-    response = jsonify(status="success", message="Logout successful.")
-    # Clear the JWT cookie
-    unset_jwt_cookies(response)
-    return response, 200
-    
-# MFA Verification
 @auth_bp.route('/login/verify-mfa', methods=['POST'])
-@csrf_required
+@rate_limiter(limit=5, per=60) # 5 requests per minute
 def verify_mfa():
-    """
-    Verify the MFA token for a user who has already passed the password check.
-    """
-    data = request.get_json()
-    if not data or 'user_id' not in data or 'mfa_token' not in data:
-        return jsonify(status="error", message="user_id and mfa_token are required."), 400
+    """Verifies the MFA token and returns JWTs upon success."""
+    data = sanitize_input(request.get_json())
+    user_id = data.get('user_id')
+    mfa_token = data.get('mfa_token')
 
-    user_id = data['user_id']
-    mfa_token = sanitize_input(data['mfa_token'])
+    if not user_id or not mfa_token:
+        return jsonify(error="user_id and mfa_token are required."), 400
 
     try:
-        # AuthService verifies the MFA token and returns final JWTs
-        tokens = AuthService.verify_mfa_login(user_id, mfa_token)
-        access_token = create_access_token(identity=user_id)
-        response = jsonify(status="success", message="MFA verification successful")
-        set_access_cookies(response, access_token)
-        return response, 200
-    except (UnauthorizedException, NotFoundException, ValidationException) as e:
-        return jsonify(status="error", message=str(e)), 401
+        if AuthService.verify_mfa_login(user_id, mfa_token):
+            access_token = create_access_token(identity=user_id)
+            refresh_token = create_refresh_token(identity=user_id)
+            return jsonify(access_token=access_token, refresh_token=refresh_token), 200
+        else:
+             raise UnauthorizedException("Invalid MFA token.")
+    except (UnauthorizedException, NotFoundException) as e:
+        security_logger.warning(f"Failed MFA attempt for user_id: {user_id} from IP: {request.remote_addr}")
+        return jsonify(error=str(e)), 401
     except Exception as e:
         security_logger.error(f"MFA verification error: {str(e)}")
-        return jsonify(status="error", message="An internal server error occurred."), 500
+        return jsonify(error="An internal server error occurred."), 500
 
-# Password Reset Request
+@auth_bp.route('/logout', methods=['POST'])
+@jwt_required()
+def logout():
+    """Logs out the user. JWT blocklisting can be implemented here."""
+    # To implement true logout, you would add the token's JTI to a blocklist (e.g., in Redis)
+    # until it expires. For now, the client is responsible for discarding the token.
+    return jsonify(message="Logout successful"), 200
+
+@auth_bp.route('/status', methods=['GET'])
+@jwt_required(optional=True)
+def status():
+    """Checks the authentication status of the user."""
+    current_user_id = get_jwt_identity()
+    if current_user_id:
+        user = UserService.get_user_by_id(current_user_id)
+        if user:
+            return jsonify(is_logged_in=True, user=user.to_dict())
+    return jsonify(is_logged_in=False)
+
+@auth_bp.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh():
+    """Refreshes an access token."""
+    current_user_id = get_jwt_identity()
+    new_access_token = create_access_token(identity=current_user_id)
+    return jsonify(access_token=new_access_token)
+
 @auth_bp.route('/password/request-reset', methods=['POST'])
+@rate_limiter(limit=3, per=300) # 3 requests per 5 minutes
 def request_password_reset():
-    """
-    Initiate a password reset request. Sends an email with a reset token.
-    """
-    data = request.get_json()
-    if not data or 'email' not in data:
-        return jsonify(status="error", message="Email is required."), 400
-    
-    email = sanitize_input(data['email'])
+    """Initiates the password reset process."""
+    data = sanitize_input(request.get_json())
+    email = data.get('email')
+    AuthService.send_password_reset_email(email)
+    # Always return a generic success message to prevent email enumeration
+    return jsonify(message="If an account with that email exists, a password reset link has been sent."), 200
 
-    try:
-        # This service method finds the user, generates a token, and dispatches an email.
-        # It should always return a success message to prevent user enumeration.
-        AuthService.request_password_reset(email)
-        return jsonify(status="success", message="If an account with that email exists, a password reset link has been sent."), 200
-    except Exception as e:
-        # Log error e but still return a generic message
-        return jsonify(status="success", message="If an account with that email exists, a password reset link has been sent."), 200
-
-# Password Reset Confirmation
 @auth_bp.route('/password/confirm-reset', methods=['POST'])
+@rate_limiter(limit=5, per=600) # 5 requests per 10 minutes
 def confirm_password_reset():
-    """
-    Reset a user's password using a valid token.
-    """
-    data = request.get_json()
-    if not data or 'token' not in data or 'new_password' not in data:
-        return jsonify(status="error", message="A token and new_password are required."), 400
+    """Resets the user's password using a valid token."""
+    data = sanitize_input(request.get_json())
+    token = data.get('token')
+    new_password = data.get('new_password')
+    
+    if not token or not new_password:
+        return jsonify(error="Token and new_password are required."), 400
 
-    token = data['token']
-    new_password = data['new_password']
-
-    try:
-        # This service method verifies the token and updates the password
-        if AuthService.confirm_password_reset(token, new_password):
-            return jsonify(status="success", message="Your password has been reset successfully."), 200
-        else:
-            return jsonify(status="error", message="Invalid or expired token."), 400
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An internal server error occurred."), 500
+    if AuthService.reset_password_with_token(token, new_password):
+        return jsonify(message="Password has been reset successfully."), 200
+    return jsonify(error="Invalid or expired token."), 400
