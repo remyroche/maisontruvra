@@ -8,6 +8,7 @@ from flask_limiter.util import get_remote_address
 from argon2 import PasswordHasher
 from flask_caching import Cache
 from flask_redis import FlaskRedis
+from flask_socketio import SocketIO
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -20,3 +21,4 @@ cache = Cache()
 jwt = JWTManager()
 limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
 redis_client = FlaskRedis() 
+socketio = SocketIO(message_queue='redis://')
