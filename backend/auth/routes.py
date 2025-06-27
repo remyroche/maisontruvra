@@ -90,10 +90,27 @@ def verify_mfa():
 @auth_bp.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():
-    """Logs out the user. JWT blocklisting can be implemented here."""
-    # To implement true logout, you would add the token's JTI to a blocklist (e.g., in Redis)
-    # until it expires. For now, the client is responsible for discarding the token.
-    return jsonify(message="Logout successful"), 200
+    """
+    Revokes the current user's access token by adding its JTI to the blocklist.
+    """
+    try:
+        token_data = get_jwt()
+        jti = token_data["jti"]
+        token_type = token_data["type"]
+        
+        # Get the expiration timestamp and calculate the remaining time in seconds
+        expires_at = datetime.fromtimestamp(token_data['exp'], tz=timezone.utc)
+        now = datetime.now(timezone.utc)
+        expires_in = (expires_at - now).total_seconds()
+
+        # Add the JTI to the Redis blocklist with an expiration
+        redis_client.set(jti, "revoked", ex=int(expires_in))
+        
+        security_logger.info(f"User {get_jwt_identity()} logged out. Revoked {token_type} token {jti}.")
+        return jsonify(message=f"{token_type.capitalize()} token successfully revoked"), 200
+    except Exception as e:
+        security_logger.error(f"Error during logout: {str(e)}")
+        return jsonify(error="An internal error occurred during logout."), 500
 
 @auth_bp.route('/status', methods=['GET'])
 @jwt_required(optional=True)
