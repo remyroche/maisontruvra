@@ -2,6 +2,7 @@
 from backend.database import db
 from backend.models.user_models import User
 from backend.models.b2b_loyalty_models import LoyaltyPointTransaction, LoyaltyTier
+from ..models.loyalty_models import LoyaltyTier, UserLoyalty, Referral, ReferralRewardTier, PointVoucher, ExclusiveReward
 from backend.services.exceptions import ValidationError, NotFoundError
 from sqlalchemy import func
 from datetime import datetime, timedelta
@@ -115,6 +116,17 @@ class LoyaltyService:
         }
 
     @staticmethod
+    def create_referral_code(user_id):
+        user = User.query.get(user_id)
+        if user and not Referral.query.filter_by(referrer_id=user_id).first():
+            code = f"{user.first_name.upper()}-{secrets.token_hex(3)}".upper()
+            referral = Referral(referrer_id=user_id, referral_code=code)
+            db.session.add(referral)
+            db.session.commit()
+            return referral
+        return None
+
+    @staticmethod
     def get_all_tier_discounts() -> list:
         """
         Gets the names and discount percentages for all loyalty tiers
@@ -164,6 +176,64 @@ class LoyaltyService:
                 db.session.add(referrer_transaction)
         
         db.session.commit()
+
+
+    @staticmethod
+    def get_referral_data(user_id):
+        return Referral.query.filter_by(referrer_id=user_id).first()
+
+    @staticmethod
+    def get_referrals_for_user(user_id):
+        return Referral.query.filter_by(referrer_id=user_id).all()
+
+    @staticmethod
+    def get_referral_reward_tiers():
+        return ReferralRewardTier.query.order_by(ReferralRewardTier.referral_count).all()
+        
+    @staticmethod
+    def create_referral_reward_tier(data):
+        reward_tier = ReferralRewardTier(**data)
+        db.session.add(reward_tier)
+        db.session.commit()
+        return reward_tier
+
+    @staticmethod
+    def convert_points_to_voucher(user_id, points_to_convert, discount_amount):
+        user_loyalty = UserLoyalty.query.filter_by(user_id=user_id).first()
+        if user_loyalty and user_loyalty.points >= points_to_convert:
+            user_loyalty.points -= points_to_convert
+            voucher_code = f"VOUCHER-{secrets.token_hex(4)}".upper()
+            voucher = PointVoucher(
+                user_id=user_id,
+                voucher_code=voucher_code,
+                points_cost=points_to_convert,
+                discount_amount=discount_amount
+            )
+            db.session.add(voucher)
+            db.session.commit()
+            return voucher
+        return None
+        
+    @staticmethod
+    def get_exclusive_rewards(tier_id=None):
+        if tier_id:
+            return ExclusiveReward.query.filter(
+                (ExclusiveReward.tier_id == tier_id) | (ExclusiveReward.tier_id == None)
+            ).all()
+        return ExclusiveReward.query.all()
+
+    @staticmethod
+    def redeem_exclusive_reward(user_id, reward_id):
+        user_loyalty = UserLoyalty.query.filter_by(user_id=user_id).first()
+        reward = ExclusiveReward.query.get(reward_id)
+        
+        if user_loyalty and reward and user_loyalty.points >= reward.points_cost:
+            user_loyalty.points -= reward.points_cost
+            # Logic to grant the reward (e.g., add product to order, send email with content)
+            # This part needs further implementation based on reward type.
+            db.session.commit()
+            return True
+        return False
 
     @staticmethod
     def get_user_balance(user_id: int) -> int:
