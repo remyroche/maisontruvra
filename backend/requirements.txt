@@ -3,6 +3,8 @@ celery==5.5.3
 playwright
 redis==4.3.4
 flask-redis==0.4.0
+Flask-SocketIO==5.3.3
+eventlet==0.33.3
 Flask-Compress==1.1.0
 cryptography
 mysql-connector-python==9.3.0
