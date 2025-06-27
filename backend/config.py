@@ -10,9 +10,8 @@ load_dotenv()
 
 class Config:
     """Base configuration."""
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=6)
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
-    # Enable JWT blocklisting for logout
     JWT_BLOCKLIST_ENABLED = True
     JWT_BLOCKLIST_TOKEN_CHECKS = ['access', 'refresh']
 
