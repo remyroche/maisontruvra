@@ -26,7 +26,7 @@
 
           <!-- Redeem Loyalty Points Section -->
           <div v-if="userStore.isLoggedIn" class="mt-10 border-t border-gray-200 pt-10">
-            <h2 class="text-lg font-medium text-gray-900">Redeem Your Loyalty Points</h2>
+            <h2 class="text-lg font-medium text-gray-900">A Gift for You?</h2>
             <p class="mt-1 text-sm text-gray-500">You have <span class="font-bold text-primary">{{ userStore.profile?.loyalty?.points || 0 }}</span> points to spend.</p>
 
             <div v-if="loyaltyStore.isLoading" class="mt-4">Loading rewards...</div>
@@ -36,8 +36,8 @@
                   <h4 class="font-semibold">{{ reward.name }}</h4>
                   <p class="text-sm text-gray-500">{{ reward.points_cost }} points</p>
                 </div>
-                <button @click="addRewardToCart(reward.id)" class="btn-secondary text-sm">
-                  Add to Cart
+                <button @click="openRewardModal(reward)" class="btn-secondary text-sm">
+                  Claim Your Gift
                 </button>
               </div>
             </div>
@@ -65,6 +65,9 @@
         </div>
       </div>
     </div>
+    
+    <!-- The Reward Modal -->
+    <RewardModal :open="isRewardModalOpen" :reward="selectedReward" @close="isRewardModalOpen = false" @claim="addRewardToCart" />
   </div>
 </template>
 
@@ -75,29 +78,35 @@ import { useCheckoutStore } from '../../js/stores/checkout';
 import { useLoyaltyStore } from '../../js/stores/loyalty';
 import { useCartStore } from '../../js/stores/cart';
 
+// Component Imports
 import GuestCheckoutForm from '../components/checkout/GuestCheckoutForm.vue';
 import AddressSelector from '../components/checkout/AddressSelector.vue';
-import DeliveryMethodSelector from '../components/checkout/DeliveryMethodSelector.vue';
 import OrderSummary from '../components/checkout/OrderSummary.vue';
+import DeliveryMethodSelector from '../components/checkout/DeliveryMethodSelector.vue';
+import RewardModal from '../components/rewards/RewardModal.vue';
 import LoginForm from '../components/checkout/LoginForm.vue';
 
+// Initialize Stores
 const userStore = useUserStore();
 const checkoutStore = useCheckoutStore();
 const loyaltyStore = useLoyaltyStore();
 const cartStore = useCartStore();
 
+// Component State
 const showLogin = ref(false);
+const isRewardModalOpen = ref(false);
+const selectedReward = ref(null);
 
+// Lifecycle Hooks
 onMounted(() => {
   if (userStore.isLoggedIn) {
     loyaltyStore.fetchExclusiveRewards();
   }
 });
 
+// Computed Properties
 const availableRewards = computed(() => {
-  if (!userStore.isLoggedIn || !userStore.profile?.loyalty) {
-    return [];
-  }
+  if (!userStore.isLoggedIn || !userStore.profile?.loyalty) return [];
   const userPoints = userStore.profile.loyalty.points;
   return loyaltyStore.rewards.filter(reward => 
     reward.linked_product_id && 
@@ -106,13 +115,16 @@ const availableRewards = computed(() => {
   );
 });
 
+// Methods
+function openRewardModal(reward) {
+  selectedReward.value = reward;
+  isRewardModalOpen.value = true;
+}
+
 async function addRewardToCart(rewardId) {
-    // This action should handle both the point deduction and adding the item to cart
     await cartStore.addRewardItem(rewardId);
-    // Refresh user profile to get updated points total
-    await userStore.checkAuthStatus(); 
-    // Re-fetch rewards to update the list of what's available
-    loyaltyStore.fetchExclusiveRewards();
+    await userStore.checkAuthStatus(); // Refresh points
+    loyaltyStore.fetchExclusiveRewards(); // Refresh available rewards
 }
 
 function onLoginSuccess() {
@@ -121,7 +133,7 @@ function onLoginSuccess() {
 }
 
 function proceedToPayment() {
-    // The core logic is now in the store for better separation of concerns
+    // The core logic is centralized in the store for better state management
     checkoutStore.submitOrder();
 }
 </script>
