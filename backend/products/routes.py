@@ -8,6 +8,29 @@ import logging
 products_bp = Blueprint('products_bp', __name__, url_prefix='/api/products')
 logger = logging.getLogger(__name__)
 
+
+@products_bp.route('/<uuid:product_id>/recommendations', methods=['GET'])
+def get_recommendations(product_id):
+    """Gets co-purchased product recommendations for a given product."""
+    recommendations = ProductService.get_product_recommendations(product_id)
+    return jsonify([product.to_dict() for product in recommendations])
+
+@products_bp.route('/search', methods=['GET'])
+def search_products():
+    """Endpoint for product search/autocomplete."""
+    query = sanitize_input(request.args.get('q', ''))
+    if len(query) < 2:
+        return jsonify([])
+    
+    products = ProductService.search_products(query)
+    # Return a simpler dict for search results
+    return jsonify([{
+        'id': str(p.id), 
+        'name': p.name, 
+        'sku': p.sku
+    } for p in products])
+
+
 # READ all products with filtering, searching, and pagination
 @cache.cached(timeout=21600)
 @products_bp.route('/', methods=['GET'])
