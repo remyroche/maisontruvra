@@ -1,6 +1,18 @@
 from backend.database import db
 from .base import BaseModel, SoftDeleteMixin
 
+class StockNotificationRequest(Base):
+    __tablename__ = 'stock_notification_requests'
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    product_id = db.Column(UUID(as_uuid=True), db.ForeignKey('products.id'), nullable=False)
+    
+    user = db.relationship('User')
+    product = db.relationship('Product')
+    
+    __table_args__ = (db.UniqueConstraint('user_id', 'product_id', name='_user_product_uc'),)
+
+
 class Product(BaseModel, SoftDeleteMixin):
     __tablename__ = 'products'
     id = db.Column(db.Integer, primary_key=True)
