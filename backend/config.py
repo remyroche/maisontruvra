@@ -10,6 +10,12 @@ load_dotenv()
 
 class Config:
     """Base configuration."""
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=6)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
+    # Enable JWT blocklisting for logout
+    JWT_BLOCKLIST_ENABLED = True
+    JWT_BLOCKLIST_TOKEN_CHECKS = ['access', 'refresh']
+
     SECRET_KEY = os.environ.get('SECRET_KEY', 'a-default-secret-key-that-is-not-so-secret')
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'a-default-jwt-secret-key')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
