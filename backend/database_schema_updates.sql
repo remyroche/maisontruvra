@@ -2,6 +2,22 @@
 -- This file outlines the necessary SQL changes to support the detailed product hierarchy,
 -- using PostgreSQL syntax.
 
+-- Add indexes to foreign keys and frequently queried columns for performance
+CREATE INDEX IF NOT EXISTS idx_user_loyalty_user_id ON user_loyalty(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_loyalty_tier_id ON user_loyalty(tier_id);
+CREATE INDEX IF NOT EXISTS idx_loyalty_point_logs_user_id ON loyalty_point_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_point_vouchers_user_id ON point_vouchers(user_id);
+CREATE INDEX IF NOT EXISTS idx_exclusive_rewards_tier_id ON exclusive_rewards(tier_id);
+CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_cart_items_cart_id ON cart_items(cart_id);
+CREATE INDEX IF NOT EXISTS idx_cart_items_product_id ON cart_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+
 -- 1. Create a table for the highest-level categories.
 CREATE TABLE "categories" (
     "id" SERIAL PRIMARY KEY,
