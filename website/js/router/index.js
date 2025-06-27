@@ -1,4 +1,3 @@
-
 import { createRouter, createWebHistory } from 'vue-router';
 import { useUserStore } from '../stores/user';
 
@@ -15,10 +14,10 @@ const ProductDetailView = () => import('../vue/views/ProductDetailView.vue');
 const JournalView = () => import('../vue/views/JournalView.vue');
 const ArticleView = () => import('../vue/views/ArticleView.vue');
 const CheckoutView = () => import('../vue/views/CheckoutView.vue');
+const AccountView = () => import('../vue/views/AccountView.vue');
 const DashboardView = () => import('../vue/views/DashboardView.vue');
 const RewardsView = () => import('../vue/views/RewardsView.vue');
 const ReferralView = () => import('../vue/views/ReferralView.vue');
-const AccountView = () => import('../vue/views/AccountView.vue');
 const NotFoundView = () => import('../vue/views/NotFoundView.vue');
 
 
@@ -44,12 +43,11 @@ const routes = [
   // --- Authenticated User Routes ---
   { 
     path: '/account', 
-    name: 'Account', 
     component: AccountView, 
     meta: { requiresAuth: true },
-    // Nested routes for the account section
+    // Nested routes for the account section for a better structure
     children: [
-        { path: '', redirect: '/account/dashboard' }, // Default to dashboard
+        { path: '', name: 'Account', redirect: '/account/dashboard' }, // Default to dashboard
         { path: 'dashboard', name: 'Dashboard', component: DashboardView },
         { path: 'rewards', name: 'Rewards', component: RewardsView },
         { path: 'referrals', name: 'Referrals', component: ReferralView },
@@ -78,15 +76,18 @@ const router = createRouter({
 });
 
 // --- Navigation Guard ---
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
     const userStore = useUserStore();
-    // This assumes you have an action that checks the user's auth status,
-    // possibly by checking for a token in localStorage or making a quick API call.
+    // Ensure auth status is checked before navigating
+    if (userStore.isLoggedIn === null) {
+        await userStore.checkAuthStatus();
+    }
     const isAuthenticated = userStore.isLoggedIn; 
 
     if (to.meta.requiresAuth && !isAuthenticated) {
         // Redirect to login page if route requires auth and user is not authenticated
-        next({ name: 'Home' }); // Or redirect to a dedicated login page
+        // You can also add a query param to redirect back after login: next({ name: 'Login', query: { redirect: to.fullPath } })
+        next({ name: 'Home' }); 
     } else {
         next(); // Proceed to route
     }
