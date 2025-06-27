@@ -4,33 +4,40 @@ from backend.models.user_models import User
 from backend.models.inventory_models import StockNotification
 from .exceptions import ServiceError, NotFoundException
 from flask import current_app
+from ..models import StockNotificationRequest
+from ..tasks import send_back_in_stock_email_task
+
 
 class NotificationService:
     @staticmethod
-    def create_stock_notification(product_id: int, user_id: int = None, guest_email: str = None):
-        """Creates a request to be notified when a product is back in stock."""
-        product = Product.query.get(product_id)
-        if not product:
-            raise NotFoundException("Product not found.")
-
-        # Check if a notification already exists and is pending
-        query = StockNotification.query.filter_by(product_id=product_id, notified=False)
-        if user_id:
-            existing_notification = query.filter_by(user_id=user_id).first()
-        elif guest_email:
-            existing_notification = query.filter_by(guest_email=guest_email).first()
-        else: # Should not happen with proper frontend logic
-             raise ServiceError("User or email required.", 400)
-
-        if existing_notification:
-            raise ServiceError("You are already on the waiting list for this product.", 409)
-
-        new_notification = StockNotification(product_id=product_id, user_id=user_id, guest_email=guest_email)
-        db.session.add(new_notification)
+    def create_stock_notification_request(user_id, product_id):
+        """Creates a request for a user to be notified when a product is back in stock."""
+        existing_request = StockNotificationRequest.query.filter_by(user_id=user_id, product_id=product_id).first()
+        if existing_request:
+            raise ValidationException("You are already subscribed to notifications for this product.")
+        
+        new_request = StockNotificationRequest(user_id=user_id, product_id=product_id)
+        db.session.add(new_request)
         db.session.commit()
-        current_app.logger.info(f"Stock notification created for product {product_id} for user {user_id or guest_email}")
-        return new_notification
+        return new_request
 
+
+    @staticmethod
+    def trigger_back_in_stock_notifications(product_id):
+        """Finds all requests for a product and triggers email tasks."""
+        requests = StockNotificationRequest.query.filter_by(product_id=product_id).all()
+        if not requests:
+            return
+
+        user_ids = [req.user_id for req in requests]
+        send_back_in_stock_email_task.delay(user_ids, product_id)
+
+        # Delete the requests after queuing the emails
+        for req in requests:
+            db.session.delete(req)
+        db.session.commit()
+
+    
     @staticmethod
     def get_and_clear_stock_notifications(product_id: int):
         """
