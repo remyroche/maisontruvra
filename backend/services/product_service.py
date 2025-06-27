@@ -13,6 +13,44 @@ logger = logging.getLogger(__name__)
 class ProductService:
 
     @staticmethod
+    def search_products(query, limit=10):
+        """Searches for products by name or SKU for autocomplete."""
+        search_term = f"%{query.lower()}%"
+        return Product.query.filter(
+            (func.lower(Product.name).like(search_term)) |
+            (func.lower(Product.sku).like(search_term))
+        ).limit(limit).all()
+
+    @staticmethod
+    def get_product_recommendations(product_id, limit=5):
+        """
+        Gets product recommendations based on co-purchase history.
+        "Customers who bought this also bought..."
+        """
+        # Find orders that contain the target product
+        subquery = db.session.query(OrderItem.order_id).filter(OrderItem.product_id == product_id).subquery()
+
+        # Find all other products purchased in those same orders
+        recommendations = db.session.query(
+            OrderItem.product_id,
+            func.count(OrderItem.product_id).label('purchase_count')
+        ).filter(
+            OrderItem.order_id.in_(subquery),
+            OrderItem.product_id != product_id  # Exclude the original product
+        ).group_by(
+            OrderItem.product_id
+        ).order_by(
+            func.count(OrderItem.product_id).desc()
+        ).limit(limit).all()
+
+        recommended_product_ids = [rec.product_id for rec in recommendations]
+        if not recommended_product_ids:
+            return []
+
+        # Fetch the full product objects for the recommended IDs
+        return Product.query.filter(Product.id.in_(recommended_product_ids)).all()
+
+    @staticmethod
     def _generate_sku(base_sku, attributes):
         """
         Generates a unique SKU for a variant based on its attributes.
