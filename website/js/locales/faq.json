@@ -1,0 +1,86 @@
+{
+  "en": {
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "subtitle": "Can't find the answer you're looking for? Reach out to our customer support team.",
+      "sections": {
+        "ordering": {
+          "title": "Ordering & Payment",
+          "q1": "How do I place an order?",
+          "a1": "Simply browse our collection, add your desired products to the cart, and proceed to checkout. You can check out as a guest or create an account to save your details for faster future purchases and to join our loyalty program.",
+          "q2": "What payment methods do you accept?",
+          "a2": "We accept all major credit cards (Visa, MasterCard, American Express) as well as secure payments through PayPal.",
+          "q3": "Can I modify or cancel my order after placing it?",
+          "a3": "Due to the perishable nature of our fresh truffles, orders are processed very quickly. Please contact our customer support team as soon as possible, and we will do our best to accommodate your request if the order has not yet been dispatched."
+        },
+        "shipping": {
+          "title": "Shipping & Delivery",
+          "q1": "Where do you ship to?",
+          "a1": "We ship throughout metropolitan France and to most countries within the European Union. For specific country inquiries, please contact our support team.",
+          "q2": "How are fresh truffles shipped to ensure they arrive in perfect condition?",
+          "a2": "Fresh truffles are our specialty. They are shipped overnight via Chronofresh in insulated packaging with cold packs to maintain optimal temperature and preserve their aroma and freshness from our door to yours.",
+          "q3": "When can I expect my order?",
+          "a3": "Orders for non-perishable items are typically dispatched within 1-2 business days. Fresh truffle orders placed before 11 AM CEST are dispatched the same day for next-day delivery. Currently, as of late June, we are in the peak of the Summer Truffle (Tuber aestivum) season, ensuring exceptional quality for all fresh orders."
+        },
+        "products": {
+          "title": "Our Products",
+          "q1": "How should I store my fresh truffles?",
+          "a1": "Upon arrival, gently wrap your fresh truffles in a clean paper towel, place them in an airtight container (like a glass jar), and store them in the refrigerator. Change the paper towel daily. For best results, we recommend consuming them within 5-7 days.",
+          "q2": "What does 'Tuber' mean in the product name?",
+          "a2": "'Tuber' is the scientific genus for truffles. Different species, like <i>Tuber melanosporum</i> (Winter Black Truffle) or <i>Tuber aestivum</i> (Summer Black Truffle), have distinct aromas, flavors, and seasons."
+        },
+        "loyalty": {
+          "title": "Loyalty & Referrals",
+          "q1": "How do I join the loyalty program?",
+          "a1": "You are automatically enrolled in our loyalty program with your first purchase! You'll start earning points immediately which you can redeem for exclusive products and unique experiences.",
+          "q2": "How can I see my points balance?",
+          "a2": "You can view your points balance, current tier, and available rewards at any time by visiting your personal account dashboard.",
+          "q3": "How does the referral program work?",
+          "a3": "From your account dashboard, you can get a unique referral link to share with friends. When they make their first purchase, you'll earn rewards! The more friends you refer, the better the rewards."
+        }
+      }
+    }
+  },
+  "fr": {
+    "faq": {
+      "title": "Questions Fréquemment Posées",
+      "subtitle": "Vous ne trouvez pas la réponse que vous cherchez ? Contactez notre service client.",
+      "sections": {
+        "ordering": {
+          "title": "Commande & Paiement",
+          "q1": "Comment puis-je passer une commande ?",
+          "a1": "Parcourez simplement notre collection, ajoutez les produits souhaités à votre panier, puis procédez au paiement. Vous pouvez commander en tant qu'invité ou créer un compte pour sauvegarder vos informations pour de futurs achats plus rapides et pour rejoindre notre programme de fidélité.",
+          "q2": "Quels moyens de paiement acceptez-vous ?",
+          "a2": "Nous acceptons toutes les principales cartes de crédit (Visa, MasterCard, American Express) ainsi que les paiements sécurisés via PayPal.",
+          "q3": "Puis-je modifier ou annuler ma commande après l'avoir passée ?",
+          "a3": "En raison de la nature périssable de nos truffes fraîches, les commandes sont traitées très rapidement. Veuillez contacter notre service client dès que possible, et nous ferons de notre mieux pour répondre à votre demande si la commande n'a pas encore été expédiée."
+        },
+        "shipping": {
+          "title": "Expédition & Livraison",
+          "q1": "Où livrez-vous ?",
+          "a1": "Nous livrons en France métropolitaine et dans la plupart des pays de l'Union Européenne. Pour des demandes spécifiques à un pays, veuillez contacter notre support.",
+          "q2": "Comment les truffes fraîches sont-elles expédiées pour garantir leur arrivée en parfait état ?",
+          "a2": "Les truffes fraîches sont notre spécialité. Elles sont expédiées en 24h via Chronofresh dans un emballage isotherme avec des packs de froid pour maintenir une température optimale et préserver leur arôme et leur fraîcheur de chez nous à chez vous.",
+          "q3": "Quand puis-je attendre ma commande ?",
+          "a3": "Les commandes d'articles non périssables sont généralement expédiées sous 1 à 2 jours ouvrables. Les commandes de truffes fraîches passées avant 11h CEST sont expédiées le jour même pour une livraison le lendemain. Actuellement, fin juin, nous sommes au sommet de la saison de la Truffe d'été (Tuber aestivum), garantissant une qualité exceptionnelle pour toutes les commandes fraîches."
+        },
+        "products": {
+          "title": "Nos Produits",
+          "q1": "Comment dois-je conserver mes truffes fraîches ?",
+          "a1": "À réception, enveloppez délicatement vos truffes fraîches dans du papier absorbant propre, placez-les dans un récipient hermétique (comme un bocal en verre) et conservez-les au réfrigérateur. Changez le papier absorbant tous les jours. Pour un résultat optimal, nous recommandons de les consommer dans les 5 à 7 jours.",
+          "q2": "Que signifie 'Tuber' dans le nom du produit ?",
+          "a2": "'Tuber' est le genre scientifique des truffes. Les différentes espèces, comme <i>Tuber melanosporum</i> (Truffe Noire d'Hiver) ou <i>Tuber aestivum</i> (Truffe Noire d'Été), ont des arômes, des saveurs et des saisons distincts."
+        },
+        "loyalty": {
+          "title": "Fidélité & Parrainage",
+          "q1": "Comment rejoindre le programme de fidélité ?",
+          "a1": "Vous êtes automatiquement inscrit à notre programme de fidélité dès votre premier achat ! Vous commencerez immédiatement à gagner des points que vous pourrez échanger contre des produits exclusifs et des expériences uniques.",
+          "q2": "Comment puis-je voir mon solde de points ?",
+          "a2": "Vous pouvez consulter votre solde de points, votre palier actuel et les récompenses disponibles à tout moment en visitant votre tableau de bord personnel.",
+          "q3": "Comment fonctionne le programme de parrainage ?",
+          "a3": "Depuis votre tableau de bord, vous pouvez obtenir un lien de parrainage unique à partager avec vos amis. Lorsqu'ils effectuent leur premier achat, vous gagnez des récompenses ! Plus vous parrainez d'amis, meilleures sont les récompenses."
+        }
+      }
+    }
+  }
+}
