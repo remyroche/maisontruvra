@@ -116,13 +116,19 @@ class ExclusiveReward(Base):
     reward_type = db.Column(db.String(50), nullable=False)
     tier_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loyalty_tiers.id'), nullable=False)
     tier = db.relationship('LoyaltyTier')
+    linked_product_id = db.Column(UUID(as_uuid=True), db.ForeignKey('products.id'), nullable=True)
+    linked_product = db.relationship('Product')
 
     def to_dict(self):
-        return {
+        # ... existing to_dict ...
+        data = {
             'id': str(self.id),
             'name': self.name,
             'description': self.description,
             'points_cost': self.points_cost,
             'reward_type': self.reward_type,
-            'required_tier': self.tier.name if self.tier else None
+            'required_tier': self.tier.name if self.tier else None,
+            'linked_product_id': str(self.linked_product_id) if self.linked_product_id else None
         }
+        return data
+
