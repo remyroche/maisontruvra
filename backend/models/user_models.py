@@ -28,6 +28,8 @@ class User(db.Model, UserMixin):
     orders = db.relationship('Order', backref='user', lazy=True)
     reviews = db.relationship('Review', backref='user', lazy=True)
     wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True, cascade="all, delete-orphan")
+    loyalty = relationship("UserLoyalty", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="user")
 
     two_factor_secret = db.Column(db.String(255), nullable=True)
     two_factor_enabled = db.Column(db.Boolean, default=False)
@@ -120,9 +122,15 @@ class User(db.Model, UserMixin):
         """Serialization for admins viewing user profiles."""
         data = self.to_user_dict()
         data.update({
+            'id': self.id,
+            'email': self.email,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'is_mfa_enabled': self.is_mfa_enabled,
+            'is_email_verified': self.is_email_verified,
             'is_admin': self.is_admin,
-            'is_active': self.is_active,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'created_at': self.created_at.isoformat(),
+            'loyalty_info': self.loyalty.to_dict() if self.loyalty else None
             'orders': [order.to_admin_dict() for order in self.orders],
             'addresses': [address.to_dict() for address in self.addresses]
         })
