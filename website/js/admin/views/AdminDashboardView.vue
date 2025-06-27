@@ -1,28 +1,77 @@
 <template>
   <div>
-    <h1 class="text-2xl font-bold mb-4">Dashboard</h1>
-    <div v-if="dashboardStore.isLoading">Loading...</div>
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <!-- Stat Cards -->
-      <div v-for="(stat, key) in dashboardStore.stats" :key="key" class="bg-white p-4 rounded-lg shadow">
-        <h3 class="text-sm font-medium text-gray-500">{{ formatStatKey(key) }}</h3>
-        <p class="mt-1 text-3xl font-semibold">{{ stat }}</p>
-      </div>
-    </div>
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">Admin Dashboard</h1>
+    <!-- Stats Cards -->
+    <DashboardStats />
 
-    <h2 class="text-xl font-bold mt-8 mb-4">Recent Activity</h2>
-     <div v-if="dashboardStore.isLoading">Loading activity...</div>
-    <ul v-else class="space-y-3">
-        <li v-for="item in dashboardStore.recentActivity" :key="item.id" class="bg-white p-3 rounded-lg shadow-sm">
-            <p>{{ item.description }} - <span class="text-gray-500 text-sm">{{ new Date(item.timestamp).toLocaleString() }}</span></p>
-        </li>
-    </ul>
+    <div class="mt-8">
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">Recent Activity</h2>
+      <!-- Placeholder for recent orders/users tables -->
+       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+           <div class="bg-white p-4 rounded-lg shadow">
+               <h3 class="font-semibold">Recent Orders</h3>
+               <!-- Order list would go here -->
+           </div>
+           <div class="bg-white p-4 rounded-lg shadow">
+                <h3 class="font-semibold">New Users</h3>
+               <!-- User list would go here -->
+           </div>
+       </div>
+    </div>
   </div>
 </template>
+
 <script setup>
-import { onMounted } from 'vue';
-import { useAdminDashboardStore } from '@/js/stores/adminDashboard';
-const dashboardStore = useAdminDashboardStore();
-onMounted(() => dashboardStore.fetchDashboardData());
-const formatStatKey = (key) => key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+import { onMounted, onUnmounted } from 'vue';
+import { io } from 'socket.io-client';
+import { useAdminOrdersStore } from '../../stores/adminOrders';
+import { useAdminUsersStore } from '../../stores/adminUsers';
+import { useNotificationStore } from '../../stores/notification';
+import DashboardStats from '../../vue/components/DashboardStats.vue';
+
+const ordersStore = useAdminOrdersStore();
+const usersStore = useAdminUsersStore();
+const notificationStore = useNotificationStore();
+
+let socket;
+
+onMounted(() => {
+  // Connect to the WebSocket server
+  socket = io('http://localhost:5000/admin'); // Use your server address and namespace
+
+  socket.on('connect', () => {
+    console.log('Connected to admin WebSocket namespace.');
+  });
+
+  // Listen for 'new_order' events
+  socket.on('new_order', (order) => {
+    notificationStore.showNotification({
+      message: `New order #${order.id} placed for €${order.total_amount}.`,
+      type: 'info'
+    });
+    // Refresh dashboard data
+    ordersStore.fetchOrders(); 
+  });
+
+  // Listen for 'new_user' events
+  socket.on('new_user', (user) => {
+    notificationStore.showNotification({
+      message: `New user registered: ${user.email}.`,
+      type: 'info'
+    });
+    // Refresh dashboard data
+    usersStore.fetchUsers();
+  });
+
+   // Fetch initial data
+  ordersStore.fetchOrders();
+  usersStore.fetchUsers();
+});
+
+onUnmounted(() => {
+  // Disconnect the socket when the component is destroyed
+  if (socket) {
+    socket.disconnect();
+  }
+});
 </script>
