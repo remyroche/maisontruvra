@@ -7,6 +7,8 @@ from backend.models.inventory_models import InventoryReservation # Added: Import
 from .exceptions import ServiceError, ValidationException, NotFoundException
 from .inventory_service import InventoryService
 from backend.utils.input_sanitizer import InputSanitizer
+from ..models import ExclusiveReward, Product
+
 
 class CartService:
     @staticmethod
@@ -21,6 +23,30 @@ class CartService:
             db.session.commit()
         return cart
 
+        @staticmethod
+    def add_reward_to_cart(user_id, reward_id):
+        """Adds a redeemed loyalty reward to the user's cart."""
+        cart = CartService.get_cart(user_id)
+        reward = ExclusiveReward.query.get(reward_id)
+
+        if not reward or not reward.linked_product_id:
+            raise ValidationException("This reward is not a physical product and cannot be added to the cart.")
+
+        # Check if the reward is already in the cart to prevent duplicates
+        existing_item = CartItem.query.filter_by(cart_id=cart.id, product_id=reward.linked_product_id, is_reward=True).first()
+        if existing_item:
+            raise ValidationException("This reward is already in your cart.")
+
+        new_item = CartItem(
+            cart_id=cart.id,
+            product_id=reward.linked_product_id,
+            quantity=1,
+            is_reward=True # Mark this item as a free reward
+        )
+        db.session.add(new_item)
+        db.session.commit()
+        return cart
+        
     @staticmethod
     def add_to_cart(cart_data: dict):
         """Add item to cart with validation and inventory reservation."""
