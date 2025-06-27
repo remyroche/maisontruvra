@@ -1,186 +1,114 @@
-
-from backend.database import db
-from backend.models.user_models import User
-from backend.models.b2b_loyalty_models import LoyaltyPointTransaction, LoyaltyTier
-from ..models.loyalty_models import LoyaltyTier, UserLoyalty, Referral, ReferralRewardTier, PointVoucher, ExclusiveReward
-from backend.services.exceptions import ValidationError, NotFoundError
-from sqlalchemy import func
-from datetime import datetime, timedelta
-import logging
-
-logger = logging.getLogger(__name__)
+import secrets
+from sqlalchemy.orm import joinedload
+from .. import db
+from ..models import User, LoyaltyTier, UserLoyalty, Referral, ReferralRewardTier, PointVoucher, ExclusiveReward, LoyaltyPointLog
+from ..services.notification_service import NotificationService
 
 class LoyaltyService:
-    @staticmethod
-    def update_settings(settings_data: dict) -> dict:
-        """
-        Update loyalty program settings.
-        """
-        try:
-            # Validate settings data
-            required_fields = ['points_per_dollar', 'reward_threshold']
-            for field in required_fields:
-                if field not in settings_data:
-                    raise ValidationError(f"Missing required field: {field}")
-            
-            # Update settings in database (assuming a settings table exists)
-            # For now, return the validated data
-            return {
-                'points_per_dollar': float(settings_data['points_per_dollar']),
-                'reward_threshold': int(settings_data['reward_threshold']),
-                'updated_at': datetime.utcnow().isoformat()
-            }
-        except (ValueError, TypeError) as e:
-            raise ValidationError(f"Invalid settings data: {str(e)}")
 
     @staticmethod
-    def adjust_points(user_id: int, points: int, reason: str) -> int:
-        """
-        Manually adjust points for a user with audit logging.
-        """
-        user = User.query.get(user_id)
-        if not user:
-            raise NotFoundError(f"User with ID {user_id} not found")
-        
-        # Create point transaction record
-        transaction = LoyaltyPointTransaction(
-            user_id=user_id,
-            points=points,
-            transaction_type='manual_adjustment',
-            description=f"Manual adjustment: {reason}",
-            expires_at=datetime.utcnow() + timedelta(days=365),
-            created_at=datetime.utcnow()
-        )
-        
-        db.session.add(transaction)
+    def get_all_tiers():
+        return LoyaltyTier.query.order_by(LoyaltyTier.min_spend).all()
+
+    @staticmethod
+    def create_tier(name, min_spend, points_per_euro, benefits):
+        tier = LoyaltyTier(name=name, min_spend=float(min_spend), points_per_euro=float(points_per_euro), benefits=benefits)
+        db.session.add(tier)
         db.session.commit()
-        
-        # Log the manual adjustment
-        logger.info(f"Manual point adjustment: User {user_id}, Points {points}, Reason: {reason}")
-        
-        # Calculate new balance
-        total_points = db.session.query(func.sum(LoyaltyPointTransaction.points)).filter(
-            LoyaltyPointTransaction.user_id == user_id,
-            LoyaltyPointTransaction.is_expired == False,
-            LoyaltyPointTransaction.expires_at > datetime.utcnow()
-        ).scalar() or 0
-        
-        return int(total_points)
-
-
-from datetime import datetime, timedelta
-from sqlalchemy import func, case
-from backend.database import db
-from backend.models.user_models import User
-from backend.models.b2b_loyalty_models import LoyaltyPointTransaction, LoyaltyTier
-from backend.services.referral_service import ReferralService
-
-class LoyaltyService:
+        return tier
 
     @staticmethod
-    def get_user_loyalty_status(user_id: int) -> dict | None:
-        """
-        Gets a user's current loyalty status, including valid points and tier.
-
-        Args:
-            user_id: The ID of the user to look up.
-
-        Returns:
-            A dictionary with the user's points, tier name, and referral code, or None if user not found.
-        """
-        user = User.query.get(user_id)
-        if not user:
-            return None
-
-        # 1. Calculate the user's current valid (non-expired) point balance.
-        # This sums up all point transactions that have not expired.
-        valid_points = db.session.query(
-            func.sum(LoyaltyPointTransaction.points)
-        ).filter(
-            LoyaltyPointTransaction.user_id == user_id,
-            LoyaltyPointTransaction.is_expired == False,
-            LoyaltyPointTransaction.expires_at > datetime.utcnow()
-        ).scalar() or 0
-        
-        # 2. Get the user's tier name from the relationship.
-        tier_name = user.loyalty_tier.name if user.loyalty_tier else 'Standard'
-
-        # 3. Get the user's referral code.
-        # Assuming the referral code is stored on the user model.
-        referral_code = user.referral_code if hasattr(user, 'referral_code') else f"B2B-{user.id}-INCOMPLETE"
-
-        return {
-            'points': valid_points,
-            'tier': tier_name,
-            'referralCode': referral_code
-        }
-
-    @staticmethod
-    def create_referral_code(user_id):
-        user = User.query.get(user_id)
-        if user and not Referral.query.filter_by(referrer_id=user_id).first():
-            code = f"{user.first_name.upper()}-{secrets.token_hex(3)}".upper()
-            referral = Referral(referrer_id=user_id, referral_code=code)
-            db.session.add(referral)
+    def update_loyalty_tier(tier_id, data):
+        tier = LoyaltyTier.query.get(tier_id)
+        if tier:
+            tier.name = data.get('name', tier.name)
+            tier.min_spend = float(data.get('min_spend', tier.min_spend))
+            tier.points_per_euro = float(data.get('points_per_euro', tier.points_per_euro))
+            tier.benefits = data.get('benefits', tier.benefits)
             db.session.commit()
-            return referral
-        return None
+        return tier
 
     @staticmethod
-    def get_all_tier_discounts() -> list:
-        """
-        Gets the names and discount percentages for all loyalty tiers
-        as configured by an administrator in the database.
-
-        Returns:
-            A list of dictionaries, e.g., [{'name': 'Partenaire', 'discount_percentage': 10.0}]
-        """
-        tiers = LoyaltyTier.query.order_by(LoyaltyTier.discount_percentage).all()
-        
-        # Serialize the data into the required format
-        return [
-            {
-                "name": tier.name,
-                "discount_percentage": tier.discount_percentage
-            }
-            for tier in tiers
-        ]
+    def delete_tier(tier_id):
+        tier = LoyaltyTier.query.get(tier_id)
+        if tier:
+            # Check if any users are in this tier before deleting
+            if UserLoyalty.query.filter_by(tier_id=tier_id).first():
+                raise ValueError("Cannot delete tier with assigned users.")
+            db.session.delete(tier)
+            db.session.commit()
+            return True
+        return False
 
     @staticmethod
-    def add_points_for_purchase(user_id: int, order_total: float, order_id: int):
-        """
-        Awards points for a purchase and handles referral bonuses.
-        Rule 1: 1 point per 1€ for the buyer, 0.1 for the referrer.
-        """
-        # Award points to the buyer
-        points_to_award = int(order_total)
-        if points_to_award > 0:
-            buyer_transaction = LoyaltyPointTransaction(
-                user_id=user_id,
-                points=points_to_award,
-                reason=f"Order #{order_id}",
-                order_id=order_id
-            )
-            db.session.add(buyer_transaction)
-
-        # Check for and award points to the referrer
-        referrer = ReferralService.get_referrer_for_user(user_id)
-        if referrer:
-            referrer_points = int(order_total * 0.1)
-            if referrer_points > 0:
-                referrer_transaction = LoyaltyPointTransaction(
-                    user_id=referrer.id,
-                    points=referrer_points,
-                    reason=f"Referral bonus from user #{user_id}'s order"
-                )
-                db.session.add(referrer_transaction)
+    def get_user_loyalty_status(user_id):
+        user_loyalty = UserLoyalty.query.options(joinedload(UserLoyalty.tier)).filter_by(user_id=user_id).first()
+        if not user_loyalty:
+            return LoyaltyService.create_initial_loyalty_status(user_id)
+        return user_loyalty
         
+    @staticmethod
+    def create_initial_loyalty_status(user_id):
+        # Find the base tier (usually the one with 0 min_spend)
+        base_tier = LoyaltyTier.query.order_by(LoyaltyTier.min_spend).first()
+        if not base_tier:
+             raise Exception("No base loyalty tier found in the system.")
+             
+        user_loyalty = UserLoyalty(user_id=user_id, tier_id=base_tier.id, points=0)
+        db.session.add(user_loyalty)
         db.session.commit()
+        return user_loyalty
 
+    @staticmethod
+    def adjust_points(user_id, points_change, reason, admin_user_id=None):
+        user_loyalty = LoyaltyService.get_user_loyalty_status(user_id)
+        user_loyalty.points += points_change
+        
+        log_entry = LoyaltyPointLog(
+            user_id=user_id,
+            points_change=points_change,
+            reason=reason,
+            changed_by_admin_id=admin_user_id
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        # Check if user qualifies for a tier upgrade
+        LoyaltyService.update_user_tier(user_id)
+        
+        return user_loyalty.points
+
+    @staticmethod
+    def update_user_tier(user_id):
+        # Logic to check user's total spending and update their tier
+        pass # To be implemented based on spending calculation
+
+    @staticmethod
+    def get_points_breakdown(user_id):
+        return LoyaltyPointLog.query.filter_by(user_id=user_id).order_by(LoyaltyPointLog.created_at.desc()).all()
 
     @staticmethod
     def get_referral_data(user_id):
         return Referral.query.filter_by(referrer_id=user_id).first()
+        
+    @staticmethod
+    def create_referral_code(user_id):
+        user = User.query.get(user_id)
+        if not user:
+            return None
+            
+        existing_referral = Referral.query.filter_by(referrer_id=user_id).first()
+        if existing_referral:
+            return existing_referral
+
+        code = f"{user.first_name.upper()}-{secrets.token_hex(3)}".upper()
+        while Referral.query.filter_by(referral_code=code).first():
+             code = f"{user.first_name.upper()}-{secrets.token_hex(3)}".upper()
+
+        referral = Referral(referrer_id=user_id, referral_code=code)
+        db.session.add(referral)
+        db.session.commit()
+        return referral
 
     @staticmethod
     def get_referrals_for_user(user_id):
@@ -189,7 +117,7 @@ class LoyaltyService:
     @staticmethod
     def get_referral_reward_tiers():
         return ReferralRewardTier.query.order_by(ReferralRewardTier.referral_count).all()
-        
+
     @staticmethod
     def create_referral_reward_tier(data):
         reward_tier = ReferralRewardTier(**data)
@@ -199,7 +127,7 @@ class LoyaltyService:
 
     @staticmethod
     def convert_points_to_voucher(user_id, points_to_convert, discount_amount):
-        user_loyalty = UserLoyalty.query.filter_by(user_id=user_id).first()
+        user_loyalty = LoyaltyService.get_user_loyalty_status(user_id)
         if user_loyalty and user_loyalty.points >= points_to_convert:
             user_loyalty.points -= points_to_convert
             voucher_code = f"VOUCHER-{secrets.token_hex(4)}".upper()
@@ -209,213 +137,30 @@ class LoyaltyService:
                 points_cost=points_to_convert,
                 discount_amount=discount_amount
             )
+            LoyaltyService.adjust_points(user_id, -points_to_convert, f"Converted to voucher {voucher_code}")
             db.session.add(voucher)
             db.session.commit()
             return voucher
         return None
-        
+
     @staticmethod
-    def get_exclusive_rewards(tier_id=None):
-        if tier_id:
-            return ExclusiveReward.query.filter(
-                (ExclusiveReward.tier_id == tier_id) | (ExclusiveReward.tier_id == None)
-            ).all()
-        return ExclusiveReward.query.all()
+    def get_exclusive_rewards(user_id):
+        user_loyalty = LoyaltyService.get_user_loyalty_status(user_id)
+        return ExclusiveReward.query.filter(ExclusiveReward.tier_id <= user_loyalty.tier_id).all()
 
     @staticmethod
     def redeem_exclusive_reward(user_id, reward_id):
-        user_loyalty = UserLoyalty.query.filter_by(user_id=user_id).first()
+        user_loyalty = LoyaltyService.get_user_loyalty_status(user_id)
         reward = ExclusiveReward.query.get(reward_id)
         
         if user_loyalty and reward and user_loyalty.points >= reward.points_cost:
-            user_loyalty.points -= reward.points_cost
-            # Logic to grant the reward (e.g., add product to order, send email with content)
-            # This part needs further implementation based on reward type.
+            reason = f"Redeemed exclusive reward: {reward.name}"
+            LoyaltyService.adjust_points(user_id, -reward.points_cost, reason)
+            
+            # Here you would add logic based on reward type
+            # For example, send an email or add a product to the next order
+            NotificationService.send_reward_redemption_email(user_id, reward)
+
             db.session.commit()
             return True
         return False
-
-    @staticmethod
-    def get_user_balance(user_id: int) -> int:
-        """
-        Calculates a user's current valid (non-expired) point balance.
-        Rule 2: Points expire after 1 year.
-        """
-        balance = db.session.query(
-            func.sum(LoyaltyPointTransaction.points)
-        ).filter(
-            LoyaltyPointTransaction.user_id == user_id,
-            LoyaltyPointTransaction.is_expired == False,
-            LoyaltyPointTransaction.expires_at > datetime.utcnow()
-        ).scalar()
-        return balance or 0
-
-    def get_points_breakdown(self, user_id):
-        """
-        Calculates the breakdown of active loyalty points from purchases vs. referrals.
-        """
-        now = datetime.utcnow()
-        
-        # Calculate points from own purchases (reason does not start with 'Referral')
-        purchase_points_query = self.session.query(func.sum(LoyaltyPoints.points)).filter(
-            LoyaltyPoints.b2b_user_id == user_id,
-            LoyaltyPoints.expires_at > now,
-            ~LoyaltyPoints.reason.like('Referral bonus%')
-        )
-        purchase_points = purchase_points_query.scalar() or 0
-
-        # Calculate points from referrals
-        referral_points_query = self.session.query(func.sum(LoyaltyPoints.points)).filter(
-            LoyaltyPoints.b2b_user_id == user_id,
-            LoyaltyPoints.expires_at > now,
-            LoyaltyPoints.reason.like('Referral bonus%')
-        )
-        referral_points = referral_points_query.scalar() or 0
-        
-        total_points = purchase_points + referral_points
-
-        return {
-            'total': round(total_points, 2),
-            'from_purchases': round(purchase_points, 2),
-            'from_referrals': round(referral_points, 2)
-        }
-        
-    def get_tier_for_points(self, points):
-        """Finds the highest tier a user qualifies for based on their points."""
-        return LoyaltyTier.query.filter(LoyaltyTier.points_required <= points).order_by(LoyaltyTier.points_required.desc()).first()
-
-    
-    @staticmethod
-    def get_tier_and_discount(user_id: int) -> dict:
-        """
-        Gets the user's current tier and associated discount.
-        Rule 4: Tier-based discounts.
-        """
-        user = User.query.get(user_id)
-        if user and user.loyalty_tier:
-            return {
-                "tier": user.loyalty_tier.name,
-                "discount_percentage": user.loyalty_tier.discount_percentage
-            }
-        return {"tier": "Standard", "discount_percentage": 0.0}
-
-    @staticmethod
-    def expire_points_task():
-        """
-        Scheduled Task: Marks all points older than 1 year as expired.
-        This should be run daily by Celery.
-        """
-        expired_transactions = LoyaltyPointTransaction.query.filter(
-            LoyaltyPointTransaction.expires_at <= datetime.utcnow(),
-            LoyaltyPointTransaction.is_expired == False
-        ).all()
-
-        for trans in expired_transactions:
-            trans.is_expired = True
-        
-        db.session.commit()
-        return len(expired_transactions)
-
-
-    @staticmethod
-    def get_loyalty_tiers() -> list:
-        """
-        Retrieves all defined loyalty tiers.
-        """
-        tiers = LoyaltyTier.query.order_by(LoyaltyTier.min_points.asc()).all()
-        return [tier.to_dict() for tier in tiers]
-
-    @staticmethod
-    def create_loyalty_tier(name: str, min_points: int, discount_percentage: float) -> LoyaltyTier:
-        """
-        Creates a new loyalty tier.
-        """
-        if LoyaltyTier.query.filter_by(name=name).first():
-            raise ValidationError(f"Loyalty tier with name '{name}' already exists.")
-        
-        new_tier = LoyaltyTier(name=name, min_points=min_points, discount_percentage=discount_percentage)
-        db.session.add(new_tier)
-        db.session.commit()
-        return new_tier
-
-    @staticmethod
-    def update_loyalty_tier(tier_id: int, name: str, min_points: int, discount_percentage: float) -> LoyaltyTier:
-        """
-        Updates an existing loyalty tier.
-        """
-        tier = LoyaltyTier.query.get(tier_id)
-        if not tier:
-            raise NotFoundError(f"Loyalty tier with ID {tier_id} not found.")
-        
-        # Check for duplicate name if name is changed
-        if tier.name != name and LoyaltyTier.query.filter_by(name=name).first():
-            raise ValidationError(f"Loyalty tier with name '{name}' already exists.")
-            
-        tier.name = name
-        tier.min_points = min_points
-        tier.discount_percentage = discount_percentage
-
-    @staticmethod
-    def update_user_tiers_task():
-        """
-        Scheduled Task: Recalculates and assigns loyalty tiers.
-        This should be run daily by Celery.
-        Rule 3: Tiers based on active users and point ranking.
-        """
-        three_months_ago = datetime.utcnow() - timedelta(days=90)
-        
-        # 1. Get active B2B users and their valid point balances
-        active_users_subquery = db.session.query(
-            User.id.label('user_id'),
-            func.sum(LoyaltyPointTransaction.points).label('total_points')
-        ).join(LoyaltyPointTransaction, User.id == LoyaltyPointTransaction.user_id)\
-         .filter(
-            User.user_type == 'B2B', # Assuming a field to identify B2B users
-            User.last_active_at >= three_months_ago,
-            LoyaltyPointTransaction.is_expired == False,
-            LoyaltyPointTransaction.expires_at > datetime.utcnow()
-        ).group_by(User.id).subquery()
-
-        # 2. Rank the active users by points
-        ranked_users = db.session.query(
-            active_users_subquery.c.user_id,
-            active_users_subquery.c.total_points,
-            func.rank().over(order_by=active_users_subquery.c.total_points.desc()).label('rank')
-        ).all()
-
-        # 3. Get total active users for tier calculation
-        total_active_users = len(ranked_users)
-        
-        # 4. Calculate tier thresholds (top 10% Gold, next 20% Silver, rest Bronze)
-        gold_threshold = max(1, int(total_active_users * 0.1))
-        silver_threshold = max(1, int(total_active_users * 0.3))
-        
-        # 5. Get tier objects
-        gold_tier = LoyaltyTier.query.filter_by(name='Gold').first()
-        silver_tier = LoyaltyTier.query.filter_by(name='Silver').first()
-        bronze_tier = LoyaltyTier.query.filter_by(name='Bronze').first()
-        
-        if not all([gold_tier, silver_tier, bronze_tier]):
-            raise ValueError("Loyalty tiers not properly configured")
-        
-        # 6. Update user tiers
-        updates_made = 0
-        for ranked_user in ranked_users:
-            user = User.query.get(ranked_user.user_id)
-            if not user:
-                continue
-                
-            new_tier = None
-            if ranked_user.rank <= gold_threshold:
-                new_tier = gold_tier
-            elif ranked_user.rank <= silver_threshold:
-                new_tier = silver_tier
-            else:
-                new_tier = bronze_tier
-            
-            if user.loyalty_tier_id != new_tier.id:
-                user.loyalty_tier_id = new_tier.id
-                updates_made += 1
-        
-        db.session.commit()
-        return updates_made
