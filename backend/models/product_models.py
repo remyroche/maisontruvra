@@ -16,9 +16,26 @@ class Product(BaseModel, SoftDeleteMixin):
     images = db.relationship('ProductImage', back_populates='product', cascade="all, delete-orphan")
     reviews = db.relationship('Review', back_populates='product', cascade="all, delete-orphan")
     inventory = db.relationship('Inventory', back_populates='product', uselist=False, cascade="all, delete-orphan")
+    stock = db.Column(db.Integer, default=0)
     passport = db.relationship('ProductPassport', back_populates='product', uselist=False, cascade="all, delete-orphan")
     is_published = db.Column(db.Boolean, default=False, nullable=False)
 
+    # --- New Fields ---
+    internal_note = db.Column(db.Text, nullable=True) # Note for staff
+    
+    # Visibility Rules
+    is_b2c_visible = db.Column(db.Boolean, default=True)
+    is_b2b_visible = db.Column(db.Boolean, default=True)
+    
+    # Many-to-Many relationship for tier-specific visibility
+    # If a product is linked to any tiers here, it's ONLY visible to those tiers.
+    # If this relationship is empty, it's visible to all users (respecting the b2c/b2b flags).
+    restricted_to_tiers = db.relationship(
+        'LoyaltyTier', 
+        secondary=product_tier_visibility,
+        backref=db.backref('visible_products', lazy='dynamic')
+    )
+    
     def to_public_dict(self, include_variants=False, include_reviews=False):
         """Public view of a product."""
         data = {
@@ -46,6 +63,9 @@ class Product(BaseModel, SoftDeleteMixin):
             'is_active': self.is_active,
             'base_sku': self.base_sku,
             'inventory': self.inventory.quantity if self.inventory else 0,
+            'is_b2c_visible': self.is_b2c_visible,
+            'is_b2b_visible': self.is_b2b_visible,
+            'restricted_to_tier_ids': [str(tier.id) for tier in self.restricted_to_tiers]
         })
         return data
 
