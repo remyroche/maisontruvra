@@ -4,136 +4,115 @@
       <h2 class="sr-only">Checkout</h2>
 
       <div class="lg:grid lg:grid-cols-2 lg:gap-x-12 xl:gap-x-16">
-        <div>
-          <!-- Guest vs Login Selector -->
-          <div v-if="!userStore.isLoggedIn && !checkoutStore.isGuestMode">
-            <h2 class="text-lg font-medium text-gray-900">Contact Information</h2>
-            <div class="mt-4 grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-4">
-                <button @click="checkoutStore.setGuestMode(true)" type="button" class="btn-primary w-full">Continue as Guest</button>
-                <button @click="showLogin = true" type="button" class="btn-secondary w-full">Log In</button>
-            </div>
-            <!-- Simple Login Form -->
-            <div v-if="showLogin" class="mt-8 border-t border-gray-200 pt-8">
-                <LoginForm @success="onLoginSuccess" />
-            </div>
-          </div>
+        <div class="space-y-6">
 
-          <!-- Guest Details Form -->
-          <GuestCheckoutForm v-if="!userStore.isLoggedIn && checkoutStore.isGuestMode" />
-          
-          <!-- Authenticated User Address -->
-          <AddressSelector v-if="userStore.isLoggedIn" />
-
-          <!-- Redeem Loyalty Points Section -->
-          <div v-if="userStore.isLoggedIn" class="mt-10 border-t border-gray-200 pt-10">
-            <h2 class="text-lg font-medium text-gray-900">A Gift for You?</h2>
-            <p class="mt-1 text-sm text-gray-500">You have <span class="font-bold text-primary">{{ userStore.profile?.loyalty?.points || 0 }}</span> points to spend.</p>
-
-            <div v-if="loyaltyStore.isLoading" class="mt-4">Loading rewards...</div>
-            <div v-else-if="availableRewards.length > 0" class="mt-4 space-y-4">
-              <div v-for="reward in availableRewards" :key="reward.id" class="flex items-center justify-between p-4 border rounded-md bg-white">
-                <div>
-                  <h4 class="font-semibold">{{ reward.name }}</h4>
-                  <p class="text-sm text-gray-500">{{ reward.points_cost }} points</p>
-                </div>
-                <button @click="openRewardModal(reward)" class="btn-secondary text-sm">
-                  Claim Your Gift
-                </button>
-              </div>
+          <!-- Step 1: Contact Information -->
+          <CheckoutAccordionSection
+            :step-number="1"
+            title="Contact Information"
+            :is-active="checkoutStore.activeSection === 'contact'"
+            :is-complete="checkoutStore.isContactComplete"
+            @activate="checkoutStore.setActiveSection('contact')"
+          >
+             <template #summary v-if="userStore.isLoggedIn">
+                <p>Logged in as <span class="font-medium text-gray-900">{{ userStore.profile.email }}</span></p>
+            </template>
+            <div v-if="!userStore.isLoggedIn">
+               <GuestCheckoutForm v-if="checkoutStore.isGuestMode" @completed="checkoutStore.setGuestDetails($event)"/>
+               <div v-else>
+                 <div class="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-4">
+                    <button @click="checkoutStore.setGuestMode(true)" type="button" class="btn-primary w-full">Continue as Guest</button>
+                    <button @click="showLogin = true" type="button" class="btn-secondary w-full">Log In</button>
+                 </div>
+                 <div v-if="showLogin" class="mt-8 border-t border-gray-200 pt-8">
+                    <LoginForm @success="onLoginSuccess" />
+                 </div>
+               </div>
             </div>
-            <div v-else class="mt-4 text-gray-500">No rewards currently available for you to redeem.</div>
-          </div>
-          
-          <!-- Delivery Methods -->
-          <DeliveryMethodSelector class="mt-10 border-t border-gray-200 pt-10" />
+          </CheckoutAccordionSection>
+
+          <!-- Step 2: Shipping Information -->
+          <CheckoutAccordionSection
+            :step-number="2"
+            title="Shipping Information"
+            :is-active="checkoutStore.activeSection === 'shipping'"
+            :is-complete="checkoutStore.isShippingComplete"
+            @activate="checkoutStore.setActiveSection('shipping')"
+          >
+            <template #summary v-if="checkoutStore.shippingAddress">
+                <p>{{ checkoutStore.shippingAddress.street }}, {{ checkoutStore.shippingAddress.city }}, {{ checkoutStore.shippingAddress.postal_code }}</p>
+            </template>
+            <AddressSelector @address-selected="checkoutStore.setShippingAddress($event)" />
+          </CheckoutAccordionSection>
+
+          <!-- Step 3: Delivery Method -->
+          <CheckoutAccordionSection
+            :step-number="3"
+            title="Delivery Method"
+            :is-active="checkoutStore.activeSection === 'delivery'"
+            :is-complete="checkoutStore.isDeliveryComplete"
+            @activate="checkoutStore.setActiveSection('delivery')"
+          >
+             <template #summary v-if="checkoutStore.deliveryMethod">
+                <p>{{ checkoutStore.deliveryMethod.name }} - €{{ checkoutStore.deliveryMethod.price.toFixed(2) }}</p>
+            </template>
+            <DeliveryMethodSelector @method-selected="checkoutStore.setDeliveryMethod($event)" />
+          </CheckoutAccordionSection>
+
+          <!-- Step 4: Payment -->
+          <CheckoutAccordionSection
+            :step-number="4"
+            title="Payment"
+            :is-active="checkoutStore.activeSection === 'payment'"
+            :is-complete="false" 
+            @activate="checkoutStore.setActiveSection('payment')"
+          >
+            <p class="text-gray-600">Please review your order summary and proceed to payment.</p>
+            <!-- Payment Gateway Component would go here -->
+          </CheckoutAccordionSection>
         </div>
 
-        <!-- Order summary -->
+        <!-- Order summary (Right Column) -->
         <div class="mt-10 lg:mt-0">
           <OrderSummary />
           <div class="mt-6">
-              <button 
-                type="button" 
-                class="w-full btn-primary" 
-                @click="proceedToPayment"
-                :disabled="checkoutStore.isSubmitting"
-              >
-                <span v-if="checkoutStore.isSubmitting">Placing Order...</span>
-                <span v-else>Proceed to Payment</span>
-              </button>
+            <button 
+              type="button" 
+              class="w-full btn-primary" 
+              @click="proceedToPayment"
+              :disabled="checkoutStore.isSubmitting || !checkoutStore.isDeliveryComplete"
+            >
+              <span v-if="checkoutStore.isSubmitting">Placing Order...</span>
+              <span v-else>Proceed to Payment</span>
+            </button>
           </div>
         </div>
       </div>
     </div>
-    
-    <!-- The Reward Modal -->
-    <RewardModal :open="isRewardModalOpen" :reward="selectedReward" @close="isRewardModalOpen = false" @claim="addRewardToCart" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useUserStore } from '../../js/stores/user';
 import { useCheckoutStore } from '../../js/stores/checkout';
-import { useLoyaltyStore } from '../../js/stores/loyalty';
-import { useCartStore } from '../../js/stores/cart';
-
-// Component Imports
 import GuestCheckoutForm from '../components/checkout/GuestCheckoutForm.vue';
 import AddressSelector from '../components/checkout/AddressSelector.vue';
-import OrderSummary from '../components/checkout/OrderSummary.vue';
 import DeliveryMethodSelector from '../components/checkout/DeliveryMethodSelector.vue';
-import RewardModal from '../components/rewards/RewardModal.vue';
+import OrderSummary from '../components/checkout/OrderSummary.vue';
 import LoginForm from '../components/checkout/LoginForm.vue';
+import CheckoutAccordionSection from '../components/checkout/CheckoutAccordionSection.vue';
 
-// Initialize Stores
 const userStore = useUserStore();
 const checkoutStore = useCheckoutStore();
-const loyaltyStore = useLoyaltyStore();
-const cartStore = useCartStore();
-
-// Component State
 const showLogin = ref(false);
-const isRewardModalOpen = ref(false);
-const selectedReward = ref(null);
-
-// Lifecycle Hooks
-onMounted(() => {
-  if (userStore.isLoggedIn) {
-    loyaltyStore.fetchExclusiveRewards();
-  }
-});
-
-// Computed Properties
-const availableRewards = computed(() => {
-  if (!userStore.isLoggedIn || !userStore.profile?.loyalty) return [];
-  const userPoints = userStore.profile.loyalty.points;
-  return loyaltyStore.rewards.filter(reward => 
-    reward.linked_product_id && 
-    userPoints >= reward.points_cost && 
-    !cartStore.items.some(item => item.product_id === reward.linked_product_id && item.is_reward)
-  );
-});
-
-// Methods
-function openRewardModal(reward) {
-  selectedReward.value = reward;
-  isRewardModalOpen.value = true;
-}
-
-async function addRewardToCart(rewardId) {
-    await cartStore.addRewardItem(rewardId);
-    await userStore.checkAuthStatus(); // Refresh points
-    loyaltyStore.fetchExclusiveRewards(); // Refresh available rewards
-}
 
 function onLoginSuccess() {
     showLogin.value = false;
-    loyaltyStore.fetchExclusiveRewards();
+    checkoutStore.activeSection = 'shipping'; // Move to next step
 }
 
 function proceedToPayment() {
-    // The core logic is centralized in the store for better state management
     checkoutStore.submitOrder();
 }
 </script>
