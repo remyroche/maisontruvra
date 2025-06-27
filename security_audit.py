@@ -9,15 +9,131 @@ from typing import List, Tuple, Dict
 # Directories to scan
 BACKEND_DIR = 'backend'
 FRONTEND_DIR = 'website'
+# Bandit configuration: -r for recursive, -f json for format, -ll for medium/high severity
+BANDIT_CMD = [
+    sys.executable, '-m', 'bandit', '-r', BACKEND_DIR, 
+    '-f', 'json', '-ll', '-c', 'bandit.yaml'
+]
+# npm audit configuration
+NPM_CMD = ['npm', 'audit', '--json']
 
-# --- Color-coding for terminal output ---
+# ANSI color codes for better readability
 class Colors:
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    GREEN = '\033[92m'
-    BLUE = '\033[94m'
-    RESET = '\033[0m'
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
     BOLD = '\033[1m'
+
+def print_header(title):
+    """Prints a styled header."""
+    print(f"\n{Colors.HEADER}{Colors.BOLD}===== {title} ====={Colors.ENDC}")
+
+def run_command(command, cwd='.'):
+    """Runs a shell command and returns its output."""
+    try:
+        print(f"{Colors.OKBLUE}Running command: {' '.join(command)}{Colors.ENDC}")
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=cwd
+        )
+        return result.stdout
+    except FileNotFoundError:
+        print(f"{Colors.FAIL}Error: Command '{command[0]}' not found.{Colors.ENDC}")
+        if command[0] == 'npm':
+            print(f"{Colors.WARNING}Please ensure Node.js and npm are installed and in your system's PATH.{Colors.ENDC}")
+        elif 'bandit' in command:
+            print(f"{Colors.WARNING}Please install bandit: pip install bandit{Colors.ENDC}")
+        return None
+    except subprocess.CalledProcessError as e:
+        # npm audit returns a non-zero exit code if vulnerabilities are found.
+        # This is expected behavior, so we return the output for parsing.
+        if command[0] == 'npm' and e.stdout:
+            return e.stdout
+        print(f"{Colors.FAIL}Error executing command: {' '.join(command)}{Colors.ENDC}")
+        print(e.stderr)
+        return None
+
+def run_bandit_scan():
+    """Runs the Bandit static analysis scan on the backend."""
+    print_header("Backend Security Scan (Bandit)")
+    
+    # Create a default bandit.yaml if it doesn't exist to exclude test files
+    if not os.path.exists('bandit.yaml'):
+        with open('bandit.yaml', 'w') as f:
+            f.write("skips: ['B101']\n")
+            f.write("tests: ['B101']\n")
+            f.write("exclude_dirs: ['/tests', '/venv']\n")
+
+    output = run_command(BANDIT_CMD)
+    if not output:
+        return 0
+
+    try:
+        report = json.loads(output)
+        issues = report.get('results', [])
+        
+        if not issues:
+            print(f"{Colors.OKGREEN}✔ No high or medium severity issues found.{Colors.ENDC}")
+            return 0
+        
+        print(f"{Colors.FAIL}Found {len(issues)} potential issues:{Colors.ENDC}")
+        for issue in issues:
+            print(f"\n  {Colors.WARNING}File: {issue['filename']}:{issue['line_number']}{Colors.ENDC}")
+            print(f"  Issue: {issue['issue_text']} (Severity: {issue['issue_severity']})")
+            print(f"  Confidence: {issue['issue_confidence']}")
+            print(f"  Code: {issue['code'].strip()}")
+            print(f"  More Info: {issue['more_info']}")
+        
+        return len(issues)
+    except json.JSONDecodeError:
+        print(f"{Colors.FAIL}Error: Could not decode Bandit JSON output.{Colors.ENDC}")
+        return 0
+
+def run_npm_audit():
+    """Runs npm audit to check for vulnerabilities in frontend dependencies."""
+    print_header("Frontend Dependency Scan (npm audit)")
+    
+    if not os.path.isdir(FRONTEND_DIR):
+        print(f"{Colors.FAIL}Frontend directory '{FRONTEND_DIR}' not found.{Colors.ENDC}")
+        return 0
+
+    output = run_command(NPM_CMD, cwd=FRONTEND_DIR)
+    if not output:
+        return 0
+
+    try:
+        report = json.loads(output)
+        vulnerabilities = report.get('vulnerabilities', {})
+        total_vulnerabilities = report.get('metadata', {}).get('vulnerabilities', {})
+        
+        if not vulnerabilities:
+            print(f"{Colors.OKGREEN}✔ No vulnerabilities found in npm packages.{Colors.ENDC}")
+            return 0
+        
+        summary = ", ".join([f"{count} {level}" for level, count in total_vulnerabilities.items() if count > 0])
+        print(f"{Colors.FAIL}Found vulnerabilities: {summary}{Colors.ENDC}")
+        
+        for name, details in vulnerabilities.items():
+            print(f"\n  {Colors.WARNING}Package: {name}{Colors.ENDC} (Severity: {details['severity']})")
+            print(f"  Affected versions: {details['range']}")
+            via = [v['name'] for v in details.get('via', []) if isinstance(v, dict)]
+            if via:
+                print(f"  Dependency of: {', '.join(via)}")
+            if details.get('fixAvailable'):
+                 print(f"  {Colors.OKGREEN}Fix: Run 'npm audit fix' in the '{FRONTEND_DIR}' directory.{Colors.ENDC}")
+
+        return sum(total_vulnerabilities.values())
+        
+    except json.JSONDecodeError:
+        print(f"{Colors.FAIL}Error: Could not decode npm audit JSON output. Is npm installed and is '{FRONTEND_DIR}' a valid npm project?{Colors.ENDC}")
+        return 0
+
 
 def print_header(title: str):
     print(f"\n{Colors.BLUE}{Colors.BOLD}===== {title.upper()} ====={Colors.RESET}")
@@ -239,3 +355,28 @@ if __name__ == '__main__':
 
     print(f"\n{Colors.BOLD}Audit complete.{Colors.RESET}")
 
+
+
+def main():
+    """Main function to run all security audits."""
+    print(f"{Colors.BOLD}Starting Comprehensive Security Audit...{Colors.ENDC}")
+    
+    bandit_issues = run_bandit_scan()
+    npm_issues = run_npm_audit()
+    
+    total_issues = bandit_issues + npm_issues
+    
+    print_header("Audit Summary")
+    if total_issues == 0:
+        print(f"{Colors.OKGREEN}{Colors.BOLD}✔ Congratulations! The security audit passed with no high/medium severity issues found.{Colors.ENDC}")
+        sys.exit(0)
+    else:
+        print(f"{Colors.FAIL}{Colors.BOLD}✖ Security audit failed with a total of {total_issues} issues found.{Colors.ENDC}")
+        print(f"  - Backend (Bandit): {bandit_issues} issues")
+        print(f"  - Frontend (npm): {npm_issues} vulnerabilities")
+        print(f"{Colors.WARNING}Please review the findings above and address them accordingly.{Colors.ENDC}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
