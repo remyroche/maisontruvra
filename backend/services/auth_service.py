@@ -16,29 +16,31 @@ from flask_login import login_user # Added: For login_user
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
 
-# Moved _validate_password inside AuthService or ensure it's imported if defined elsewhere
-def _validate_password(password):
-    """
-    Validates a password against the policy defined in the config.
-    Raises InvalidPasswordException if the policy is not met.
-    """
-    errors = []
-    if len(password) < current_app.config.get('PASSWORD_MIN_LENGTH', 8):
-        errors.append(f"Password must be at least {current_app.config['PASSWORD_MIN_LENGTH']} characters long.")
-    if current_app.config.get('PASSWORD_REQUIRE_LOWERCASE') and not re.search(r'[a-z]', password):
-        errors.append("Password must contain at least one lowercase letter.")
-    if current_app.config.get('PASSWORD_REQUIRE_UPPERCASE') and not re.search(r'[A-Z]', password):
-        errors.append("Password must contain at least one uppercase letter.")
-    if current_app.config.get('PASSWORD_REQUIRE_DIGIT') and not re.search(r'\d', password):
-        errors.append("Password must contain at least one digit.")
-    if current_app.config.get('PASSWORD_REQUIRE_SPECIAL') and not re.search(r'[\W_]', password):
-        errors.append("Password must contain at least one special character.")
-
-    if errors:
-        # We join errors into a single string for the exception message.
-        raise InvalidPasswordException("Password validation failed: " + " ".join(errors))
 
 class AuthService:
+
+    @staticmethod
+    def _validate_password(password):
+        """
+        Validates a password against the policy defined in the config.
+        Raises InvalidPasswordException if the policy is not met.
+        """
+        errors = []
+        if len(password) < current_app.config.get('PASSWORD_MIN_LENGTH', 8):
+            errors.append(f"Password must be at least {current_app.config['PASSWORD_MIN_LENGTH']} characters long.")
+        if current_app.config.get('PASSWORD_REQUIRE_LOWERCASE') and not re.search(r'[a-z]', password):
+            errors.append("Password must contain at least one lowercase letter.")
+        if current_app.config.get('PASSWORD_REQUIRE_UPPERCASE') and not re.search(r'[A-Z]', password):
+            errors.append("Password must contain at least one uppercase letter.")
+        if current_app.config.get('PASSWORD_REQUIRE_DIGIT') and not re.search(r'\d', password):
+            errors.append("Password must contain at least one digit.")
+        if current_app.config.get('PASSWORD_REQUIRE_SPECIAL') and not re.search(r'[\W_]', password):
+            errors.append("Password must contain at least one special character.")
+    
+        if errors:
+            # We join errors into a single string for the exception message.
+            raise InvalidPasswordException("Password validation failed: " + " ".join(errors))
+    
     @staticmethod
     def get_token_serializer(salt='default'):
         """Creates a token serializer with a specific salt.""" # Corrected: URLSafeTimedSerializer was not defined
@@ -115,43 +117,26 @@ class AuthService:
             return None
 
     @staticmethod
-    def register_user(user_data):
-        """Register a new user with validation."""
-        email = user_data.get('email', '').strip().lower()
-        password = user_data.get('password', '')
-        first_name = user_data.get('first_name', '').strip()
-        last_name = user_data.get('last_name', '').strip()
-        
-        # Validation
-        if not email or '@' not in email:
-            raise ValidationException("Valid email is required")
-        if len(password) < 8:
-            raise ValidationException("Password must be at least 8 characters")
-        if not first_name or not last_name:
-            raise ValidationException("First and last name are required")
-            
-        # Check if user exists
+    def register_user(data):
+        """Registers a new user, enforcing password policy."""
+        email = data.get('email')
+        password = data.get('password')
+
         if User.query.filter_by(email=email).first():
-            raise ValidationException("User with this email already exists")
+            raise ValidationException("An account with this email already exists.")
+            
+        AuthService._validate_password(password)
 
-        _validate_password(user_data['password'])
-
-        # Create user
         user = User(
             email=email,
-            first_name=first_name,
-            last_name=last_name,
-            role=UserRole.CUSTOMER,
-            is_active=True,
-            email_verified=False
+            password_hash=generate_password_hash(password),
+            first_name=data.get('first_name'),
+            last_name=data.get('last_name')
         )
-        user.set_password(password)
-        
         db.session.add(user)
         db.session.commit()
-        
-        security_logger.info(f"New user registered: {email} (ID: {user.id})")
         return user
+
         
     @staticmethod
     def login(email, password, is_b2b=False, is_admin=False):
@@ -163,6 +148,9 @@ class AuthService:
         email = email.strip().lower()
         
         user = User.query.filter_by(email=email).first()
+
+        if not user.is_email_verified:
+            raise UnauthorizedException("Email not verified. Please check your inbox.")
 
         # Check for user existence and correct password
         if not user or not user.check_password(password):
