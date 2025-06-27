@@ -65,7 +65,8 @@ class Product(BaseModel, SoftDeleteMixin):
             'inventory': self.inventory.quantity if self.inventory else 0,
             'is_b2c_visible': self.is_b2c_visible,
             'is_b2b_visible': self.is_b2b_visible,
-            'restricted_to_tier_ids': [str(tier.id) for tier in self.restricted_to_tiers]
+            'restricted_to_tier_ids': [str(tier.id) for tier in self.restricted_to_tiers],
+            'internal_note': self.internal_note
         })
         return data
 
