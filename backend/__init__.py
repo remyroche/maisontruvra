@@ -1,5 +1,5 @@
 from flask import Flask
-from flask_migrate import Migrate
+from .extensions import db, login_manager, csrf, migrat
 from flask_login import LoginManager
 from flask_cors import CORS
 from flask_mail import Mail
@@ -59,6 +59,8 @@ def create_app(config_class=config.Config):
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    csrf.init_app(app)
+    migrate.init_app(app, db)
     CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}})
     mail.init_app(app)
     celery.conf.update(app.config)
