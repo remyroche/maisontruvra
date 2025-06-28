@@ -10,12 +10,17 @@ from flask_caching import Cache
 from flask_redis import FlaskRedis
 from flask_socketio import SocketIO
 from flask_jwt_extended import JWTManager
+from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
+from flask_migrate import Migrate
 
 # Initialize extensions
 db = SQLAlchemy()
 migrate = Migrate()
 password_hasher = PasswordHasher() 
 login_manager = LoginManager()
+csrf = CSRFProtect()
+migrate = Migrate() # Add this line
 mail = Mail()
 cors = CORS()
 cache = Cache()
