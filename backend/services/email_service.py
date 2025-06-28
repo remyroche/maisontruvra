@@ -1,4 +1,12 @@
 # backend/services/email_service.py
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+import os
+from typing import List, Optional, Dict, Any
+from .monitoring_service import MonitoringService
 from flask import current_app, render_template, url_for
 from flask_mail import Message
 from threading import Thread
@@ -7,26 +15,76 @@ from backend.tasks import send_email_task
 from flask import render_template, current_app
 
 class EmailService:
-    @staticmethod
-    def send_email(recipient, subject, template_name, context=None):
-        """
-        Sends an email by queuing it as an asynchronous background task.
+    def __init__(self):
+        self.monitoring = MonitoringService()
+        self.logger = self.monitoring.get_logger(__name__)
         
-        This is the sole public entry point for sending emails. All other parts
-        of the application MUST call this method, which guarantees that the
-        email sending is handled by a Celery worker and does not block the
-        user-facing request.
+        # Email configuration from environment variables
+        self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+        self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        self.smtp_username = os.getenv('SMTP_USERNAME')
+        self.smtp_password = os.getenv('SMTP_PASSWORD')
+        self.from_email = os.getenv('FROM_EMAIL', self.smtp_username)
+        
+        if not self.smtp_username or not self.smtp_password:
+            self.logger.warning("SMTP credentials not configured")
+   
 
-        :param recipient: Email address of the recipient.
-        :param subject: Subject of the email.
-        :param template_name: The name of the HTML template file (e.g., 'welcome.html').
-        :param context: A dictionary of data to pass to the template.
-        """
-        if context is None:
-            context = {}
-        print(f"ASYNC SEND TRIGGERED: Queuing email for {recipient} with template '{template_name}'")
-        send_email_task.delay(recipient, subject, template_name, context)
-
+    def send_email(self, to_email: str, subject: str, body: str, 
+                   html_body: Optional[str] = None, 
+                   attachments: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Send an email"""
+        try:
+            if not self.smtp_username or not self.smtp_password:
+                self.logger.error("SMTP credentials not configured")
+                return {"success": False, "message": "Email service not configured"}
+            
+            # Create message
+            msg = MIMEMultipart('alternative')
+            msg['From'] = self.from_email
+            msg['To'] = to_email
+            msg['Subject'] = subject
+            
+            # Add text body
+            text_part = MIMEText(body, 'plain')
+            msg.attach(text_part)
+            
+            # Add HTML body if provided
+            if html_body:
+                html_part = MIMEText(html_body, 'html')
+                msg.attach(html_part)
+            
+            # Add attachments if provided
+            if attachments:
+                for file_path in attachments:
+                    if os.path.isfile(file_path):
+                        with open(file_path, "rb") as attachment:
+                            part = MIMEBase('application', 'octet-stream')
+                            part.set_payload(attachment.read())
+                        
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename= {os.path.basename(file_path)}'
+                        )
+                        msg.attach(part)
+            
+            # Send email
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+            server.starttls()
+            server.login(self.smtp_username, self.smtp_password)
+            
+            text = msg.as_string()
+            server.sendmail(self.from_email, to_email, text)
+            server.quit()
+            
+            self.logger.info(f"Email sent successfully to {to_email}")
+            return {"success": True, "message": "Email sent successfully"}
+            
+        except Exception as e:
+            self.logger.error(f"Failed to send email to {to_email}: {str(e)}")
+            return {"success": False, "message": f"Failed to send email: {str(e)}"}
+    
     @staticmethod
     def send_email_immediately(recipient, subject, template_name, context):
         """
