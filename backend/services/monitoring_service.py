@@ -62,8 +62,3 @@ class MonitoringService:
             return [] # Return an empty list on failure
 
 
-
-import time
-from flask import current_app
-from backend.database import db
-from backend.services.exceptions import ServiceException
