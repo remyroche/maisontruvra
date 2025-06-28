@@ -3,7 +3,6 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_login import login_user, logout_user, current_user, login_required
 from datetime import datetime
 import logging
-
 from backend.services.mfa_service import MfaService
 from backend.services.user_service import UserService
 from backend.services.auth_service import AuthService

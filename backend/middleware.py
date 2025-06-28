@@ -2,6 +2,7 @@ from functools import wraps
 from flask import request, jsonify, g, session, current_app, redirect, Flask
 from flask_jwt_extended import get_jwt_identity # For JWT identity if needed in early middleware
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta
 from flask_login import current_user, logout_user
@@ -190,14 +191,24 @@ def setup_middleware(app: Flask) -> None:
     # 1. Initialize Flask Extensions
     limiter.init_app(app)
     compress.init_app(app)
+
+    # Define allowed origins dynamically for better security and flexibility
+    allowed_origins = [
+        "http://localhost:5173",  # Vite dev server
+        "http://127.0.0.1:5173", # Vite dev server
+    ]
+    
+    # Add production frontend URL from environment variable
+    prod_frontend_url = os.getenv('FRONTEND_URL')
+    if prod_frontend_url:
+        allowed_origins.append(prod_frontend_url)
+    elif not app.debug:
+        # Log a warning if the production URL is not set when not in debug mode
+        logger.warning("FRONTEND_URL environment variable not set. CORS will not allow production frontend.")
+
     CORS(app, resources={
         r"/api/*": {
-            "origins": [
-                "http://localhost:3000", # Vue.js development server
-                "http://127.0.0.1:3000", # Another common dev address
-                "https://your-frontend-domain.com", # Your production frontend domain
-                # Add any other allowed origins here
-            ],
+            "origins": allowed_origins,
             "methods": ["GET", "HEAD", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
             "allow_headers": ["Content-Type", "Authorization", "X-CSRF-TOKEN"],
             "supports_credentials": True # Important for JWT in HttpOnly cookies or sessions

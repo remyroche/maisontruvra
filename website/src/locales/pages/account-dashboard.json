@@ -1,0 +1,34 @@
+{
+  "en": {
+    "title": "Dashboard",
+    "welcome": "Welcome back, {name}!",
+    "welcomeSubtitle": "Here's a summary of your account activity.",
+    "recentOrdersTitle": "Recent Orders",
+    "noOrders": "You haven't placed any orders yet.",
+    "loyaltyStatusTitle": "Loyalty Status",
+    "points": "Points",
+    "tier": "Tier",
+    "viewRewards": "View Rewards",
+    "quickLinksTitle": "Quick Links",
+    "editProfile": "Edit Profile",
+    "viewAllOrders": "View All Orders",
+    "referFriend": "Refer a Friend",
+    "loading": "Loading your dashboard..."
+  },
+  "fr": {
+    "title": "Tableau de Bord",
+    "welcome": "Bon retour parmi nous, {name} !",
+    "welcomeSubtitle": "Voici un résumé de l'activité de votre compte.",
+    "recentOrdersTitle": "Commandes Récentes",
+    "noOrders": "Vous n'avez pas encore passé de commande.",
+    "loyaltyStatusTitle": "Statut de Fidélité",
+    "points": "Points",
+    "tier": "Niveau",
+    "viewRewards": "Voir les Récompenses",
+    "quickLinksTitle": "Liens Rapides",
+    "editProfile": "Modifier le Profil",
+    "viewAllOrders": "Voir Toutes les Commandes",
+    "referFriend": "Parrainer un Ami",
+    "loading": "Chargement de votre tableau de bord..."
+  }
+}

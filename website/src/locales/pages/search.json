@@ -1,0 +1,18 @@
+{
+  "en": {
+    "title": "Search Results for \"{query}\"",
+    "loading": "Searching...",
+    "error": "An error occurred while searching. Please try again.",
+    "noResults": "No results found for \"{query}\".",
+    "productsTitle": "Products",
+    "articlesTitle": "Journal Articles"
+  },
+  "fr": {
+    "title": "Résultats de recherche pour \"{query}\"",
+    "loading": "Recherche en cours...",
+    "error": "Une erreur est survenue lors de la recherche. Veuillez réessayer.",
+    "noResults": "Aucun résultat trouvé pour \"{query}\".",
+    "productsTitle": "Produits",
+    "articlesTitle": "Articles du Journal"
+  }
+}

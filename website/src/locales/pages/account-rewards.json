@@ -1,0 +1,20 @@
+{
+  "en": {
+    "title": "My Rewards",
+    "subtitle": "View your available rewards and redemption history.",
+    "availableRewardsTitle": "Available Rewards",
+    "loading": "Loading available rewards...",
+    "noRewards": "There are no exclusive rewards available for you at this time.",
+    "historyTitle": "Redemption History",
+    "historyComingSoon": "Reward history coming soon."
+  },
+  "fr": {
+    "title": "Mes Récompenses",
+    "subtitle": "Consultez vos récompenses disponibles et votre historique d'échange.",
+    "availableRewardsTitle": "Récompenses Disponibles",
+    "loading": "Chargement des récompenses disponibles...",
+    "noRewards": "Il n'y a pas de récompenses exclusives disponibles pour vous en ce moment.",
+    "historyTitle": "Historique d'Échange",
+    "historyComingSoon": "L'historique des récompenses sera bientôt disponible."
+  }
+}

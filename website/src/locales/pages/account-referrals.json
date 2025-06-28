@@ -1,0 +1,50 @@
+{
+  "en": {
+    "title": "Refer a Friend",
+    "subtitle": "Share your unique referral link and earn rewards when your friends make their first purchase.",
+    "yourLinkTitle": "Your Unique Referral Link",
+    "copyButton": "Copy Link",
+    "copiedButton": "Copied!",
+    "howItWorksTitle": "How It Works",
+    "steps": [
+      {
+        "title": "Share Your Link",
+        "description": "Send your personal referral link to friends via email, social media, or text."
+      },
+      {
+        "title": "Friend Makes a Purchase",
+        "description": "Your friend uses your link to visit our store and makes their first qualifying purchase."
+      },
+      {
+        "title": "You Get Rewarded",
+        "description": "Once their order is confirmed, loyalty points will be automatically added to your account."
+      }
+    ],
+    "historyTitle": "Your Referrals",
+    "historyComingSoon": "Referral history and status will be shown here."
+  },
+  "fr": {
+    "title": "Parrainer un Ami",
+    "subtitle": "Partagez votre lien de parrainage unique et gagnez des récompenses lorsque vos amis effectuent leur premier achat.",
+    "yourLinkTitle": "Votre Lien de Parrainage Unique",
+    "copyButton": "Copier le lien",
+    "copiedButton": "Copié !",
+    "howItWorksTitle": "Comment Ça Marche",
+    "steps": [
+      {
+        "title": "Partagez Votre Lien",
+        "description": "Envoyez votre lien de parrainage personnel à vos amis par e-mail, sur les réseaux sociaux ou par SMS."
+      },
+      {
+        "title": "Votre Ami Fait un Achat",
+        "description": "Votre ami utilise votre lien pour visiter notre boutique et effectue son premier achat éligible."
+      },
+      {
+        "title": "Vous Êtes Récompensé",
+        "description": "Une fois sa commande confirmée, des points de fidélité seront automatiquement ajoutés à votre compte."
+      }
+    ],
+    "historyTitle": "Vos Parrainages",
+    "historyComingSoon": "L'historique et le statut de vos parrainages seront affichés ici."
+  }
+}

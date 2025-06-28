@@ -1,0 +1,20 @@
+{
+  "en": {
+    "title": "My Account",
+    "navigation": [
+      { "name": "Dashboard", "to": "Dashboard" },
+      { "name": "My Rewards", "to": "Rewards" },
+      { "name": "Refer a Friend", "to": "Referrals" }
+    ],
+    "logout": "Logout"
+  },
+  "fr": {
+    "title": "Mon Compte",
+    "navigation": [
+      { "name": "Tableau de Bord", "to": "Dashboard" },
+      { "name": "Mes Récompenses", "to": "Rewards" },
+      { "name": "Parrainer un Ami", "to": "Referrals" }
+    ],
+    "logout": "Déconnexion"
+  }
+}

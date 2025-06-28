@@ -15,7 +15,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './js'),
+      '@': path.resolve(__dirname, './src'),
     },
   },
   build: {
@@ -23,8 +23,7 @@ export default defineConfig({
     manifest: true,
     rollupOptions: {
       input: {
-        main: path.resolve(__dirname, 'js/main.js'),
-        admin: path.resolve(__dirname, 'js/admin/main.js'), // Assuming this is your admin entry
+        app: path.resolve(__dirname, 'src/main.js'), // Use a single entry point for the entire SPA
       },
     },
   },

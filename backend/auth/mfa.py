@@ -5,8 +5,10 @@
 import pyotp
 import qrcode
 import io
+import db   
 from flask import Blueprint, jsonify, request, g, Response
 from flask_jwt_extended import get_jwt_identity
+from backend.extensions import cache # Import the cache instance
 from backend.auth.permissions import permission_required
 from backend.services.email_service import EmailService
 # Assume 'db' is a database connection manager and 'encryption_service' is configured
@@ -37,22 +39,22 @@ def setup_mfa():
     # Encrypt the secret before storing it temporarily in the session or a cache
     # DO NOT save it to the user's record until they have verified it.
     # For simplicity here, we will just return it. In a real app, manage this state carefully.
-    
+
     # Generate QR code image
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(provisioning_uri)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
-    
+
     # Save image to a byte stream
     img_io = io.BytesIO()
     img.save(img_io, 'PNG')
     img_io.seek(0)
-    
+
     # Store the un-activated secret securely, e.g., in Redis with a short TTL,
     # associated with the user_id.
-    # encryption_service.encrypt(totp_secret)
-    # redis.set(f"mfa_setup_{user_id}", encrypted_secret, ex=300) # 5-minute expiry
+    # In a production app, you should encrypt this secret before caching.
+    cache.set(f"mfa_setup_{user_id}", totp_secret, timeout=300) # 5-minute expiry
 
     # Return the QR code image and the secret (for manual entry)
     # The frontend should display the QR code and also the 'totp_secret' for manual setup.
@@ -70,14 +72,11 @@ def verify_mfa_setup():
     data = request.get_json()
     token = data.get('token')
 
-    # 1. Retrieve the temporarily stored secret for this user from Redis/cache.
-    # encrypted_secret = redis.get(f"mfa_setup_{user_id}")
-    # if not encrypted_secret:
-    #     return jsonify({"error": "MFA setup session expired. Please start over."}), 408
-    #
-    # secret = encryption_service.decrypt(encrypted_secret)
-    secret = "YOUR_TEMP_SECRET_FROM_PREVIOUS_STEP" # Placeholder
-    
+    # 1. Retrieve the temporarily stored secret for this user from the cache.
+    secret = cache.get(f"mfa_setup_{user_id}")
+    if not secret:
+        return jsonify({"error": "MFA setup session expired. Please start over."}), 408 # 408 Request Timeout
+
     # 2. Verify the token against the secret.
     totp = pyotp.TOTP(secret)
     if not totp.verify(token):
@@ -85,7 +84,8 @@ def verify_mfa_setup():
 
     # 3. On successful verification, save the encrypted secret to the database
     #    and enable MFA for the user. This is a permanent change.
-    encrypted_secret_for_db = "ENCRYPTED_" + secret # Placeholder for actual encryption
+    # In a real app, use a strong encryption service here.
+    encrypted_secret_for_db = "encrypted:" + secret # Placeholder for actual encryption
     conn = db.get_connection()
     cursor = conn.cursor()
     try:
@@ -94,6 +94,8 @@ def verify_mfa_setup():
             (encrypted_secret_for_db, user_id)
         )
         conn.commit()
+        # Clean up the temporary secret from the cache
+        cache.delete(f"mfa_setup_{user_id}")
         # You should also generate and show the user their one-time recovery codes here.
         EmailService.send_security_alert(user, "L'authentification à deux facteurs (2FA) a été activée")
         return jsonify({"message": "MFA has been successfully enabled."}), 200

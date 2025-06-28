@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Invitation to Maison Truvrā</title>
+</head>
+<body style="font-family: sans-serif; line-height: 1.6;">
+    <h2>Welcome to Maison Truvrā, {{ new_user_name }}!</h2>
+    <p>
+        You have been invited by <strong>{{ inviter_name }}</strong> to join the <strong>{{ company_name }}</strong> professional account on Maison Truvrā.
+    </p>
+    <p>
+        Your account has been created, and you can now log in to access exclusive products, pricing, and features available to your company.
+    </p>
+    <p>
+        <a href="{{ url_for('b2b_auth.login', _external=True) }}" style="display: inline-block; padding: 10px 20px; background-color: #333; color: #fff; text-decoration: none; border-radius: 5px;">
+            Log In to Your Professional Account
+        </a>
+    </p>
+    <p>
+        If you have any questions, please contact your account administrator, {{ inviter_name }}.
+    </p>
+    <p>Best regards,<br>The Maison Truvrā Team</p>
+</body>
+</html>

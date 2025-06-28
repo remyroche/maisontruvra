@@ -1,0 +1,31 @@
+{
+  "b2c": [
+    {
+      "id": "b2c_1",
+      "question": "What is your return policy?",
+      "answer": "We accept returns within 30 days of purchase for a full refund. The item must be in its original condition and packaging. Please visit our returns page for more details on how to initiate a return."
+    },
+    {
+      "id": "b2c_2",
+      "question": "How long does shipping take?",
+      "answer": "Standard shipping typically takes 5-7 business days within the country. Expedited shipping options are available at checkout for faster delivery. International shipping times may vary."
+    },
+    {
+      "id": "b2c_3",
+      "question": "Are your products sustainably sourced?",
+      "answer": "Yes, sustainability is at the core of our mission. All our products are sourced from verified second-hand markets, and we prioritize items with a known history and low environmental impact. Our packaging is also 100% recyclable."
+    }
+  ],
+  "b2b": [
+    {
+      "id": "b2b_1",
+      "question": "How do I apply for a professional account?",
+      "answer": "You can apply for a professional account by filling out the form on our 'For Professionals' page. Our team will review your application, including your business registration and VAT number, and get back to you within 2-3 business days."
+    },
+    {
+      "id": "b2b_2",
+      "question": "Do you offer bulk discounts or tiered pricing?",
+      "answer": "Yes, we offer tiered pricing and exclusive discounts for our B2B partners. The discount level depends on your partnership tier and order volume. Please contact your account representative or our B2B support team for more details on our pricing structure."
+    }
+  ]
+}

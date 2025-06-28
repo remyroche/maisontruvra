@@ -1,0 +1,40 @@
+{
+  "en": {
+    "title": "An Alliance for Excellence",
+    "subtitle": "Join our network of professional partners and gain access to exclusive collections, preferential rates, and dedicated services.",
+    "ctaButton": "Create Your Professional Account",
+    "features": [
+      {
+        "name": "Exclusive Access",
+        "description": "Discover unique pieces and collections reserved exclusively for our B2B partners."
+      },
+      {
+        "name": "Tiered Pricing",
+        "description": "Benefit from competitive pricing and volume discounts tailored to your business needs."
+      },
+      {
+        "name": "Dedicated Support",
+        "description": "Our professional team is at your disposal to assist you with sourcing, logistics, and any specific requests."
+      }
+    ]
+  },
+  "fr": {
+    "title": "Une Alliance pour l'Excellence",
+    "subtitle": "Rejoignez notre réseau de partenaires professionnels et accédez à des collections exclusives, des tarifs préférentiels et des services dédiés.",
+    "ctaButton": "Créer Votre Compte Professionnel",
+    "features": [
+      {
+        "name": "Accès Exclusif",
+        "description": "Découvrez des pièces et des collections uniques réservées exclusivement à nos partenaires B2B."
+      },
+      {
+        "name": "Tarifs Évolutifs",
+        "description": "Bénéficiez de prix compétitifs et de remises sur volume adaptées aux besoins de votre entreprise."
+      },
+      {
+        "name": "Support Dédié",
+        "description": "Notre équipe professionnelle est à votre disposition pour vous aider dans vos recherches, la logistique et toute demande spécifique."
+      }
+    ]
+  }
+}

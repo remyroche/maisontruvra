@@ -1,0 +1,16 @@
+{
+  "en": {
+    "title": "From the Journal",
+    "subtitle": "Insights, stories, and inspiration from the world of timeless design and sustainable living.",
+    "loading": "Loading articles...",
+    "error": "We could not load the journal at this time. Please check back later.",
+    "noArticles": "There are no articles yet. Stay tuned for updates."
+  },
+  "fr": {
+    "title": "Le Journal",
+    "subtitle": "Idées, histoires et inspiration du monde du design intemporel et de la vie durable.",
+    "loading": "Chargement des articles...",
+    "error": "Impossible de charger le journal pour le moment. Veuillez revenir plus tard.",
+    "noArticles": "Il n'y a pas encore d'articles. Restez à l'écoute pour les mises à jour."
+  }
+}

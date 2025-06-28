@@ -233,6 +233,11 @@ class ProductService:
             db.selectinload(Product.variants),
             db.selectinload(Product.category)
         )
+
+        # Handle soft-deleted filter
+        if filters and not filters.get('include_deleted', False):
+            # By default, only show non-deleted (active) products
+            query = query.filter(Product.deleted_at.is_(None))
         
         if filters:
             filters = sanitize_input(filters)

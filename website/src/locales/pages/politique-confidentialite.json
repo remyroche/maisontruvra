@@ -1,0 +1,40 @@
+{
+  "en": {
+    "title": "Privacy Policy",
+    "lastUpdated": "Last updated: June 22, 2025",
+    "introduction": "Maison Truvrā is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website.",
+    "sections": [
+      {
+        "title": "Collection of Your Information",
+        "content": "We may collect personal information, such as your name, shipping address, email address, and telephone number, and demographic information, such as your age, gender, hometown, and interests, that you voluntarily give to us when you register with the website or when you choose to participate in various activities related to the website, such as online chat and message boards."
+      },
+      {
+        "title": "Use of Your Information",
+        "content": "Having accurate information about you permits us to provide you with a smooth, efficient, and customized experience. Specifically, we may use information collected about you via the website to create and manage your account, email you regarding your account or order, process payments and refunds, and increase the efficiency and operation of the website."
+      },
+      {
+        "title": "Security of Your Information",
+        "content": "We use administrative, technical, and physical security measures to help protect your personal information. While we have taken reasonable steps to secure the personal information you provide to us, please be aware that despite our efforts, no security measures are perfect or impenetrable, and no method of data transmission can be guaranteed against any interception or other type of misuse."
+      }
+    ]
+  },
+  "fr": {
+    "title": "Politique de Confidentialité",
+    "lastUpdated": "Dernière mise à jour : 22 juin 2025",
+    "introduction": "Maison Truvrā s'engage à protéger votre vie privée. Cette politique de confidentialité explique comment nous collectons, utilisons, divulguons et protégeons vos informations lorsque vous visitez notre site web.",
+    "sections": [
+      {
+        "title": "Collecte de Vos Informations",
+        "content": "Nous pouvons collecter des informations personnelles, telles que votre nom, votre adresse de livraison, votre adresse e-mail et votre numéro de téléphone, ainsi que des informations démographiques, telles que votre âge, votre sexe, votre ville natale et vos centres d'intérêt, que vous nous fournissez volontairement lorsque vous vous inscrivez sur le site ou lorsque vous choisissez de participer à diverses activités liées au site, telles que le chat en ligne et les forums de discussion."
+      },
+      {
+        "title": "Utilisation de Vos Informations",
+        "content": "Avoir des informations précises sur vous nous permet de vous offrir une expérience fluide, efficace et personnalisée. Plus précisément, nous pouvons utiliser les informations collectées à votre sujet via le site pour créer et gérer votre compte, vous envoyer des e-mails concernant votre compte ou votre commande, traiter les paiements et les remboursements, et augmenter l'efficacité et le fonctionnement du site."
+      },
+      {
+        "title": "Sécurité de Vos Informations",
+        "content": "Nous utilisons des mesures de sécurité administratives, techniques et physiques pour aider à protéger vos informations personnelles. Bien que nous ayons pris des mesures raisonnables pour sécuriser les informations personnelles que vous nous fournissez, sachez que malgré nos efforts, aucune mesure de sécurité n'est parfaite ou impénétrable, et aucune méthode de transmission de données ne peut être garantie contre toute interception ou autre type d'utilisation abusive."
+      }
+    ]
+  }
+}

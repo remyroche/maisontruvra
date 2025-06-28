@@ -1,0 +1,46 @@
+{
+  "en": {
+    "title": "Our Quality Charter",
+    "subtitle": "A commitment to excellence, sustainability, and the unique story of each piece.",
+    "sections": [
+      {
+        "title": "1. Authenticity & Provenance",
+        "content": "Every item in our collection is meticulously verified for its authenticity and history. We believe that the soul of an object lies in its past, and we strive to preserve and share that story with you. We provide a detailed history for each piece whenever possible."
+      },
+      {
+        "title": "2. Meticulous Restoration",
+        "content": "Our skilled artisans treat each piece with the utmost respect. Restoration is performed using traditional techniques and period-appropriate materials to enhance the item's natural beauty without erasing the marks of time that give it character."
+      },
+      {
+        "title": "3. Sustainable Practice",
+        "content": "By giving a second life to pre-loved furniture and decor, we champion a model of consumption that is both elegant and responsible. We are committed to minimizing our environmental footprint through sustainable sourcing, restoration practices, and 100% recyclable packaging."
+      },
+      {
+        "title": "4. Unwavering Customer Service",
+        "content": "Your satisfaction is our priority. From initial inquiry to white-glove delivery, we are dedicated to providing a seamless and personal experience. We are here to answer your questions and ensure your chosen piece finds its perfect place in your home."
+      }
+    ]
+  },
+  "fr": {
+    "title": "Notre Charte de Qualité",
+    "subtitle": "Un engagement envers l'excellence, la durabilité et l'histoire unique de chaque pièce.",
+    "sections": [
+      {
+        "title": "1. Authenticité & Provenance",
+        "content": "Chaque article de notre collection est méticuleusement vérifié pour son authenticité et son histoire. Nous croyons que l'âme d'un objet réside dans son passé, et nous nous efforçons de préserver et de partager cette histoire avec vous. Nous fournissons un historique détaillé pour chaque pièce lorsque cela est possible."
+      },
+      {
+        "title": "2. Restauration Méticuleuse",
+        "content": "Nos artisans qualifiés traitent chaque pièce avec le plus grand respect. La restauration est effectuée en utilisant des techniques traditionnelles et des matériaux d'époque pour rehausser la beauté naturelle de l'objet sans effacer les marques du temps qui lui donnent son caractère."
+      },
+      {
+        "title": "3. Pratique Durable",
+        "content": "En donnant une seconde vie à des meubles et objets de décoration d'occasion, nous défendons un modèle de consommation à la fois élégant et responsable. Nous nous engageons à minimiser notre empreinte environnementale grâce à un approvisionnement durable, des pratiques de restauration respectueuses et des emballages 100% recyclables."
+      },
+      {
+        "title": "4. Service Client Irréprochable",
+        "content": "Votre satisfaction est notre priorité. De la première demande à la livraison en gants blancs, nous nous engageons à offrir une expérience fluide et personnelle. Nous sommes là pour répondre à vos questions et nous assurer que la pièce que vous avez choisie trouve sa place parfaite dans votre maison."
+      }
+    ]
+  }
+}

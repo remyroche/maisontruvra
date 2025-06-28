@@ -1,14 +1,14 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import { defineRule, configure } from 'vee-validate';
 import { required, email, min, confirmed, max } from '@vee-validate/rules';
 import { localize } from '@vee-validate/i18n';
 import fr from '@vee-validate/i18n/dist/locale/fr.json';
-import { createPinia } from 'pinia'
-import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 
 import App from '../vue/App.vue';
 import router from './router';
+import { useNotificationStore } from './stores/notification.js';
 // Note: Assuming main.css is the entry point for styles
 import '../css/main.css';
 

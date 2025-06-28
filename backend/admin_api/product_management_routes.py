@@ -97,8 +97,16 @@ def get_products():
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
+        
+        # Collect filter parameters from the request
         include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'
-        products_pagination = ProductService.get_all_products_paginated(page=page, per_page=per_page, include_deleted=include_deleted)
+        search_query = request.args.get('search', None, type=str)
+        
+        filters = {'include_deleted': include_deleted}
+        if search_query:
+            filters['search'] = search_query
+            
+        products_pagination = ProductService.get_all_products_paginated(page=page, per_page=per_page, filters=filters)
         return jsonify({
             "status": "success",
             "data": [product.to_dict() for product in products_pagination.items],

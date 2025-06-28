@@ -1,0 +1,18 @@
+{
+  "en": {
+    "addToCart": "Add to Cart",
+    "quantity": "Quantity",
+    "descriptionTitle": "Description",
+    "recommendationsTitle": "You Might Also Like",
+    "loading": "Loading product...",
+    "error": "We're sorry, but we couldn't load the product details at this time. Please try again later."
+  },
+  "fr": {
+    "addToCart": "Ajouter au Panier",
+    "quantity": "Quantité",
+    "descriptionTitle": "Description",
+    "recommendationsTitle": "Vous pourriez aussi aimer",
+    "loading": "Chargement du produit...",
+    "error": "Nous sommes désolés, mais nous n'avons pas pu charger les détails du produit pour le moment. Veuillez réessayer plus tard."
+  }
+}
