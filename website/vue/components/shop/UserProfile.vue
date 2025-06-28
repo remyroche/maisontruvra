@@ -1,149 +1,175 @@
 <template>
-  <div class="p-6">
-    <h2 class="text-2xl font-bold mb-4">Mon Compte</h2>
-    
-    <div v-if="userStore.user" class="mt-8">
-      <h3 class="text-xl font-semibold">Sécurité</h3>
-      <div class="mt-4 p-4 border rounded-lg">
-        <h4 class="font-medium">Authentification à deux facteurs (A2F)</h4>
+  <div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-6">Mon Compte</h1>
 
-          <!-- Language Settings -->
-          <div class="mt-8">
-            <h3 class="text-xl font-semibold">Préférences</h3>
-            <div class="mt-4 p-4 border rounded-lg">
-              <label for="language-select" class="block text-sm font-medium text-gray-700">Langue</label>
-              <select id="language-select" v-model="selectedLanguage" @change="updateLanguage" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                <option value="en">English</option>
-                <option value="fr">Français</option>
-              </select>
-            </div>
-          </div>
+    <div v-if="isLoading" class="text-center">
+      <p>Loading...</p>
+    </div>
 
-        <!-- State: 2FA is Disabled -->
-        <div v-if="!userStore.user.two_factor_enabled">
-          <p class="text-gray-600 my-2">Ajoutez une couche de sécurité supplémentaire à votre compte.</p>
-          <button @click="handleEnableMFA" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-            Activer l'A2F
-          </button>
-          
-          <!-- MFA Setup View -->
-          <div v-if="userStore.mfaSetupData.secret" class="mt-4 p-4 bg-gray-50 rounded-md">
-            <p class="font-semibold">1. Scannez ce code QR avec votre application d'authentification :</p>
-            <img :src="userStore.mfaSetupData.qrCode" alt="QR Code A2F" class="my-2 border rounded" />
-            <p class="mt-2 text-sm">Ou entrez cette clé manuellement :</p>
-            <p class="font-mono bg-gray-200 p-2 rounded my-1 text-sm break-all">{{ userStore.mfaSetupData.secret }}</p>
-            
-            <p class="font-semibold mt-4">2. Entrez le code de vérification pour confirmer :</p>
-            <div class="mt-2">
-              <label for="totp-confirm" class="sr-only">Code de vérification</label>
-              <input type="text" v-model="totpCode" id="totp-confirm" placeholder="123456" class="mt-1 w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-              <div class="mt-2">
-                <button @click="handleConfirmMFA" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-                  Confirmer et Activer
-                </button>
-                 <button @click="cancelMfaSetup" class="ml-2 text-sm text-gray-600 hover:underline">
-                  Annuler
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+    <div v-if="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+      <strong class="font-bold">Error:</strong>
+      <span class="block sm:inline">{{ error }}</span>
+    </div>
 
-        <!-- State: 2FA is Enabled -->
-        <div v-else>
-          <p class="text-green-700 bg-green-100 p-3 rounded-md my-2">L'authentification à deux facteurs est activée.</p>
-          <button @click="handleDisableMFA" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
-            Désactiver l'A2F
-          </button>
+    <div v-if="user" class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <!-- Left Column: Navigation -->
+      <div class="md:col-span-1">
+        <div class="bg-white p-6 rounded-lg shadow">
+          <ul class="space-y-4">
+            <li>
+              <a href="#" @click.prevent="activeTab = 'profile'" :class="['block font-medium', activeTab === 'profile' ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600']">
+                Mon Profil
+              </a>
+            </li>
+            <li>
+              <a href="#" @click.prevent="activeTab = 'orders'" :class="['block font-medium', activeTab === 'orders' ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600']">
+                Mes Commandes
+              </a>
+            </li>
+            <li>
+              <a href="#" @click.prevent="activeTab = 'addresses'" :class="['block font-medium', activeTab === 'addresses' ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600']">
+                Mes Adresses
+              </a>
+            </li>
+             <li>
+              <a href="#" @click.prevent="activeTab = 'danger'" :class="['block font-medium', activeTab === 'danger' ? 'text-red-600' : 'text-gray-700 hover:text-red-600']">
+                Zone de Danger
+              </a>
+            </li>
+            <li>
+              <button @click="handleLogout" class="w-full text-left font-medium text-gray-700 hover:text-blue-600">
+                Déconnexion
+              </button>
+            </li>
+          </ul>
         </div>
       </div>
-    </div>
-    <div v-else>
-        <p>Chargement des informations utilisateur...</p>
+
+      <!-- Right Column: Content -->
+      <div class="md:col-span-2">
+        <!-- Profile Section -->
+        <div v-if="activeTab === 'profile'" class="bg-white p-8 rounded-lg shadow">
+          <h2 class="text-2xl font-semibold mb-4">Informations Personnelles</h2>
+          <form @submit.prevent="updateProfile">
+            <div class="mb-4">
+              <label for="firstName" class="block text-sm font-medium text-gray-700">Prénom</label>
+              <input type="text" id="firstName" v-model="editableUser.first_name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div class="mb-4">
+              <label for="lastName" class="block text-sm font-medium text-gray-700">Nom</label>
+              <input type="text" id="lastName" v-model="editableUser.last_name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div class="mb-4">
+              <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+              <input type="email" id="email" :value="user.email" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-100" disabled>
+            </div>
+            <button type="submit" class="bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+              Mettre à jour
+            </button>
+          </form>
+        </div>
+
+        <!-- Orders Section -->
+        <div v-if="activeTab === 'orders'" class="bg-white p-8 rounded-lg shadow">
+          <h2 class="text-2xl font-semibold mb-4">Historique des Commandes</h2>
+          <div v-if="orders.length > 0" class="space-y-4">
+            <div v-for="order in orders" :key="order.id" class="border p-4 rounded-md">
+              <p><strong>Commande #{{ order.id }}</strong> - {{ order.status }}</p>
+              <p>Date: {{ new Date(order.created_at).toLocaleDateString() }}</p>
+              <p>Total: {{ order.total_amount }} €</p>
+            </div>
+          </div>
+          <p v-else>Vous n'avez aucune commande.</p>
+        </div>
+
+        <!-- Addresses Section -->
+        <div v-if="activeTab === 'addresses'" class="bg-white p-8 rounded-lg shadow">
+          <h2 class="text-2xl font-semibold mb-4">Mes Adresses</h2>
+           <div v-if="addresses.length > 0" class="space-y-4">
+               <div v-for="address in addresses" :key="address.id" class="border p-4 rounded-md">
+                   <p>{{ address.address_line_1 }}</p>
+                   <p v-if="address.address_line_2">{{ address.address_line_2 }}</p>
+                   <p>{{ address.city }}, {{ address.postal_code }}</p>
+                   <p>{{ address.country }}</p>
+               </div>
+           </div>
+          <p v-else>Vous n'avez aucune adresse enregistrée.</p>
+        </div>
+        
+        <!-- Danger Zone -->
+        <div v-if="activeTab === 'danger'" class="bg-red-50 border-l-4 border-red-500 p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold text-red-800 mb-4">Zone de Danger</h2>
+            <p class="text-red-700 mb-4">La suppression de votre compte est permanente et ne peut être annulée. Toutes vos données, y compris l'historique des commandes et les informations personnelles, seront définitivement effacées.</p>
+            <button @click="deleteAccount" class="bg-red-600 text-white font-bold py-2 px-4 rounded hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                Supprimer mon compte
+            </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useUserStore } from '@/stores/user';
-import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 
+// State for the active tab
+const activeTab = ref('profile');
+
+// Access the user store and router
 const userStore = useUserStore();
-const { locale } = useI18n();
-const selectedLanguage = ref('en');
-const totpCode = ref('');
+const router = useRouter();
 
+// Computed properties to get data from the store
+const user = computed(() => userStore.user);
+const orders = computed(() => userStore.orders);
+const addresses = computed(() => userStore.addresses);
+const isLoading = computed(() => userStore.isLoading);
+const error = computed(() => userStore.error);
 
-// This function will be called when the component is first created
-// and also after the user data is fetched or updated.
-function setLanguageFromStore() {
-    const userLang = userStore.user?.language;
-    if (userLang && ['en', 'fr'].includes(userLang)) {
-        selectedLanguage.value = userLang;
-        locale.value = userLang;
-    }
-}
-
-onMounted(async () => {
-  if (!userStore.user) {
-    await userStore.fetchUser();
-  }
-  setLanguageFromStore();
+// Local state for the editable user profile
+const editableUser = ref({
+  first_name: '',
+  last_name: ''
 });
 
-// Watch for changes in the user store (e.g., after a profile update)
-watch(() => userStore.user, setLanguageFromStore, { deep: true });
-
-async function updateLanguage() {
-  const result = await userStore.updateLanguage(selectedLanguage.value);
-  if (result.success) {
-    locale.value = selectedLanguage.value;
-    // Optionally show a success notification
-  } else {
-    // Revert the select box to the original language if the update fails
-    selectedLanguage.value = userStore.user.language;
-    // Optionally show an error notification
+// Watch for changes in the user data from the store to update the local form
+watch(user, (newUser) => {
+  if (newUser) {
+    editableUser.value.first_name = newUser.first_name;
+    editableUser.value.last_name = newUser.last_name;
   }
-}
-  
+}, { immediate: true });
+
+
+// Fetch user data when the component is mounted
 onMounted(() => {
-  // Fetch user data when component is mounted to get 2FA status
-  if (!userStore.user) {
-    userStore.fetchUser();
-  }
+  userStore.fetchUserProfile();
+  userStore.fetchUserOrders();
+  userStore.fetchUserAddresses();
 });
 
-async function handleEnableMFA() {
-  await userStore.enableMFA();
-}
+// Method to handle profile updates
+const updateProfile = async () => {
+  await userStore.updateUserProfile(editableUser.value);
+};
 
-async function handleConfirmMFA() {
-  if (!totpCode.value) {
-    alert('Veuillez entrer le code de vérification.');
-    return;
+// Method to handle logout
+const handleLogout = async () => {
+  await userStore.logout();
+  router.push('/'); // Redirect to homepage after logout
+};
+
+// Method to handle account deletion
+const deleteAccount = async () => {
+  if (confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")) {
+    await userStore.deleteAccount();
+    router.push('/'); // Redirect to homepage after deletion
   }
-  const result = await userStore.confirmMFA(totpCode.value);
-  if (result.success) {
-    totpCode.value = '';
-    alert('A2F activée avec succès !');
-  } else {
-    alert(`Erreur: ${result.error}`);
-  }
-}
-
-async function handleDisableMFA() {
-    if (confirm("Êtes-vous sûr de vouloir désactiver l'authentification à deux facteurs ?")) {
-        const result = await userStore.disableMFA();
-        if (result.success) {
-            alert('A2F désactivée avec succès.');
-        } else {
-            alert(`Erreur: ${result.error}`);
-        }
-    }
-}
-
-function cancelMfaSetup() {
-  userStore.clearMfaSetup();
-}
+};
 </script>
+
+<style scoped>
+/* Scoped styles can be added here if needed */
+</style>
