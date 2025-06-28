@@ -4,7 +4,8 @@ from flask_login import login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend.database import db
-from backend.models.user_models import User, Address
+from backend.models.user_models import User
+from backend.models.address_models import Address
 from backend.services.user_service import UserService
 from backend.services.mfa_service import MfaService
 from backend.services.address_service import AddressService

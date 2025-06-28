@@ -7,8 +7,9 @@ from ..utils.decorators import log_admin_action
 
 @admin_api_bp.route('/assets/upload', methods=['POST'])
 @log_admin_action
-@roles_required ('Admin', 'Manager', 'Editor')
-@admin_requireddef upload_asset():
+@roles_required('Admin', 'Manager', 'Editor')
+@admin_required
+def upload_asset():
     if 'file' not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
     
@@ -23,15 +24,17 @@ from ..utils.decorators import log_admin_action
 
 @admin_api_bp.route('/assets', methods=['GET'])
 @log_admin_action
-@roles_required ('Admin', 'Manager', 'Editor')
-@admin_requireddef get_assets():
+@roles_required('Admin', 'Manager', 'Editor')
+@admin_required
+def get_assets():
     assets = AssetService.get_all_assets()
     return jsonify([asset.to_dict() for asset in assets])
 
 @admin_api_bp.route('/assets/<int:asset_id>', methods=['DELETE'])
 @log_admin_action
-@roles_required ('Admin', 'Manager', 'Editor')
-@admin_requireddef delete_asset(asset_id):
+@roles_required('Admin', 'Manager', 'Editor')
+@admin_required
+def delete_asset(asset_id):
     try:
         AssetService.delete_asset(asset_id)
         return '', 204

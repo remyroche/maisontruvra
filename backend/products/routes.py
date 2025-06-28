@@ -3,6 +3,7 @@ from backend.services.product_service import ProductService
 from backend.utils.sanitization import sanitize_input
 from backend.services.exceptions import NotFoundException, ValidationException
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.extensions import cache
 import logging
 
 products_bp = Blueprint('products_bp', __name__, url_prefix='/api/products')

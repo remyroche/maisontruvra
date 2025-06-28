@@ -4,12 +4,9 @@ from flask import render_template, current_app
 from playwright.sync_api import sync_playwright
 from backend.database import db
 from backend.models.order_models import Order
-from backend.models.invoice_models import Invoice # Create this new model
 from backend.tasks import generate_invoice_pdf_task
-import logging
-from backend.models.b2b_models import Invoice, B2BProfile, B2BAccount
+from backend.models.b2b_models import B2BAccount, B2BUser
 from backend.models.invoice_models import Quote, Invoice, InvoiceItem
-from datetime import datetime
 
 
 
@@ -101,16 +98,16 @@ class InvoiceService:
         Generates a PDF for a given order by passing a full context
         dictionary to the relevant B2C or B2B template.
         """
-        logger.info(f"Starting PDF generation for order_id: {order_id}")
+        current_app.logger.info(f"Starting PDF generation for order_id: {order_id}")
         
         order = Order.query.options(db.joinedload(Order.user)).get(order_id)
         if not order:
-            logger.error(f"Could not generate invoice: Order {order_id} not found.")
+            current_app.logger.error(f"Could not generate invoice: Order {order_id} not found.")
             raise ValueError(f"Order {order_id} not found")
 
         invoice = Invoice.query.filter_by(order_id=order.id).first()
         if not invoice:
-            logger.error(f"Could not generate invoice: Invoice record for Order {order_id} not found.")
+            current_app.logger.error(f"Could not generate invoice: Invoice record for Order {order_id} not found.")
             raise ValueError(f"Invoice for Order {order_id} not found")
 
         # --- IMPLEMENTATION: Build a comprehensive context dictionary ---
@@ -135,10 +132,10 @@ class InvoiceService:
         # If the user is B2B, add B2B-specific details to the context
         if order.user.is_b2b:
             template_name = 'non-email/b2b_invoice.html'
-            b2b_profile = B2BProfile.query.filter_by(user_id=order.user.id).first()
-            if b2b_profile:
-                context['company_name'] = b2b_profile.company_name
-                context['vat_number'] = b2b_profile.vat_number
+            b2b_user = B2BUser.query.filter_by(user_id=order.user.id).first()
+            if b2b_user:
+                context['company_name'] = b2b_user.company_name
+                context['vat_number'] = b2b_user.vat_number
             try:
                 # Render the correct template with the full context
                 html_string = render_template(template_name, **context)
@@ -166,11 +163,11 @@ class InvoiceService:
     
                 logger.info(f"PDF generation for invoice {invoice.invoice_number} completed. Saved to {filename}")
                 return True
-                
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"An error occurred during PDF generation for order {order_id}: {e}", exc_info=True)
-            raise
+                    
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"An error occurred during PDF generation for order {order_id}: {e}", exc_info=True)
+                raise
 
     @staticmethod
     def _generate_invoice_number(prefix: str = "INV") -> str:
@@ -255,7 +252,7 @@ class InvoiceService:
         db.session.add(new_invoice)
         
         # 5. Send the correct confirmation email with the invoice attached
-        print(f"Invoice {new_invoice['id']} created. Queuing PDF generation.")
+        current_app.logger.info(f"Invoice {new_invoice.id} created. Queuing PDF generation.")
         generate_invoice_pdf_task.delay(order_id)
 
         # The calling service is responsible for the final db.session.commit()

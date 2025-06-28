@@ -1,7 +1,9 @@
 import secrets
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 from .. import db
 from ..models import User, LoyaltyTier, UserLoyalty, Referral, ReferralRewardTier, PointVoucher, ExclusiveReward, LoyaltyPointLog
+from ..models.order_models import Order
 from ..services.notification_service import NotificationService
 
 class LoyaltyService:

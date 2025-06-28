@@ -1,14 +1,11 @@
 import os
 import uuid
-import logging
 from flask import render_template, current_app
 from backend.database import db
 from backend.models.product_models import Product
 from backend.models.passport_models import ProductPassport
 from .exceptions import ServiceError, NotFoundException
 from playwright.sync_api import sync_playwright
-
-logger = logging.getLogger(__name__)
 
 class PassportService:
 
@@ -19,7 +16,7 @@ class PassportService:
         passport record in the database.
         This is called by a Celery task.
         """
-        logger.info(f"Starting PDF generation for passport_id: {passport_id}")
+        current_app.logger.info(f"Starting PDF generation for passport_id: {passport_id}")
 
         # 1. Fetch passport and related product data from the database
         passport = ProductPassport.query.options(
@@ -27,7 +24,7 @@ class PassportService:
         ).get(passport_id)
 
         if not passport:
-            logger.error(f"Could not generate passport: Passport {passport_id} not found.")
+            current_app.logger.error(f"Could not generate passport: Passport {passport_id} not found.")
             raise ValueError(f"Passport {passport_id} not found")
 
         # 2. Build the context dictionary for the template
@@ -79,12 +76,12 @@ class PassportService:
 
             db.session.commit()
 
-            logger.info(f"PDF generation for passport {passport.id} completed. Saved to {filename}")
+            current_app.logger.info(f"PDF generation for passport {passport.id} completed. Saved to {filename}")
             return True
 
         except Exception as e:
             db.session.rollback()
-            logger.error(f"An error occurred during PDF generation for passport {passport_id}: {e}", exc_info=True)
+            current_app.logger.error(f"An error occurred during PDF generation for passport {passport_id}: {e}", exc_info=True)
             # The Celery task's autoretry will handle this exception.
             raise
 

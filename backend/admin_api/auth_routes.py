@@ -1,22 +1,16 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import get_jwt_identity, jwt_required
-from backend.auth.mfa import MfaService # Assumed service
-from backend.utils.sanitization import sanitize_inputfrom flask import Blueprint, request, jsonify, session
-from services.user_service import UserService
-from services.mfa_service import MFAService
-from flask_login import login_user, logout_user, current_user, login_required
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from ..utils.decorators import log_admin_action
-from utils.sanitization import sanitize_input
-from ..services.auth_service import AuthService
-from ..services.exceptions import ServiceError
-import logging
 from flask import Blueprint, request, jsonify, session, current_app
-from flask_login import current_user, login_user, logout_user
+from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_login import login_user, logout_user, current_user, login_required
 from datetime import datetime
+import logging
+
+from backend.services.mfa_service import MfaService
 from backend.services.user_service import UserService
 from backend.services.auth_service import AuthService
-from backend.utils.decorators import admin_required, staff_required
+from backend.services.exceptions import ServiceError
+from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from backend.utils.decorators import log_admin_action
+from backend.utils.sanitization import sanitize_input
 from backend.loggers import security_logger
 
 admin_auth_bp = Blueprint('admin_auth', __name__)
@@ -24,7 +18,7 @@ admin_auth_bp = Blueprint('admin_auth', __name__)
 
 admin_auth_bp = Blueprint('admin_auth_bp', __name__)
 user_service = UserService()
-mfa_service = MFAService()
+mfa_service = MfaService()
 security_logger = logging.getLogger('security')
 
 

@@ -42,7 +42,7 @@ class CartItem(BaseModel):
             'product_id': self.product_id,
             'quantity': self.quantity,
             'product_name': self.product.name,
-            'price': self.product.price
+            'price': self.product.price,
             'data': self.is_reward
         }
 

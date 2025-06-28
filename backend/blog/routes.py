@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify
 from backend.schemas import BlogPostSchema, BlogCategorySchema
 from backend.services.blog_service import BlogService
 from backend.services.exceptions import NotFoundException
+from backend.extensions import cache
 
 blog_bp = Blueprint('blog_bp', __name__, url_prefix='/blog')
 blog_service = BlogService()

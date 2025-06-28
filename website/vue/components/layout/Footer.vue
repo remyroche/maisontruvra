@@ -26,7 +26,7 @@
               <div>
                 <h3 class="text-sm font-semibold text-gray-400 tracking-wider uppercase">{{ $t('footer.sections.support') }}</h3>
                 <ul class="mt-4 space-y-4">
-                  <li><a href="/contact" class="text-base text-gray-300 hover:text-white">{{ $t('footer.links.contact') }}</a></li>
+                  <li><router-link to="/contact-b2c" class="text-base text-gray-300 hover:text-white">Contact B2C</router-link></li>
                   <li><router-link to="/faq" class="text-base text-gray-300 hover:text-white">{{ $t('footer.links.faq') }}</router-link></li>
                 </ul>
                 <a href="https://www.instagram.com/maisontruvra" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-white">

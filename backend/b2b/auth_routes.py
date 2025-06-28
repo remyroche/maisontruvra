@@ -9,7 +9,7 @@ from backend.models.user_models import User
 from flask_login import current_user # Added: Import current_user
 from datetime import datetime # Added: Import datetime
 from flask import session # Added: Import session
-from backend.b2b import b2b_register
+# b2b_register function is defined in this file
 
 
 b2b_auth_bp = Blueprint('b2b_auth_bp', __name__, url_prefix='/api/b2b/auth')
@@ -50,6 +50,14 @@ def b2b_reset_password():
         return jsonify({"error": e.message}), e.status_code
         
 # B2B User Registration Request
+def register_b2b_user(data):
+    """
+    Helper function to register a B2B user.
+    """
+    # Implementation for B2B user registration
+    # This would create a B2B user with pending status
+    return data  # Placeholder return
+
 @b2b_auth_bp.route('/register', methods=['POST'])
 def b2b_register():
     """
@@ -70,7 +78,7 @@ def b2b_register():
         missing = [f for f in required_fields if f not in sanitized_data]
         return jsonify(status="error", message=f"Missing required fields: {', '.join(missing)}"), 400
 
-    new_user = b2b_register(data)
+    new_user = register_b2b_user(data)
     EmailService.send_b2b_account_pending_email(new_user) 
 
     try:

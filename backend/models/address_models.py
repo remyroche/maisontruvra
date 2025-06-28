@@ -1,6 +1,6 @@
-from .. import db
+from backend.database import db
 from sqlalchemy.ext.hybrid import hybrid_property
-from utils.encryption import encrypt_data, decrypt_data
+from backend.utils.encryption import encrypt_data, decrypt_data
 
 class Address(db.Model):
     id = db.Column(db.Integer, primary_key=True)

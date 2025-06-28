@@ -3,11 +3,10 @@ from backend.models.user_models import User, UserRole
 from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
 from backend.utils.sanitization import sanitize_input
 from backend.services.audit_log_service import AuditLogService
-from flask import current_app
+from flask import current_app, request  # Ensure request is imported
 from flask_jwt_extended import get_jwt_identity
-import logging
+from backend.models.b2b_models import B2BUser  # Add this import
 
-logger = logging.getLogger(__name__)
 
 class UserService:
     @staticmethod
@@ -55,7 +54,7 @@ class UserService:
         if User.query.filter_by(email=user_data['email']).first():
             raise ValidationException("User with this email already exists")
 
-            browser_lang = request.accept_languages.best_match(['en', 'fr'], default='en')
+        browser_lang = request.accept_languages.best_match(['en', 'fr'], default='en')
 
         try:
             user = User(
@@ -63,7 +62,7 @@ class UserService:
                 first_name=user_data['first_name'],
                 last_name=user_data['last_name'],
                 role=user_data.get('role', UserRole.B2C),
-                is_active=user_data.get('is_active', True)
+                is_active=user_data.get('is_active', True),
                 language=browser_lang
             )
             user.set_password(user_data['password'])
@@ -80,12 +79,12 @@ class UserService:
 
             db.session.commit()
 
-            logger.info(f"User created successfully: {user.email} (ID: {user.id})")
+            current_app.logger.info(f"User created successfully: {user.email} (ID: {user.id})")
             return user.to_dict(context='admin')
 
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to create user: {str(e)}")
+            current_app.logger.error(f"Failed to create user: {str(e)}")
             raise ValidationException(f"Failed to create user: {str(e)}")
 
     def update_user_language(self, user_id, language, user_type='b2c'):
@@ -156,12 +155,12 @@ class UserService:
 
             db.session.commit()
 
-            logger.info(f"User updated successfully: {user.email} (ID: {user.id})")
+            current_app.logger.info(f"User updated successfully: {user.email} (ID: {user.id})")
             return user.to_dict(context='admin')
 
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to update user {user_id}: {str(e)}")
+            current_app.logger.error(f"Failed to update user {user_id}: {str(e)}")
             raise ValidationException(f"Failed to update user: {str(e)}")
 
     @staticmethod
@@ -185,9 +184,9 @@ class UserService:
 
             db.session.commit()
 
-            logger.info(f"User soft deleted: {user.email} (ID: {user.id})")
+            current_app.logger.info(f"User soft deleted: {user.email} (ID: {user.id})")
 
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to delete user {user_id}: {str(e)}")
+            current_app.logger.error(f"Failed to delete user {user_id}: {str(e)}")
             raise ValidationException(f"Failed to delete user: {str(e)}")

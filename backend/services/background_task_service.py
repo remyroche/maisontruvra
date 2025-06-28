@@ -6,9 +6,7 @@ from backend.models.user_models import User
 from backend.services.email_service import EmailService
 from backend.services.invoice_service import InvoiceService
 from flask import current_app
-import logging
 
-logger = logging.getLogger(__name__)
 
 class BackgroundTaskService:
     @staticmethod
@@ -27,10 +25,10 @@ class BackgroundTaskService:
                 'order_id': order_id
             }])
             
-            logger.info(f"Background tasks queued for order {order_id}")
+            current_app.logger.info(f"Background tasks queued for order {order_id}")
             
         except Exception as e:
-            logger.error(f"Failed to queue background tasks for order {order_id}: {str(e)}")
+            current_app.logger.error(f"Failed to queue background tasks for order {order_id}: {str(e)}")
             raise
     
     @staticmethod
@@ -42,10 +40,10 @@ class BackgroundTaskService:
                 'user_id': user_id
             }])
             
-            logger.info(f"Welcome email queued for user {user_id}")
+            current_app.logger.info(f"Welcome email queued for user {user_id}")
             
         except Exception as e:
-            logger.error(f"Failed to queue welcome email for user {user_id}: {str(e)}")
+            current_app.logger.error(f"Failed to queue welcome email for user {user_id}: {str(e)}")
     
     @staticmethod
     def queue_inventory_sync(product_variant_id: int):
@@ -53,10 +51,10 @@ class BackgroundTaskService:
         try:
             celery.send_task('sync_inventory', args=[product_variant_id])
             
-            logger.info(f"Inventory sync queued for variant {product_variant_id}")
+            current_app.logger.info(f"Inventory sync queued for variant {product_variant_id}")
             
         except Exception as e:
-            logger.error(f"Failed to queue inventory sync for variant {product_variant_id}: {str(e)}")
+            current_app.logger.error(f"Failed to queue inventory sync for variant {product_variant_id}: {str(e)}")
     
     @staticmethod
     def queue_low_stock_alert():
@@ -64,7 +62,7 @@ class BackgroundTaskService:
         try:
             celery.send_task('check_low_stock')
             
-            logger.info("Low stock check task queued")
+            current_app.logger.info("Low stock check task queued")
             
         except Exception as e:
-            logger.error(f"Failed to queue low stock check: {str(e)}")
+            current_app.logger.error(f"Failed to queue low stock check: {str(e)}")

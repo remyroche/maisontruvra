@@ -3,149 +3,18 @@ from flask import jsonify, request, g
 from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt, jwt_required
 import logging
 
-from backend.services.rbac_service import RBACService
+from backend.services.rbac_service import rbac_service as RBACService
 from backend.utils.csrf_protection import CSRFProtection
 from backend.models.user_models import User
 
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
 
-# Instantiate the RBACService (this would typically be a singleton or dependency injected)
-class RBACService:
-    """
-    A conceptual Role-Based Access Control Service.
-    In a real application, this would interact with a database
-    (e.g., SQL, NoSQL) to store and retrieve user roles and
-    role-permission mappings.
+# RBACService is imported from backend.services.rbac_service
 
-    For demonstration, we use in-memory dictionaries.
-    """
-    def __init__(self):
-        # Maps user_id to a set of role names
-        self._user_roles = {} # Example: {"user123": {"Admin", "Editor"}}
+# CSRFProtection is imported from backend.utils.csrf_protection
 
-        # Maps role name to a set of permissions
-        self._role_permissions = {
-            "Admin": {"MANAGE_USERS", "VIEW_REPORTS", "DELETE_DATA", "MANAGE_PRODUCTS", "VIEW_INVENTORY", "FULL_ACCESS"},
-            "Staff": {"VIEW_REPORTS", "PROCESS_ORDERS"},
-            "Manager": {"MANAGE_PRODUCTS", "VIEW_INVENTORY", "GENERATE_REPORTS"},
-            "Editor": {"CREATE_CONTENT", "EDIT_CONTENT", "UPLOAD_MEDIA"},
-            "Viewer": {"VIEW_CONTENT", "DOWNLOAD_REPORTS"},
-            "B2B": {"VIEW_B2B_DASHBOARD", "ACCESS_B2B_DATA"},
-            # Add more roles and their permissions here
-        }
-        security_logger.info("RBACService initialized with default roles and permissions.")
-
-    def _get_user_roles_from_storage(self, user_id):
-        """
-        Simulates fetching user roles from a database.
-        Returns a set of role names.
-        """
-        return self._user_roles.get(user_id, set())
-
-    def _get_role_permissions_from_storage(self, role_name):
-        """
-        Simulates fetching permissions for a specific role from a database.
-        Returns a set of permission strings.
-        """
-        return self._role_permissions.get(role_name, set())
-
-    def add_user(self, user_id):
-        """Adds a user to the RBAC system, initially with no roles."""
-        if user_id not in self._user_roles:
-            self._user_roles[user_id] = set()
-            security_logger.info(f"User '{user_id}' added to RBACService.")
-        else:
-            security_logger.debug(f"User '{user_id}' already exists in RBACService.")
-
-    def assign_role(self, user_id, role_name):
-        """Assigns a role to a user."""
-        if user_id not in self._user_roles:
-            self.add_user(user_id)
-        if role_name in self._role_permissions:
-            self._user_roles[user_id].add(role_name)
-            security_logger.info(f"Assigned role '{role_name}' to user '{user_id}'.")
-        else:
-            security_logger.warning(f"Attempted to assign undefined role '{role_name}' to user '{user_id}'.")
-
-    def remove_role(self, user_id, role_name):
-        """Removes a role from a user."""
-        if user_id in self._user_roles and role_name in self._user_roles[user_id]:
-            self._user_roles[user_id].remove(role_name)
-            security_logger.info(f"Removed role '{role_name}' from user '{user_id}'.")
-        else:
-            security_logger.debug(f"User '{user_id}' does not have role '{role_name}' or user not found.")
-
-    def get_user_roles(self, user_id):
-        """Retrieves all roles assigned to a user."""
-        return list(self._get_user_roles_from_storage(user_id))
-
-    def user_has_role(self, user_id, role_name):
-        """Checks if a user has a specific role."""
-        return role_name in self._get_user_roles_from_storage(user_id)
-
-    def user_has_permission(self, user_id, permission):
-        """
-        Checks if a user has a specific permission via any of their roles.
-        This aggregates permissions from all roles the user has.
-        """
-        user_roles = self._get_user_roles_from_storage(user_id)
-        for role in user_roles:
-            if permission in self._get_role_permissions_from_storage(role):
-                return True
-        return False
-
-    def user_has_permissions(self, user_id, *required_permissions):
-        """
-        Checks if a user has ALL of the specified permissions.
-        Iterates through required permissions and uses user_has_permission.
-        """
-        for perm in required_permissions:
-            if not self.user_has_permission(user_id, perm):
-                return False
-        return True
-
-    def user_is_staff(self, user_id):
-        """
-        Checks if a user is considered 'staff'.
-        This can be defined by having a specific 'Staff' role or other criteria.
-        """
-        return self.user_has_role(user_id, 'Staff')
-
-RBACService = RBACService()
-
-class CSRFProtection:
-    @staticmethod
-    def validate_csrf_token():
-        if request.headers.get('X-CSRF-TOKEN') != 'valid-csrf-token':
-            raise Exception("Invalid CSRF token")
-        security_logger.info("CSRF token validated successfully.")
-
-class User:
-    _users_db = {}
-    class Role:
-        def __init__(self, value):
-            self.value = value
-    def __init__(self, id, email, role, is_active=True, two_factor_enabled=False):
-        self.id = id
-        self.email = email
-        self.role = self.Role(role)
-        self.is_active = is_active
-        self.two_factor_enabled = two_factor_enabled
-        User._users_db[id] = self
-
-    @staticmethod
-    def query_get(user_id):
-        return User._users_db.get(user_id)
-
-# Populate some test users for demonstration, including MFA status
-User("user123", "user1@example.com", "Viewer")
-User("admin456", "admin@example.com", "Admin", two_factor_enabled=True) # Admin with MFA
-User("staff789", "staff@example.com", "Staff", two_factor_enabled=True) # Staff with MFA
-User("manager012", "manager@example.com", "Manager", two_factor_enabled=False) # Manager without MFA
-User("editor345", "editor@example.com", "Editor")
-User("b2buser", "b2b@example.com", "B2B")
-User("inactive_user", "inactive@example.com", "Viewer", is_active=False)
+# User model is imported from backend.models.user_models
 
 
 def _common_auth_check(fn, user_id):
@@ -162,7 +31,7 @@ def _common_auth_check(fn, user_id):
         })
         return jsonify(status="error", message="Authentication required."), 401
 
-    user_obj = User.query_get(user_id)
+    user_obj = User.query.get(user_id)
     if not user_obj:
         security_logger.warning({
             'message': 'User ID from JWT not found in DB',
@@ -184,13 +53,23 @@ def _common_auth_check(fn, user_id):
         return jsonify(status="error", message="Account inactive."), 401
 
     # Store relevant user info in g for use in the route and subsequent checks
+    # Get user role - handle different possible role structures
+    user_role = 'Customer'  # default role
+    if hasattr(user_obj, 'roles') and user_obj.roles:
+        user_role = user_obj.roles[0].name if user_obj.roles else 'Customer'
+    elif hasattr(user_obj, 'role') and user_obj.role:
+        user_role = user_obj.role.name if hasattr(user_obj.role, 'name') else str(user_obj.role)
+    
+    # Get MFA status
+    mfa_enabled = getattr(user_obj, 'two_factor_enabled', False) or getattr(user_obj, 'mfa_enabled', False)
+    
     g.user = {
         'id': user_obj.id,
         'email': user_obj.email,
-        'role': user_obj.role.value,
-        'two_factor_enabled': user_obj.two_factor_enabled # Store MFA status
+        'role': user_role,
+        'two_factor_enabled': mfa_enabled
     }
-    security_logger.debug(f"User {user_id} authenticated and active. Role: {user_obj.role.value}, MFA Enabled: {user_obj.two_factor_enabled}")
+    security_logger.debug(f"User {user_id} authenticated and active. Role: {user_role}, MFA Enabled: {mfa_enabled}")
     return None
 
 def _csrf_and_state_change_check(fn):

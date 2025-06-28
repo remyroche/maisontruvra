@@ -5,6 +5,7 @@ from flask import session, current_app
 from datetime import datetime, timedelta
 from .passport_service import PassportService
 from .notification_service import NotificationService
+from ..extensions import cache
 
 
 # Updated reservation lifetime to 1 hour (60 minutes)
@@ -159,12 +160,11 @@ class InventoryService:
             # Use synchronize_session=False for a more efficient bulk delete,
             # as the session is being managed by the calling service (CartService).
             num_deleted = InventoryReservation.query.filter_by(user_id=user_id).delete(synchronize_session=False)
-            
             # This does not commit the session; the calling service is responsible for the commit.
             current_app.logger.info(f"Released {num_deleted} total reservations for user {user_id} as part of a larger transaction.")
 
-        cache.delete('view//api/products/{}'.format(product_id)) 
-        cache.delete('view//api/products') 
+            cache.delete('view//api/products/{}'.format(product_id)) 
+            cache.delete('view//api/products') 
 
         except Exception as e:
             # The calling service should handle rollback.

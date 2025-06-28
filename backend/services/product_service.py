@@ -5,10 +5,11 @@ from backend.models.inventory_models import ProductItem
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
 from backend.utils.sanitization import sanitize_input
 from backend.services.audit_log_service import AuditLogService
-from flask import current_app
-import logging
+from flask import current_app, request
+from flask_jwt_extended import get_jwt_identity
+from backend.models.user_models import User
 
-logger = logging.getLogger(__name__)
+
 
 class ProductService:
 
@@ -155,7 +156,61 @@ class ProductService:
             current_app.logger.error(f"Failed to create product with variants: {e}", exc_info=True)
             raise ServiceError("Product creation failed due to a database error.")
 
-    
+    @staticmethod
+    def get_b2b_product_by_id(product_id, user_id):
+        """Fetch a product with B2B-specific pricing for a given user."""
+        product = Product.query.get(product_id)
+        if not product:
+            raise NotFoundException(f"Product with ID {product_id} not found")
+
+        # Fetch user and their tier discount
+        user = User.query.get(user_id)
+        tier_discount = 0
+        if user and user.loyalty and user.loyalty.tier:
+            tier_discount = user.loyalty.tier.discount
+
+        # Calculate B2B price
+        b2b_price = product.price * (1 - tier_discount / 100)
+
+        product_data = product.to_dict(view='b2b')
+        product_data['b2c_price'] = product.price
+        product_data['b2b_price'] = b2b_price
+
+        return product_data
+
+    @staticmethod
+    def get_b2b_products_paginated(user_id, page, per_page, **filters):
+        """Fetch paginated products with B2B pricing."""
+        query = Product.query.filter(Product.is_b2b_visible == True)
+
+        # Apply filters if any
+        if filters.get('category'):
+            query = query.filter(Product.category_id == filters['category'])
+        if filters.get('collection'):
+            query = query.filter(Product.collection_id == filters['collection'])
+        if filters.get('search_term'):
+            search_term = f"%{filters['search_term']}%"
+            query = query.filter(Product.name.ilike(search_term))
+
+        # Fetch user and their tier discount
+        user = User.query.get(user_id)
+        tier_discount = 0
+        if user and user.loyalty and user.loyalty.tier:
+            tier_discount = user.loyalty.tier.discount
+
+        # Paginate and calculate B2B prices
+        products_pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        products_data = []
+        for product in products_pagination.items:
+            b2b_price = product.price * (1 - tier_discount / 100)
+            product_data = product.to_dict(view='b2b')
+            product_data['b2c_price'] = product.price
+            product_data['b2b_price'] = b2b_price
+            products_data.append(product_data)
+
+        return products_data, products_pagination.total, products_pagination.pages, products_pagination.page
+
+
     @staticmethod
     def get_product_by_id(product_id: int, context: str = 'public'):
         """Get product by ID with different serialization contexts."""
@@ -230,12 +285,12 @@ class ProductService:
             
             db.session.commit()
             
-            logger.info(f"Product created successfully: {product.name} (ID: {product.id})")
+            current_app.logger.info(f"Product created successfully: {product.name} (ID: {product.id})")
             return product.to_dict(context='admin')
             
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to create product: {str(e)}")
+            current_app.logger.error(f"Failed to create product: {str(e)}")
             raise ValidationException(f"Failed to create product: {str(e)}")
     
     @staticmethod
@@ -284,12 +339,12 @@ class ProductService:
             
             db.session.commit()
             
-            logger.info(f"Product updated successfully: {product.name} (ID: {product.id})")
+            current_app.logger.info(f"Product updated successfully: {product.name} (ID: {product.id})")
             return product.to_dict(context='admin')
             
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to update product {product_id}: {str(e)}")
+            current_app.logger.error(f"Failed to update product {product_id}: {str(e)}")
             raise ValidationException(f"Failed to update product: {str(e)}")
     
     @staticmethod
@@ -313,11 +368,11 @@ class ProductService:
             
             db.session.commit()
             
-            logger.info(f"Product soft deleted: {product.name} (ID: {product.id})")
+            current_app.logger.info(f"Product soft deleted: {product.name} (ID: {product.id})")
             
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to delete product {product_id}: {str(e)}")
+            current_app.logger.error(f"Failed to delete product {product_id}: {str(e)}")
             raise ValidationException(f"Failed to delete product: {str(e)}")
     
     @staticmethod

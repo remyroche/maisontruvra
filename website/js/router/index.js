@@ -19,6 +19,8 @@ const DashboardView = () => import('../vue/views/DashboardView.vue');
 const RewardsView = () => import('../vue/views/RewardsView.vue');
 const ReferralView = () => import('../vue/views/ReferralView.vue');
 const NotFoundView = () => import('../vue/views/NotFoundView.vue');
+const ContactB2C = () => import('../vue/views/ContactB2C.vue');
+const ContactB2B = () => import('../vue/views/ContactB2B.vue');
 
 
 const routes = [
@@ -39,6 +41,10 @@ const routes = [
 
   // --- Search ---
   { path: '/search', name: 'Search', component: SearchView, props: route => ({ query: route.query.q }) },
+
+  // --- Contact Pages ---
+  { path: '/contact-b2c', name: 'ContactB2C', component: ContactB2C },
+  { path: '/contact-b2b', name: 'ContactB2B', component: ContactB2B },
 
   // --- Authenticated User Routes ---
   { 

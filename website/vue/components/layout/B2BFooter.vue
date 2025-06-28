@@ -87,7 +87,7 @@
             <div class="mt-10 md:mt-0">
               <h3 class="text-sm font-semibold leading-6 text-white">Ressources</h3>
               <ul role="list" class="mt-6 space-y-4">
-                 <li><a href="/contact" class="text-sm leading-6 text-gray-300 hover:text-white">Contact</a></li>
+                <li><router-link to="/contact-b2b" class="text-base text-gray-300 hover:text-white">Contact</router-link></li>
                  <li><a href="/faq" class="text-sm leading-6 text-gray-300 hover:text-white">FAQ</a></li>
               </ul>
             </div>

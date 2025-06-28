@@ -23,7 +23,7 @@ class CartService:
             db.session.commit()
         return cart
 
-        @staticmethod
+    @staticmethod
     def add_reward_to_cart(user_id, reward_id):
         """Adds a redeemed loyalty reward to the user's cart."""
         cart = CartService.get_cart(user_id)

@@ -4,6 +4,15 @@ from flask_login import current_user
 from backend.services.audit_log_service import AuditLogService
 import re
 
+def admin_required(f):
+    """Ensures the user is an authenticated admin."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            return jsonify({"error": "Administrator access required"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
 def staff_required(f):
     """Ensures the user is an authenticated staff member (not B2C or B2B)."""
     @wraps(f)
@@ -85,3 +94,6 @@ def audit_action(f):
             )
         return response, status_code
     return decorated_function
+
+# Alias for backward compatibility
+log_admin_action = audit_action

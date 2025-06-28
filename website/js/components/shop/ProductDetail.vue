@@ -4,19 +4,25 @@
         <div v-else-if="!productStore.currentProduct" class="text-center text-gray-500 py-24">Produit non trouvé.</div>
         <div v-else class="grid md:grid-cols-2 gap-12">
             <div>
-                <img v-bind:src="productStore.currentProduct.image_url" v-bind:alt="productStore.currentProduct.name" class="w-full rounded-lg shadow-lg">
+                <img :src="productStore.currentProduct.image_url" :alt="productStore.currentProduct.name" class="w-full rounded-lg shadow-lg">
             </div>
             <div>
                 <h1 class="text-4xl font-serif text-brand-burgundy">{{ productStore.currentProduct.name }}</h1>
-                <p class="text-2xl font-semibold my-4">{{ formatCurrency(productStore.currentProduct.price) }}</p>
+                <p class="text-2xl font-semibold my-4">
+                    B2C Price: {{ formatCurrency(productStore.currentProduct.b2c_price) }}
+                </p>
+                <p class="text-2xl font-semibold my-4 text-green-600">
+                    B2B Price: {{ formatCurrency(productStore.currentProduct.b2b_price) }}
+                </p>
                 <p class="text-gray-600 leading-relaxed">{{ productStore.currentProduct.description }}</p>
                 <div class="mt-8">
-                    <button v-on:click="cartStore.addToCart(productStore.currentProduct.id, 1)" class="btn-primary rounded-md py-3 px-8 text-lg" v-bind:disabled="cartStore.isLoading">
+                    <button @click="cartStore.addToCart(productStore.currentProduct.id, 1)" class="btn-primary rounded-md py-3 px-8 text-lg" :disabled="cartStore.isLoading">
                         Ajouter au Panier
                     </button>
                 </div>
             </div>
         </div>
+        <ProductReviews :productId="productStore.currentProduct.id" />
     </div>
 </template>
 
@@ -24,9 +30,13 @@
 import { defineComponent, onMounted } from 'vue';
 import { useProductStore } from '../../stores/product.js';
 import { useB2CCartStore } from '../../stores/B2CCart.js';
+import ProductReviews from '../products/ProductReviews.vue';
 
 export default defineComponent({
     name: 'ProductDetail',
+    components: {
+        ProductReviews
+    },
     props: {
         slug: {
             type: String,

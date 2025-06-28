@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify
 from backend.services.product_service import ProductService
 from backend.utils.sanitization import sanitize_input
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from backend.models.inventory_models import Inventory
+from backend.extensions import cache
 from ..utils.decorators import log_admin_action
 
 product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
@@ -29,7 +31,7 @@ def create_product():
 
     try:
         new_product = ProductService.create_product(sanitized_data)
-        call cache.delete('view//api/products')
+        cache.delete('view//api/products')
         return jsonify(status="success", data=new_product.to_dict()), 201
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400

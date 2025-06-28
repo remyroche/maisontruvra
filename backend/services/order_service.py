@@ -1,10 +1,9 @@
-import logging
 import uuid
 from backend import db
 from backend.models.order_models import Order, OrderItem
 from backend.models.product_models import ProductItem, Product
 from backend.models.cart_models import Cart
-from backend.models.user_models import Address
+from backend.models.address_models import Address
 from backend.services.loyalty_service import LoyaltyService
 from .exceptions import ServiceError, NotFoundException
 from sqlalchemy.orm import joinedload, subqueryload
@@ -23,7 +22,7 @@ from ..extensions import socketio
 
 
 
-logger = logging.getLogger(__name__)
+
 
 class OrderService:
     """
@@ -253,7 +252,7 @@ class OrderService:
             return new_order
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Failed to process guest order: {str(e)}", exc_info=True)
+            current_app.logger.error(f"Failed to process guest order: {str(e)}", exc_info=True)
             raise ServiceError("Could not process the guest order.")
 
     @staticmethod
@@ -293,7 +292,7 @@ class OrderService:
         It allocates serialized items and updates the order status.
         This entire operation is a single atomic transaction.
         """
-        logger.info(f"Starting fulfillment service for order_id: {order_id}")
+        current_app.logger.info(f"Starting fulfillment service for order_id: {order_id}")
         
         order = Order.query.get(order_id)
         if not order:
@@ -310,11 +309,11 @@ class OrderService:
             # Once all items are allocated, the order can be moved to 'Awaiting Shipment'.
             order.status = 'awaiting_shipment'
             db.session.commit()
-            logger.info(f"Successfully fulfilled and allocated items for order_id: {order_id}")
+            current_app.logger.info(f"Successfully fulfilled and allocated items for order_id: {order_id}")
 
         except Exception as e:
             db.session.rollback()
-            logger.error(f"CRITICAL: Failed to fulfill order {order_id}. Manual intervention required. Error: {str(e)}", exc_info=True)
+            current_app.logger.error(f"CRITICAL: Failed to fulfill order {order_id}. Manual intervention required. Error: {str(e)}", exc_info=True)
             raise ServiceError(f"Fulfillment failed for order {order_id}.")
 
     @staticmethod
@@ -343,4 +342,4 @@ class OrderService:
             item.status = 'sold'
             item.order_item_id = order_item_id
         
-        logger.info(f"Allocated {len(items_to_allocate)} items for order_item_id {order_item_id}")
+        current_app.logger.info(f"Allocated {len(items_to_allocate)} items for order_item_id {order_item_id}")

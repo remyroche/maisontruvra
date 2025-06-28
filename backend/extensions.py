@@ -9,6 +9,7 @@ from argon2 import PasswordHasher
 from flask_caching import Cache
 from flask_redis import FlaskRedis
 from flask_socketio import SocketIO
+from flask_jwt_extended import JWTManager
 
 # Initialize extensions
 db = SQLAlchemy()

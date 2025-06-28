@@ -3,6 +3,7 @@ from .enums import UserStatus, RoleType
 from backend.database import db # Changed: Import db from backend.database
 from flask_login import UserMixin
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import relationship
 from backend.utils.encryption import encrypt_data, decrypt_data # Changed: Use absolute import for utils
 from argon2 import PasswordHasher
 from backend.models.base import BaseModel # No change needed here
@@ -130,7 +131,7 @@ class User(db.Model, UserMixin):
             'is_email_verified': self.is_email_verified,
             'is_admin': self.is_admin,
             'created_at': self.created_at.isoformat(),
-            'loyalty_info': self.loyalty.to_dict() if self.loyalty else None
+            'loyalty_info': self.loyalty.to_dict() if self.loyalty else None,
             'orders': [order.to_admin_dict() for order in self.orders],
             'addresses': [address.to_dict() for address in self.addresses]
         })

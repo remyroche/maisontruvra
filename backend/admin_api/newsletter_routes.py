@@ -104,4 +104,4 @@ def send_newsletter():
     sender = "noreply@maisontruvra.com"
     EmailService.send_bulk_email(subject, sender, recipient_emails, html_content)
     
-    return jsonify({"message": f"Newsletter sent to
+    return jsonify({"message": f"Newsletter sent to {len(recipient_emails)} subscribers"})

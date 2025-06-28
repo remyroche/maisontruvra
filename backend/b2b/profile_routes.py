@@ -1,13 +1,15 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.b2b_service import B2BService
 from backend.utils.sanitization import sanitize_input
 from backend.auth.permissions import b2b_user_required
+from backend.models.b2b_models import B2BUser
+from backend.database import db
 
 b2b_profile_bp = Blueprint('b2b_profile_bp', __name__, url_prefix='/api/b2b/profile')
 
-@b2b_bp.route('/api/b2b/users', methods=['GET'])
-@b2b_login_required
+@b2b_profile_bp.route('/users', methods=['GET'])
+@b2b_user_required
 def get_b2b_users():
     """Fetches all users associated with the current user's company account."""
     b2b_user_id = session.get('b2b_user_id')

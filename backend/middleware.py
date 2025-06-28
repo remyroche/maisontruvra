@@ -5,6 +5,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from flask_login import current_user, logout_user
+from backend.loggers import security_logger
 
 
 # New imports for middleware functionality

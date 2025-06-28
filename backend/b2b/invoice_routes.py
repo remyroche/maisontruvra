@@ -1,11 +1,11 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.b2b_service import B2BService
 from backend.services.invoice_service import InvoiceService # Assuming this service exists
 from backend.auth.permissions import b2b_user_required
 import io
 from io import BytesIO
-from utils.sanitization import sanitize_input
+from backend.utils.sanitization import sanitize_input
 from backend.database import db
 from backend.models.b2b_models import B2BUser
 from backend.models.invoice_models import Quote, Invoice
@@ -43,7 +43,7 @@ def get_invoices():
         return jsonify(status="error", message="An internal error occurred while fetching invoices."), 500
 
 @b2b_invoice_bp.route('/quotes', methods=['POST'])
-@b2b_login_required
+@b2b_user_required
 def submit_quote_request():
     data = request.get_json()
     b2b_user_id = session.get('b2b_user_id')
@@ -59,7 +59,7 @@ def submit_quote_request():
         return jsonify({"error": str(e)}), 400
 
 @b2b_invoice_bp.route('/invoices/<int:invoice_id>/sign', methods=['POST'])
-@b2b_login_required
+@b2b_user_required
 def sign_invoice(invoice_id):
     data = request.get_json()
     signature_data = data.get('signature_data')
