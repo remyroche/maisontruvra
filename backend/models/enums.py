@@ -28,3 +28,13 @@ class B2BTier(enum.Enum):
     T1 = 'collaborateur'
     T2 = 'partenaire'
     T3 = 'associé'
+
+class UserRole(enum.Enum):
+    ADMIN = 'admin'
+    B2C_USER = 'b2c_user'
+    B2B_USER = 'b2b_user'
+    STAFF = 'staff'
+
+class LanguagePreference(enum.Enum):
+    EN = 'en'
+    FR = 'fr'

@@ -67,6 +67,6 @@ class AddressSchema(Schema):
 class ContactFormSchema(Schema):
     """Schema for validating contact form submissions."""
     name = fields.Str(required=True, validate=validate.Length(min=2, error="Name is required."))
-    email = fields.Email(required=True, error="A valid email is required.")
+    email = fields.Email(required=True, error_messages={"required": "A valid email is required."})
     subject = fields.Str(required=True, validate=validate.Length(min=5, error="Subject must be at least 5 characters."))
     message = fields.Str(required=True, validate=validate.Length(min=10, error="Message must be at least 10 characters."))

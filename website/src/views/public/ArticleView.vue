@@ -1,37 +1,54 @@
+<!-- website/src/views/public/ArticleView.vue -->
+<!-- Description: Updated to use DOMPurify to sanitize HTML content and the new API service. -->
 <template>
-  <div class="container mx-auto py-12 px-4">
-    <div v-if="isLoading" class="text-center py-20">
-      <p class="text-lg text-gray-600">Loading article...</p>
-    </div>
-    <div v-else-if="error" class="text-center py-20 bg-red-50 rounded-lg">
-      <p class="text-lg text-red-700">Could not load the article. Please try again later.</p>
-    </div>
-    <article v-else-if="article" class="prose lg:prose-xl mx-auto">
-      <h1>{{ article.title }}</h1>
-      <p class="lead">{{ article.excerpt }}</p>
-      <img v-if="article.cover_image" :src="article.cover_image" :alt="article.title" class="rounded-lg shadow-lg my-8 w-full">
-      <div v-html="article.content"></div>
-      <div class="mt-8 text-sm text-gray-500 border-t pt-4">
-        <span>Published on {{ new Date(article.published_at).toLocaleDateString() }} by {{ article.author.name }}</span>
-      </div>
-    </article>
+  <div v-if="article" class="container mx-auto px-4 py-8">
+    <h1 class="text-4xl font-bold mb-2">{{ article.title }}</h1>
+    <p class="text-gray-500 mb-6">Published on: {{ formattedDate }}</p>
+    
+    <!-- Using v-html is now safe because we are sanitizing the content first -->
+    <div class="prose lg:prose-xl max-w-none" v-html="sanitizedContent"></div>
+  </div>
+  <div v-else class="text-center py-16">
+    <p>Loading article...</p>
   </div>
 </template>
 
 <script setup>
+import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { useApiData } from '@/composables/useApiData';
-import { apiClient } from '@/services/api';
+import api from '@/services/api'; // Use the new centralized API service
+import DOMPurify from 'dompurify'; // Import DOMPurify
+import { useDateFormatter } from '@/composables/useDateFormatter';
 
 const route = useRoute();
+const article = ref(null);
+const { formatDate } = useDateFormatter();
 
-const { data: article, isLoading, error } = useApiData(
-  () => {
-    const slug = route.params.slug;
-    if (!slug) return Promise.resolve(null); // Prevent fetch if no slug
-    // Assuming the endpoint is /journal/:slug based on other components
-    return apiClient.get(`/journal/${slug}`);
-  },
-  () => route.params.slug // Re-fetch when the slug prop changes
-);
+// Sanitized content for rendering
+const sanitizedContent = computed(() => {
+  if (article.value && article.value.content) {
+    // Sanitize the HTML before it is rendered. This prevents XSS attacks.
+    return DOMPurify.sanitize(article.value.content);
+  }
+  return '';
+});
+
+const formattedDate = computed(() => {
+  return article.value ? formatDate(article.value.published_at) : '';
+});
+
+onMounted(async () => {
+  const articleSlug = route.params.slug; // Routes should use slug for SEO-friendly URLs
+  if (!articleSlug) return;
+  
+  try {
+    // Use the new API service method
+    const response = await api.getBlogPost(articleSlug);
+    article.value = response.data;
+  } catch (error) {
+    // The global interceptor in api.js will already show a notification.
+    // We just log the error here for debugging purposes.
+    console.error(`Failed to fetch article ${articleSlug}:`, error);
+  }
+});
 </script>

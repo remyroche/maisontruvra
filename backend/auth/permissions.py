@@ -11,9 +11,7 @@ logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
 
 # RBACService is imported from backend.services.rbac_service
-
 # CSRFProtection is imported from backend.utils.csrf_protection
-
 # User model is imported from backend.models.user_models
 
 

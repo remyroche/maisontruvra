@@ -3,17 +3,15 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_login import login_user, logout_user, current_user, login_required
 from datetime import datetime
 import logging
+from backend.extensions import db
 from backend.services.mfa_service import MfaService
 from backend.services.user_service import UserService
 from backend.services.auth_service import AuthService
 from backend.services.exceptions import ServiceError
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from backend.utils.decorators import log_admin_action
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.loggers import security_logger
-
-admin_auth_bp = Blueprint('admin_auth', __name__)
-
 
 admin_auth_bp = Blueprint('admin_auth_bp', __name__)
 user_service = UserService()
@@ -94,7 +92,7 @@ def reauthenticate():
 
 @admin_auth_bp.route('/login', methods=['POST'])
 def login():
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.recursive_sanitize(request.get_json())
     email = data.get('email')
     password = data.get('password')
     
@@ -114,7 +112,7 @@ def login():
 
 @admin_auth_bp.route('/2fa/verify', methods=['POST'])
 def verify_2fa_login():
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.recursive_sanitize(request.get_json())
     user_id = session.get('2fa_user_id')
     token = data.get('token')
 
@@ -180,7 +178,7 @@ def verify_mfa():
     if not data or 'token' not in data:
         return jsonify(status="error", message="Invalid or missing JSON body with 'token'"), 400
     
-    token = sanitize_input(data['token'])
+    token = InputSanitizer.sanitize_input(data['token'])
 
     try:
         # The MfaService should verify the token against the temporarily stored secret

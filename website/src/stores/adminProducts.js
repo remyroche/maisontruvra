@@ -2,29 +2,30 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { adminApiClient } from '@/services/api';
 import { useNotificationStore } from './notification';
+import api from '@/services/api';
 
 export const useAdminProductsStore = defineStore('adminProducts', () => {
   const products = ref([]);
-  const isLoading = ref(false);
-  const error = ref(null);
 
-  const notificationStore = useNotificationStore();
-
-  // Although the main view uses useApiData, this action can be useful for other components or for programmatic refreshes.
-  async function fetchProducts(options = {}) {
-    isLoading.value = true;
-    error.value = null;
+  async function fetchProducts(params) {
     try {
-      const params = new URLSearchParams(options);
-      const data = await adminApiClient.get(`/products?${params.toString()}`);
-      products.value = data.data; // Assuming paginated response
-      return data;
-    } catch (e) {
-      error.value = 'Failed to fetch products.';
-      console.error(e);
-    } finally {
-      isLoading.value = false;
+        const response = await api.adminGetProducts(params);
+        products.value = response.data;
+    } catch (error) {
+        console.error("Failed to fetch products:", error);
     }
+  }
+
+  async function createProduct(productData) {
+     try {
+        await api.adminCreateProduct(productData);
+        // Refresh the product list after creating
+        await fetchProducts();
+     } catch (error) {
+        console.error("Failed to create product:", error);
+        // Rethrow to let the component know the save failed
+        throw error;
+     }
   }
 
   async function _handleAction(actionPromise, successMessage) {

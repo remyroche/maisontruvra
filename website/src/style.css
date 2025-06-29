@@ -1,8 +1,9 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* Custom CSS Variables for Brand Colors */
+/* To generate utilities like `bg-brand-burgundy`, add these to your `tailwind.config.js` theme. */
 :root {
   --brand-burgundy: #8B1538;
   --brand-cream: #F5F1E8;
@@ -10,39 +11,24 @@
   --brand-gold: #D4AF37;
 }
 
-/* Global Styles */
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  @apply font-sans text-brand-dark-brown;
   line-height: 1.6;
-  color: var(--brand-dark-brown);
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
-
 ::-webkit-scrollbar-track {
   background: #f1f1f1;
 }
-
 ::-webkit-scrollbar-thumb {
   background: var(--brand-burgundy);
   border-radius: 4px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: #6b1028;
-}
-
-/* Focus styles for accessibility */
-.focus\:ring-brand-burgundy:focus {
-  --tw-ring-color: var(--brand-burgundy);
-}
-
-.focus\:border-brand-burgundy:focus {
-  --tw-border-opacity: 1;
-  border-color: var(--brand-burgundy);
 }
 
 /* Custom button styles */
@@ -52,24 +38,6 @@ body {
 
 .btn-secondary {
   @apply border border-brand-burgundy text-brand-burgundy px-6 py-3 rounded-md font-medium hover:bg-brand-burgundy hover:text-white transition-colors;
-}
-
-/* Loading animation */
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-/* Smooth transitions */
-* {
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
 }
 
 /* Form styles */
@@ -90,7 +58,7 @@ body {
   @apply bg-white rounded-lg shadow-sm border p-6;
 }
 
-/* Notification styles */
+/* Vue Transition Group Styles */
 .notification-enter-active,
 .notification-leave-active {
   transition: all 0.3s ease;
@@ -102,7 +70,6 @@ body {
   transform: translateY(-20px);
 }
 
-/* Modal styles */
 .modal-fade-enter-active,
 .modal-fade-leave-active {
   transition: opacity 0.3s ease;

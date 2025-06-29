@@ -2,6 +2,7 @@ from flask import request, jsonify, Blueprint
 from ..services.contact_service import ContactService
 from ..schemas import ContactFormSchema
 from marshmallow import ValidationError
+from flask import current_app
 
 # Define the blueprint
 contact_bp = Blueprint('contact', __name__, url_prefix='/api/contact')

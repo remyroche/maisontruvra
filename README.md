@@ -1,60 +1,160 @@
-Maison Truvra - Premium Truffle E-Commerce PlatformMaison Truvra is a comprehensive e-commerce solution designed for the sale of premium truffles and truffle-based products. The platform caters to both individual consumers (B2C) and professional clients (B2B), offering a tailored experience for each segment. It includes a sophisticated administrative backend for managing products, orders, users, and a feature-rich loyalty and referral program.✨ Key FeaturesDual B2C & B2B Portals: Separate storefronts and dashboards for retail customers and professional clients, each with a unique feature set.Comprehensive Admin Panel: A secure administrative interface for managing the entire platform, including:Product & Inventory ManagementOrder & Invoice ProcessingUser and Role Management (Admin, Staff, B2B, B2C)Content Management for the BlogAdvanced Loyalty & Referral Program:Tiered Loyalty System: Customers earn points and unlock tiers with escalating benefits based on their spending.Points Redemption: Users can convert points into vouchers or redeem them for exclusive products and experiences.Referral System: Tiered rewards for successful referrals, encouraging evangelism.Social Sharing: Integrated sharing options (Email, WhatsApp, Instagram) for referral links.Secure Authentication: Robust authentication system featuring JWT, MFA (Two-Factor Authentication), and secure password handling.Internationalization (i18n): Frontend is fully configured for English and French, with a language switcher in the header.Client-Side Validation: Forms are protected with VeeValidate and yup to ensure data integrity and provide a better user experience.🚀 Tech StackBackendFramework: FlaskDatabase: PostgreSQLORM: SQLAlchemyAuthentication: Flask-JWT-ExtendedBackground Tasks: Celery with RedisAPI: RESTful principles with Flask BlueprintsFrontendFramework: Vue.js 3 (Composition API)State Management: PiniaStyling: Tailwind CSSValidation: VeeValidate & YupBundler: ViteInternationalization: vue-i18nTestingEnd-to-End: Playwright🛠️ Getting StartedFollow these instructions to set up the project for local development.PrerequisitesPython 3.9+Node.js 16+ and npmPostgreSQL serverRedis server (for Celery)1. Backend SetupClone the repository and navigate to the project root.# 1. Create and activate a Python virtual environment
+# Maison Truvrā E-commerce Platform
+
+Maison Truvrā is a comprehensive, modern e-commerce platform designed for both B2C (Business-to-Consumer) and B2B (Business-to-Business) operations. It features a robust backend built with Flask and a reactive frontend using Vue.js.
+
+## ✨ Key Features
+
+- **Dual B2C/B2B Functionality**: Separate product visibility, pricing, and user experiences.
+- **Advanced Product Management**: Support for product variants, categories, collections, and custom attributes.
+- **Inventory Control**: Real-time stock tracking with inventory reservation for carts to prevent overselling.
+- **Comprehensive Order System**: Manages orders from creation to fulfillment, including guest checkouts.
+- **User Account System**:
+    - Separate B2C and B2B user profiles.
+    - Secure authentication with JWT.
+    - Multi-Factor Authentication (2FA/MFA) for enhanced security.
+    - User address book management.
+- **Loyalty & Referral Program**: Tier-based loyalty system with points, vouchers, and referral rewards.
+- **Full-Featured Admin Panel**:
+    - User, product, order, and B2B account management.
+    - Role-Based Access Control (RBAC) with granular permissions.
+    - System monitoring, audit logs, and site settings management.
+- **Content Management**: Integrated blog system with categories and posts.
+- **Automated PDF Generation**: Creates PDF invoices and unique Product Passports for traceability.
+- **Asynchronous Operations**: Uses Celery and Redis for background tasks like sending emails and processing orders.
+
+## 🛠️ Tech Stack
+
+- **Backend**: Python, Flask, SQLAlchemy, PostgreSQL
+- **Frontend**: Vue.js, Vite
+- **Task Queue**: Celery
+- **Caching/Broker**: Redis
+- **Authentication**: Flask-JWT-Extended
+- **Database Migrations**: Flask-Migrate
+
+## 📂 Project Structure
+
+```
+/
+├── backend/         # Flask backend application
+│   ├── admin_api/   # Admin-specific API routes
+│   ├── auth/        # Authentication routes and logic
+│   ├── b2b/         # B2B-specific routes
+│   ├── models/      # SQLAlchemy database models
+│   ├── services/    # Business logic services
+│   ├── tasks.py     # Celery background tasks
+│   ├── requirements.py
+│   └── ...
+├── website/         # Vue.js frontend application
+│   ├── public/
+│   ├── src/
+│   └── package.json
+├── instance/        # Instance-specific files (e.g., uploads, db)
+├── logs/            # Application logs
+├── manage.py        # CLI commands for the application
+└── README.md
+```
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Python 3.9+
+- Node.js 18+ & npm
+- PostgreSQL 14+
+- Redis
+
+### 1. Clone the Repository
+
+```bash
+git clone <your-repository-url>
+cd <project-directory-name>
+```
+
+### 2. Backend Setup
+
+```bash
+# Navigate to the backend directory
+cd backend
+
+# Create and activate a virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# 2. Install Python dependencies
-pip install -r backend/requirements.txt
+# Install Python dependencies
+pip install -r ../requirements.txt
 
-# 3. Set up the database
-#    - Create a PostgreSQL database (e.g., 'maisontruvra_db')
-#    - Create a database user with privileges for the new database
-
-# 4. Configure Environment Variables
-#    - Copy the example environment file
+# Create a .env file from the example in the project root
+cd ..
 cp .env.example .env
 
-#    - Edit the .env file with your database URL, secret keys, etc.
-#      DATABASE_URL="postgresql://user:password@localhost/maisontruvra_db"
-#      SECRET_KEY="..."
-#      JWT_SECRET_KEY="..."
-#      ...and other required variables
+# Edit the .env file with your local configuration (database, redis, etc.)
+# Make sure to generate a new ENCRYPTION_KEY. You can use:
+# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-# 5. Apply Database Migrations & Seed Data
-#    - Ensure your database URL in .env is correct
-#    - Run the database schema update script (you may need to adapt this to your migration tool)
-psql -U your_user -d maisontruvra_db -a -f backend/database_schema_updates.sql
+# Set up the database
+flask db upgrade
 
-#    - Seed the database with initial data (e.g., admin user, loyalty tiers)
-flask db seed
-2. Frontend SetupNavigate to the website directory in a new terminal window.# 1. Go to the frontend directory
+# Seed the database with initial roles and data
+python backend/seed.py
+
+# Create an initial admin user
+# You will be prompted to scan a QR code for MFA setup.
+flask create-admin your-admin-email@example.com your-secure-password
+```
+
+### 3. Frontend Setup
+
+```bash
+# Navigate to the frontend directory
 cd website
 
-# 2. Install Node.js dependencies
+# Install npm dependencies
 npm install
 
-# 3. Install validation libraries
-npm install vee-validate@latest yup@latest
-▶️ Running the ApplicationYou will need to run the backend, frontend, and Celery worker in separate terminal windows.Terminal 1: Run the Flask Backend# (From the project root, with venv activated)
-flask run
-The Flask server will start, typically on http://127.0.0.1:5000.Terminal 2: Run the Vite Frontend Dev Server# (From the website/ directory)
-npm run dev
-The Vite server will start, typically on http://127.0.0.1:5173. Your browser will open to this address, and it will proxy API requests to the Flask backend.Terminal 3: Run the Celery Worker (Optional)# (From the project root, with venv activated)
-celery -A backend.celery_worker.celery worker --loglevel=info
-This is required for processing background tasks like sending emails.You can now access the application:B2C Site: http://localhost:5173Admin Panel: http://localhost:5173/admin📂 Project Structure.
-├── backend/            # Flask application source code
-│   ├── admin_api/      # API routes for the admin panel
-│   ├── b2b/            # API routes for the B2B portal
-│   ├── models/         # SQLAlchemy database models
-│   ├── services/       # Business logic and services
-│   ├── templates/      # Email templates
-│   └── ...
-├── website/            # Frontend source code (Vue.js, Vite)
-│   ├── js/             # JavaScript and Vue source files
-│   │   ├── admin/      # Admin panel components and views
-│   │   ├── stores/     # Pinia stores
-│   │   └── vue/        # B2C/B2B components and views
-│   └── ...
-├── tests/              # E2E tests with Playwright
-├── .env                # Local environment variables (DO NOT COMMIT)
-└── README.md           # This file
-🔒 SecurityAuthentication: User sessions are managed using JSON Web Tokens (JWTs).Authorization: API endpoints are protected using role-based (@admin_required, @b2b_user_required) and permission-based decorators.CSRF Protection: Implemented on session-based routes to prevent cross-site request forgery.Input Validation: Client-side validation is enforced using VeeValidate, with corresponding server-side validation and sanitization.Multi-Factor Authentication (MFA): Available for all user roles to enhance account security.
+# The frontend may require its own .env file for variables like VITE_API_BASE_URL
+# to connect to the backend.
+```
+
+## 🏃 Running the Application
+
+You will need to run multiple processes in separate terminal windows.
+
+1.  **Start the Backend Server:**
+    ```bash
+    # From the root directory, with the backend venv activated
+    flask run
+    ```
+
+2.  **Start the Frontend Dev Server:**
+    ```bash
+    # From the root directory
+    cd website
+    npm run dev
+    ```
+
+3.  **Start the Celery Worker:**
+    ```bash
+    # From the root directory, with the backend venv activated
+    celery -A backend.tasks.celery worker --loglevel=info
+    ```
+
+4.  **Start Celery Beat (for scheduled tasks):**
+    ```bash
+    # From the root directory, with the backend venv activated
+    celery -A backend.tasks.celery beat --loglevel=info
+    ```
+
+The application should now be accessible at your `FRONTEND_URL` (e.g., `http://localhost:5173`).
+
+## 🧪 Running Tests & Audits
+
+This project includes a custom security audit script.
+
+```bash
+# From the root directory
+python security_audit.py
+```
+
+## 📄 License
+
+This project is proprietary. All rights reserved.

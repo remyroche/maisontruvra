@@ -1,7 +1,12 @@
 from backend.database import db
-from backend.models.b2b_models import B2BUser, B2BAccount, B2BInvoice, B2BOrder, B2BCart, B2BCartItem, B2BOrderItem
+from backend.models.b2b_models import B2BUser, B2BAccount, B2BInvoice, B2BOrder, B2BCart, B2BCartItem, B2BOrderItem, B2BTier
 from backend.models.product_models import Product
 from backend.services.exceptions import NotFoundException, ServiceError
+from backend.extensions import redis_client # Assuming redis_client is initialized in extensions.py
+from .monitoring_service import MonitoringService
+import json
+
+CACHE_TTL_SECONDS = 600 # Cache for 10 minutes
 
 class B2BService:
     """
@@ -52,6 +57,80 @@ class B2BService:
             db.session.commit()
             
         return cart
+
+    @staticmethod
+    def get_b2b_price(user, product):
+        """
+        Calculates the B2B price for a product based on the user's tier.
+        This function now uses Redis to cache the results.
+        """
+        # The user object is assumed to be the main User model, with a `b2b_profile` relationship.
+        if not user or not getattr(user, 'is_b2b', False) or not getattr(user, 'b2b_profile', None) or not user.b2b_profile.tier_id:
+            return product.price
+
+        tier_id = user.b2b_profile.tier_id
+        
+        cache_key = f"b2b_price:tier_{tier_id}:product_{product.id}"
+        
+        try:
+            cached_price = redis_client.get(cache_key)
+            if cached_price:
+                return float(json.loads(cached_price))
+        except Exception as e:
+            MonitoringService.log_error(
+                f"Redis GET error for key {cache_key}: {e}",
+                "B2BService",
+                level='WARNING'
+            )
+            # Proceed with calculation if cache is unavailable
+
+        # If not in cache, calculate it
+        # (Assuming B2BTier model has a `discount_percentage` field)
+        tier = db.session.get(B2BTier, tier_id)
+        if not tier or not tier.discount_percentage:
+            calculated_price = float(product.price)
+        else:
+            discount = float(product.price) * (tier.discount_percentage / 100)
+            calculated_price = round(float(product.price) - discount, 2)
+        
+        # Store the result in cache
+        try:
+            redis_client.setex(cache_key, CACHE_TTL_SECONDS, json.dumps(calculated_price))
+        except Exception as e:
+            MonitoringService.log_error(
+                f"Redis SETEX error for key {cache_key}: {e}",
+                "B2BService",
+                level='WARNING'
+            )
+            
+        return calculated_price
+
+    @staticmethod
+    def invalidate_b2b_product_price_cache(product_id=None, tier_id=None):
+        """
+        Invalidates B2B price caches.
+        - If only product_id is provided, invalidates for that product across all tiers.
+        - If only tier_id is provided, invalidates for that tier across all products.
+        WARNING: Using KEYS in production Redis is not recommended for large datasets.
+        For larger scale, consider using Redis sets to track keys.
+        """
+        try:
+            if product_id:
+                keys_to_delete = redis_client.keys(f"b2b_price:tier_*:product_{product_id}")
+                if keys_to_delete:
+                    redis_client.delete(*keys_to_delete)
+                    
+            if tier_id:
+                keys_to_delete = redis_client.keys(f"b2b_price:tier_{tier_id}:product_*")
+                if keys_to_delete:
+                    redis_client.delete(*keys_to_delete)
+        except Exception as e:
+            MonitoringService.log_error(
+                f"Failed to invalidate B2B price cache (product: {product_id}, tier: {tier_id}): {e}",
+                "B2BService",
+                level='ERROR'
+            )
+
 
     @staticmethod
     def create_b2b_order(user_id: int, data: dict):

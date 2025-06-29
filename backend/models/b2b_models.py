@@ -1,6 +1,9 @@
 from backend.database import db
-from .base import BaseModel
+from .base import BaseModel, SoftDeleteMixin
 from .enums import B2BRequestStatus
+from sqlalchemy.dialects.postgresql import UUID
+from werkzeug.security import generate_password_hash, check_password_hash
+import uuid
 
 
 # Represents the parent company account
@@ -34,7 +37,7 @@ class B2BUser(db.Model):
     # Role to distinguish permissions within the account
     role = db.Column(db.String(50), default='member', nullable=False) # 'admin' or 'member'
 
-    mfa_secret = db.Column(EncryptedType(db.String, Config.SECRET_KEY), nullable=True)
+    mfa_secret = db.Column(db.String(255), nullable=True)
     mfa_enabled = db.Column(db.Boolean, default=False)
 
     # Relationship back to the parent account

@@ -5,8 +5,8 @@
         <!-- Company Info -->
         <div class="col-span-1 md:col-span-2">
           <div class="flex items-center mb-4">
-            <img class="h-8 w-auto" src="/logo-white.svg" alt="Maison Truvra" />
-            <span class="ml-2 text-xl font-bold">Maison Truvra</span>
+            <!-- <img class="h-8 w-auto" src="/logo-white.svg" alt="Maison Truvra" /> -->
+            <span class="text-xl font-bold">Maison Truvra</span>
           </div>
           <p class="text-gray-300 mb-4">
             Découvrez l'excellence des truffes françaises avec Maison Truvra. 

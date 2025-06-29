@@ -1,6 +1,11 @@
+// website/src/services/api.js
+// Description: This is the new, single source for all API calls.
+// It includes a global error handler to notify users of failed requests.
+
 import axios from 'axios';
 import { useNotificationStore } from '../stores/notification';
 import router from '../router';
+
 
 // Create an Axios instance with a base URL.
 // The Vite proxy will handle forwarding these requests to the Flask backend in development.
@@ -26,7 +31,7 @@ apiClient.interceptors.request.use(async (config) => {
         } catch (error) {
             console.error('Could not fetch CSRF token', error);
             const notificationStore = useNotificationStore();
-            notificationStore.showNotification('A security error occurred. Please refresh the page.', 'error');
+            notificationStore.addNotification({ message: 'A security error occurred. Please refresh the page.', type: 'error' });
             return Promise.reject(new Error('CSRF token fetch failed.'));
         }
     }
@@ -58,35 +63,35 @@ apiClient.interceptors.response.use(
                     // Avoid redirecting if we are already on a public auth page
                     if (!router.currentRoute.value.meta.public) {
                         router.push({ name: 'Login' });
-                        notificationStore.showNotification('Your session has expired. Please log in again.', 'error');
+                        notificationStore.addNotification({ message: 'Your session has expired. Please log in again.', type: 'error' });
                     }
                     break;
                 case 403:
                     // Forbidden
-                    notificationStore.showNotification(`Access Denied: ${message}`, 'error');
+                    notificationStore.addNotification({ message: `Access Denied: ${message}`, type: 'error' });
                     break;
                 case 404:
                     // Not Found
-                    notificationStore.showNotification('The requested resource was not found.', 'error');
+                    notificationStore.addNotification({ message: 'The requested resource was not found.', type: 'error' });
                     break;
                 case 422: // Unprocessable Entity (Validation Error)
                 case 400: // Bad Request
                     // The global handler can show a generic message.
                     // Specific forms should handle detailed error messages from the response body.
-                    notificationStore.showNotification(`Error: ${message}`, 'warning');
+                    notificationStore.addNotification({ message: `Error: ${message}`, type: 'warning' });
                     break;
                 case 500:
                 default:
                     // Server Error or other issues
-                    notificationStore.showNotification('A server error occurred. Please try again later.', 'error');
+                    notificationStore.addNotification({ message: 'A server error occurred. Please try again later.', type: 'error' });
                     break;
             }
         } else if (error.request) {
             // The request was made but no response was received
-            notificationStore.showNotification('Could not connect to the server. Please check your network.', 'error');
+            notificationStore.addNotification({ message: 'Could not connect to the server. Please check your network.', type: 'error' });
         } else {
             // Something happened in setting up the request that triggered an Error
-            notificationStore.showNotification(`An error occurred: ${error.message}`, 'error');
+            notificationStore.addNotification({ message: `An error occurred: ${error.message}`, type: 'error' });
         }
 
         return Promise.reject(error);

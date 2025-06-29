@@ -1,6 +1,7 @@
 from backend.database import db
 from backend.models.user_models import User
 from backend.models.product_models import Product
+from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
 from backend.utils.sanitization import sanitize_input
 from backend.services.audit_log_service import AuditLogService
@@ -57,11 +58,18 @@ class WishlistService:
                     'created_at': item.created_at.isoformat() if item.created_at else None
                 })
             
-            current_app.logger.info(f"Retrieved {len(result)} wishlist items for user {user_id}")
+            MonitoringService.log_info(
+                f"Retrieved {len(result)} wishlist items for user {user_id}",
+                "WishlistService"
+            )
             return result
             
         except Exception as e:
-            current_app.logger.error(f"Error getting wishlist items for user {user_id}: {str(e)}")
+            MonitoringService.log_error(
+                f"Error getting wishlist items for user {user_id}: {str(e)}",
+                "WishlistService",
+                exc_info=True
+            )
             raise ServiceError(f"Failed to retrieve wishlist items: {str(e)}")
     
     @staticmethod
@@ -108,7 +116,10 @@ class WishlistService:
                 details=f"Added product {product_id} to wishlist"
             )
             
-            current_app.logger.info(f"User {user_id} added product {product_id} to wishlist")
+            MonitoringService.log_info(
+                f"User {user_id} added product {product_id} to wishlist",
+                "WishlistService"
+            )
             
             return {
                 'id': wishlist_item.id,
@@ -128,7 +139,7 @@ class WishlistService:
             raise ValidationException("Product already in wishlist")
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error adding product {product_id} to wishlist for user {user_id}: {str(e)}")
+            MonitoringService.log_error(f"Error adding product {product_id} to wishlist for user {user_id}: {str(e)}")
             raise ServiceError(f"Failed to add product to wishlist: {str(e)}")
     
     @staticmethod
@@ -160,12 +171,15 @@ class WishlistService:
                 details=f"Removed product {product_id} from wishlist"
             )
             
-            current_app.logger.info(f"User {user_id} removed product {product_id} from wishlist")
+            MonitoringService.log_info(
+                f"User {user_id} removed product {product_id} from wishlist",
+                "WishlistService"
+            )
             return True
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error removing product {product_id} from wishlist for user {user_id}: {str(e)}")
+            MonitoringService.log_error(f"Error removing product {product_id} from wishlist for user {user_id}: {str(e)}")
             raise ServiceError(f"Failed to remove product from wishlist: {str(e)}")
     
     @staticmethod
@@ -192,12 +206,15 @@ class WishlistService:
                 details=f"Cleared {deleted_count} items from wishlist"
             )
             
-            current_app.logger.info(f"User {user_id} cleared {deleted_count} items from wishlist")
+            MonitoringService.log_info(
+                f"User {user_id} cleared {deleted_count} items from wishlist",
+                "WishlistService"
+            )
             return deleted_count
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error clearing wishlist for user {user_id}: {str(e)}")
+            MonitoringService.log_error(f"Error clearing wishlist for user {user_id}: {str(e)}")
             raise ServiceError(f"Failed to clear wishlist: {str(e)}")
     
     @staticmethod
@@ -215,7 +232,7 @@ class WishlistService:
             return wishlist_item is not None
             
         except Exception as e:
-            current_app.logger.error(f"Error checking if product {product_id} is in wishlist for user {user_id}: {str(e)}")
+            MonitoringService.log_error(f"Error checking if product {product_id} is in wishlist for user {user_id}: {str(e)}")
             return False
     
     @staticmethod
@@ -228,5 +245,5 @@ class WishlistService:
             return count
             
         except Exception as e:
-            current_app.logger.error(f"Error getting wishlist count for user {user_id}: {str(e)}")
+            MonitoringService.log_error(f"Error getting wishlist count for user {user_id}: {str(e)}")
             return 0

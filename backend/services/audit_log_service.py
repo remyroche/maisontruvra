@@ -2,6 +2,7 @@ from backend.database import db
 from backend.models.admin_audit_models import AdminAuditLog
 from backend.models.user_models import User
 from flask import current_app
+from backend.services.monitoring_service import MonitoringService
 from datetime import datetime
 
 class AuditLogService:
@@ -26,10 +27,16 @@ class AuditLogService:
             log_entry = AdminAuditLog(admin_user_id=admin_user_id, action=action, details=details)
             db.session.add(log_entry)
             db.session.commit()
-            current_app.logger.info(f"Audit log created: Admin {admin_user_id} -> {action}")
+            MonitoringService.log_info(
+                f"Audit log created: Admin {admin_user_id} -> {action}",
+                "AuditLogService"
+            )
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to create audit log: {e}")
+            MonitoringService.log_error(
+                f"Failed to create audit log: {e}",
+                "AuditLogService"
+            )
 
     @staticmethod
     def get_logs(page=1, per_page=20, date_filter=None):
@@ -61,5 +68,8 @@ class AuditLogService:
                 "has_prev": paginated_logs.has_prev,
             }
         except Exception as e:
-            current_app.logger.error(f"Failed to retrieve audit logs: {e}")
+            MonitoringService.log_error(
+                f"Failed to retrieve audit logs: {e}",
+                "AuditLogService"
+            )
             return {"logs": [], "total": 0, "pages": 0}

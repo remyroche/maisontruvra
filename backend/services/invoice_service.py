@@ -7,7 +7,8 @@ from backend.models.order_models import Order
 from backend.tasks import generate_invoice_pdf_task
 from backend.models.b2b_models import B2BAccount, B2BUser
 from backend.models.invoice_models import Quote, Invoice, InvoiceItem
-
+from backend.services.monitoring_service import MonitoringService
+from weasyprint import HTML
 
 
 class InvoiceService:
@@ -98,16 +99,25 @@ class InvoiceService:
         Generates a PDF for a given order by passing a full context
         dictionary to the relevant B2C or B2B template.
         """
-        current_app.logger.info(f"Starting PDF generation for order_id: {order_id}")
+        MonitoringService.log_info(
+            f"Starting PDF generation for order_id: {order_id}",
+            "InvoiceService"
+        )
         
         order = Order.query.options(db.joinedload(Order.user)).get(order_id)
         if not order:
-            current_app.logger.error(f"Could not generate invoice: Order {order_id} not found.")
+            MonitoringService.log_error(
+                f"Could not generate invoice: Order {order_id} not found.",
+                "InvoiceService"
+            )
             raise ValueError(f"Order {order_id} not found")
 
         invoice = Invoice.query.filter_by(order_id=order.id).first()
         if not invoice:
-            current_app.logger.error(f"Could not generate invoice: Invoice record for Order {order_id} not found.")
+            MonitoringService.log_error(
+                f"Could not generate invoice: Invoice record for Order {order_id} not found.",
+                "InvoiceService"
+            )
             raise ValueError(f"Invoice for Order {order_id} not found")
 
         # --- IMPLEMENTATION: Build a comprehensive context dictionary ---
@@ -161,12 +171,12 @@ class InvoiceService:
                 invoice.status = 'generated'
                 db.session.commit()
     
-                logger.info(f"PDF generation for invoice {invoice.invoice_number} completed. Saved to {filename}")
+                MonitoringService.log_info(f"PDF generation for invoice {invoice.invoice_number} completed. Saved to {filename}")
                 return True
                     
             except Exception as e:
                 db.session.rollback()
-                logger.error(f"An error occurred during PDF generation for order {order_id}: {e}", exc_info=True)
+                MonitoringService.log_info(f"An error occurred during PDF generation for order {order_id}: {e}", exc_info=True)
                 raise
 
     @staticmethod
@@ -252,8 +262,11 @@ class InvoiceService:
         db.session.add(new_invoice)
         
         # 5. Send the correct confirmation email with the invoice attached
-        current_app.logger.info(f"Invoice {new_invoice.id} created. Queuing PDF generation.")
-        generate_invoice_pdf_task.delay(order_id)
+        MonitoringService.log_info(
+            f"Invoice {new_invoice.id} created. Queuing PDF generation.",
+            "InvoiceService"
+        )
+        generate_invoice_pdf_task.delay(new_invoice.id)
 
         # The calling service is responsible for the final db.session.commit()
         return new_invoice

@@ -1,7 +1,6 @@
 
 import re # Added: For regular expressions
 import os # Added: For os.environ.get
-from werkzeug.security import check_password_hash, generate_password_hash
 from backend.models.user_models import User, UserRole
 from backend.database import db, Database
 from backend.services.exceptions import ServiceError, ValidationException, UnauthorizedException, NotFoundException, InvalidPasswordException
@@ -18,8 +17,12 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, InvalidHash
 
 
+# Instantiate the PasswordHasher. It's thread-safe and can be shared.
+ph = PasswordHasher()
 
 
 class AuthService:
@@ -27,20 +30,28 @@ class AuthService:
         self.db = Database()
         self.sessions = {}  # In production, use Redis or similar
 
-    def hash_password(self, password: str) -> str:
-        """Hash a password using SHA-256 with salt"""
-        salt = secrets.token_hex(16)
-        password_hash = hashlib.sha256((password + salt).encode()).hexdigest()
-        return f"{salt}:{password_hash}"
-    
-    def verify_password(self, password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash"""
+    @staticmethod
+    def verify_password(hashed_password: str, password: str) -> bool:
+        """
+        Verifies a user's password using Argon2.
+        Returns True if the password is correct, False otherwise.
+        Re-hashing logic is handled separately in the login flow.
+        """
+        if not hashed_password or not password:
+            return False
         try:
-            salt, password_hash = hashed_password.split(':')
-            test_hash = hashlib.sha256((password + salt).encode()).hexdigest()
-            return test_hash == password_hash
-        except ValueError:
-            current_app.logger.error("Invalid password hash format")
+            ph.verify(hashed_password, password)
+            return True
+        except VerifyMismatchError:
+            # This is the expected exception for a wrong password.
+            return False
+        except (InvalidHash, Exception) as e:
+            # Log other potential argon2 errors for debugging.
+            MonitoringService.log_error(
+                f"Password verification failed with an unexpected error: {e}",
+                "AuthService",
+                level='ERROR'
+            )
             return False
 
     def validate_session(self, session_token: str) -> Optional[Dict[str, Any]]:
@@ -54,13 +65,20 @@ class AuthService:
             # Check if session is expired
             if datetime.now() > session["expires_at"]:
                 del self.sessions[session_token]
-                current_app.logger.info(f"Expired session removed for user: {session.get('email', 'unknown')}")
+                MonitoringService.log_security_event(
+                    f"Expired session removed for user: {session.get('email', 'unknown')}",
+                    "AuthService"
+                )
                 return None
             
             return session
             
         except Exception as e:
-            current_app.logger.error(f"Session validation error: {str(e)}")
+            MonitoringService.log_security_event(
+                f"Session validation error: {str(e)}",
+                "AuthService",
+                level='ERROR'
+            )
             return None
 
     def get_user_profile(self, session_token: str) -> Dict[str, Any]:
@@ -72,7 +90,10 @@ class AuthService:
             
             user = self.db.get_user_by_id(session["user_id"])
             if not user:
-                current_app.logger.error(f"User not found for session: {session['user_id']}")
+                MonitoringService.log_error(
+                    f"User not found for session: {session['user_id']}",
+                    "AuthService"
+                )
                 return {"success": False, "message": "User not found"}
             
             return {
@@ -87,7 +108,11 @@ class AuthService:
             }
             
         except Exception as e:
-            current_app.logger.error(f"Get profile error: {str(e)}")
+            MonitoringService.log_error(
+                f"Get profile error: {str(e)}",
+                "AuthService",
+                exc_info=True
+            )
             return {"success": False, "message": "Failed to get profile"}
             
     @staticmethod
@@ -170,12 +195,19 @@ class AuthService:
             raise ServiceError("User and new password are required.")
         try:
             AuthService._validate_password(new_password)
-            user.set_password(new_password)
+            user.password_hash = ph.hash(new_password)
             db.session.commit()
-            current_app.logger.info(f"Password reset successfully for user {user.email}")
+            MonitoringService.log_security_event(
+                f"Password reset successfully for user {user.email}",
+                "AuthService"
+            )
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to reset password for user {user.email}: {e}", exc_info=True)
+            MonitoringService.log_security_event(
+                f"Failed to reset password for user {user.email}: {e}",
+                "AuthService",
+                level='ERROR'
+            )
             raise ServiceError("Could not update password.")
             
     @staticmethod
@@ -193,11 +225,15 @@ class AuthService:
             # Check if user already exists
             existing_user = self.db.get_user_by_email(email)
             if existing_user:
-                current_app.logger.warning(f"Registration attempt with existing email: {email}")
+                MonitoringService.log_security_event(
+                    f"Registration attempt with existing email: {email}",
+                    "AuthService",
+                    level='WARNING'
+                )
                 return {"success": False, "message": "User already exists"}
             
             # Hash password
-            hashed_password = self.hash_password(password)
+            hashed_password = ph.hash(password)
             
             # Create user
             user_data = {
@@ -209,7 +245,10 @@ class AuthService:
             }
             
             user_id = self.db.create_user(user_data)
-            current_app.logger.info(f"New user registered: {username} ({email})")
+            MonitoringService.log_security_event(
+                f"New user registered: {username} ({email})",
+                "AuthService"
+            )
             
             return {
                 "success": True, 
@@ -218,10 +257,21 @@ class AuthService:
             }
             
         except Exception as e:
-            current_app.logger.error(f"Registration error: {str(e)}")
+            MonitoringService.log_security_event(
+                f"Registration error: {str(e)}",
+                "AuthService",
+                level='ERROR'
+            )
             return {"success": False, "message": "Registration failed"}
     
-        
+    @staticmethod
+    def find_user_by_email(email):
+        """Finds a user by their email address."""
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            raise NotFoundException(f"User with email {email} not found.")
+        return user
+
     def send_verification_email(self, email):
         """Generates a token and sends a verification email."""
         serializer = AuthService.get_token_serializer()
@@ -247,15 +297,44 @@ class AuthService:
         try:
             user = self.db.get_user_by_email(email)
             if not user:
-                current_app.logger.warning(f"Login attempt with non-existent email: {email}")
+                MonitoringService.log_security_event(
+                    f"Login attempt with non-existent email: {email}",
+                    "AuthService",
+                    level='WARNING'
+                )
                 return {"success": False, "message": "Invalid credentials"}
             
-            if not self.verify_password(password, user.password_hash):
-                current_app.logger.warning(f"Failed login attempt for: {email}")
+            if not AuthService.verify_password(user.password_hash, password):
+                MonitoringService.log_security_event(
+                    f"Failed login attempt for: {email}",
+                    "AuthService",
+                    level='WARNING'
+                )
                 return {"success": False, "message": "Invalid credentials"}
             
+            # --- Automatic Re-hashing for Security Upgrades ---
+            # If verification is successful, check if the hash uses outdated parameters.
+            if ph.check_needs_rehash(user.password_hash):
+                try:
+                    # Rehash the password with the new, more secure parameters.
+                    user.password_hash = ph.hash(password)
+                    db.session.commit()
+                    MonitoringService.log_security_event(
+                        f"Password rehashed for user {user.email}", "AuthService"
+                    )
+                except Exception as e:
+                    db.session.rollback()
+                    MonitoringService.log_error(
+                        f"Failed to rehash password for user {user.email}: {e}",
+                        "AuthService", level='WARNING'
+                    )
+
             if not user.is_active:
-                current_app.logger.warning(f"Login attempt for inactive user: {email}")
+                MonitoringService.log_security_event(
+                    f"Login attempt for inactive user: {email}",
+                    "AuthService",
+                    level='WARNING'
+                )
                 return {"success": False, "message": "Account is inactive"}
             
             # Create session
@@ -269,7 +348,10 @@ class AuthService:
             }
             
             self.sessions[session_token] = session_data
-            current_app.logger.info(f"User logged in: {email}")
+            MonitoringService.log_security_event(
+                f"User logged in: {email}",
+                "AuthService"
+            )
             
             return {
                 "success": True,
@@ -283,7 +365,11 @@ class AuthService:
             }
             
         except Exception as e:
-            current_app.logger.error(f"Login error: {str(e)}")
+            MonitoringService.log_security_event(
+                f"Login error: {str(e)}",
+                "AuthService",
+                level='ERROR'
+            )
             return {"success": False, "message": "Login failed"}
     
     def logout_user(self, session_token: str) -> Dict[str, Any]:
@@ -292,14 +378,25 @@ class AuthService:
             if session_token in self.sessions:
                 user_email = self.sessions[session_token].get("email", "unknown")
                 del self.sessions[session_token]
-                current_app.logger.info(f"User logged out: {user_email}")
+                MonitoringService.log_security_event(
+                    f"User logged out: {user_email}",
+                    "AuthService"
+                )
                 return {"success": True, "message": "Logout successful"}
             else:
-                current_app.logger.warning("Logout attempt with invalid session token")
+                MonitoringService.log_security_event(
+                    "Logout attempt with invalid session token",
+                    "AuthService",
+                    level='WARNING'
+                )
                 return {"success": False, "message": "Invalid session"}
                 
         except Exception as e:
-            current_app.logger.error(f"Logout error: {str(e)}")
+            MonitoringService.log_security_event(
+                f"Logout error: {str(e)}",
+                "AuthService",
+                level='ERROR'
+            )
             return {"success": False, "message": "Logout failed"}
     
     @staticmethod
@@ -322,7 +419,10 @@ class AuthService:
             login_user(user)
             session['mfa_authenticated'] = True
             session.pop('mfa_pending_user_id', None) # Clean up the pending key
-            current_app.logger.info(f"MFA successful for user {user.email}")
+            MonitoringService.log_security_event(
+                f"MFA successful for user {user.email}",
+                "AuthService"
+            )
             return user
 
         # If verification fails
@@ -341,10 +441,17 @@ class AuthService:
             raise ValidationException("MFA not enabled for this user")
             
         if not MfaService.verify_token(user.two_factor_secret, mfa_token): # Corrected attribute name
-            current_app.logger.warning(f"Failed MFA verification for user ID: {user_id}")
+            MonitoringService.log_security_event(
+                f"Failed MFA verification for user ID: {user_id}",
+                "AuthService",
+                level='WARNING'
+            )
             raise UnauthorizedException("Invalid MFA token")
             
-        current_app.logger.info(f"MFA verification successful for user ID: {user_id}")
+        MonitoringService.log_security_event(
+            f"MFA verification successful for user ID: {user_id}",
+            "AuthService"
+        )
         return AuthService.generate_tokens(user.id)
         
         
@@ -375,5 +482,9 @@ class AuthService:
             }
             
         except Exception as e:
-            current_app.logger.error(f"Error generating tokens for user {user_id}: {str(e)}")
+            MonitoringService.log_error(
+                f"Error generating tokens for user {user_id}: {str(e)}",
+                "AuthService",
+                exc_info=True
+            )
             raise ServiceError("Failed to generate authentication tokens")

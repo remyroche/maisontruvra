@@ -6,6 +6,7 @@ from backend.models.product_models import Product, ProductVariant
 from backend.models.inventory_models import InventoryReservation # Added: Import InventoryReservation
 from .exceptions import ServiceError, ValidationException, NotFoundException
 from .inventory_service import InventoryService
+from .monitoring_service import MonitoringService
 from backend.utils.input_sanitizer import InputSanitizer
 from ..models import ExclusiveReward, Product
 
@@ -75,7 +76,10 @@ class CartService:
         try:
             InventoryService.reserve_stock(product_id, quantity, user_id=user_id)
         except ServiceError as e:
-            current_app.logger.warning(f"Failed to reserve stock for product {product_id} for user {user_id}: {e.message}")
+            MonitoringService.log_warning(
+                f"Failed to reserve stock for product {product_id} for user {user_id}: {e.message}",
+                "CartService"
+            )
             raise e # Re-raise to inform the client of the stock issue
         # --- End Reservation Logic ---
 
@@ -90,13 +94,20 @@ class CartService:
                 db.session.add(new_item)
             
             db.session.commit()
-            current_app.logger.info(f"Item added to cart: User {user_id}, Product {product_id}, Quantity {quantity}")
+            MonitoringService.log_info(
+                f"Item added to cart: User {user_id}, Product {product_id}, Quantity {quantity}",
+                "CartService"
+            )
             return cart.to_dict() # Return the updated cart
         except Exception as e:
             db.session.rollback()
             # If DB operation fails, we must release the reservation
             InventoryService.release_stock(product_id, quantity, user_id=user_id)
-            current_app.logger.error(f"Failed to add item to cart after reservation: {str(e)}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to add item to cart after reservation: {str(e)}",
+                "CartService",
+                exc_info=True
+            )
             raise ServiceError(f"Failed to add item to cart: {str(e)}")
 
     @staticmethod
@@ -138,16 +149,26 @@ class CartService:
             # Update item quantity in cart
             cart_item.quantity = new_quantity
             db.session.commit()
-            current_app.logger.info(f"Cart item updated: Item {item_id}, New quantity {new_quantity}")
+            MonitoringService.log_info(
+                f"Cart item updated: Item {item_id}, New quantity {new_quantity}",
+                "CartService"
+            )
             return cart_item.cart.to_dict()
 
         except ServiceError as e:
             db.session.rollback()
-            current_app.logger.warning(f"Failed to update cart item {item_id} due to stock issue: {e.message}")
+            MonitoringService.log_warning(
+                f"Failed to update cart item {item_id} due to stock issue: {e.message}",
+                "CartService"
+            )
             raise e
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to update cart item {item_id}: {str(e)}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to update cart item {item_id}: {str(e)}",
+                "CartService",
+                exc_info=True
+            )
             raise ServiceError(f"Failed to update cart item: {str(e)}")
 
     @staticmethod
@@ -172,11 +193,18 @@ class CartService:
             # Release the inventory reservation after successful removal from cart
             InventoryService.release_stock(product_id, quantity_to_release, user_id=user_id)
             
-            current_app.logger.info(f"Cart item removed: Item {item_id}")
+            MonitoringService.log_info(
+                f"Cart item removed: Item {item_id}",
+                "CartService"
+            )
             return cart.to_dict()
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to remove cart item {item_id}: {str(e)}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to remove cart item {item_id}: {str(e)}",
+                "CartService",
+                exc_info=True
+            )
             raise ServiceError(f"Failed to remove cart item: {str(e)}")
 
 
@@ -202,11 +230,18 @@ class CartService:
             
             db.session.commit()
             
-            current_app.logger.info(f"Cart and all associated reservations cleared for user {user_id}")
+            MonitoringService.log_info(
+                f"Cart and all associated reservations cleared for user {user_id}",
+                "CartService"
+            )
             return cart.to_dict(cleared=True) # Assuming to_dict can handle this state
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to clear cart for user {user_id}: {str(e)}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to clear cart for user {user_id}: {str(e)}",
+                "CartService",
+                exc_info=True
+            )
             # The transaction is rolled back, so no reservations were released and no items were deleted.
             raise ServiceError(f"Failed to clear cart due to a database error.")

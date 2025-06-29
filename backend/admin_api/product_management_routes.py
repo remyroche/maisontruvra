@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify
 from backend.services.product_service import ProductService
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from backend.models.inventory_models import Inventory
-from backend.extensions import cache
+from backend.extensions import cache, db
 from ..utils.decorators import log_admin_action
+# Assuming the Celery task is defined in a tasks.py file at the backend root
+from backend.tasks import send_back_in_stock_emails_task
 
 product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
 
@@ -22,7 +24,7 @@ def create_product():
     if not data:
         return jsonify(status="error", message="Invalid or missing JSON body"), 400
 
-    sanitized_data = sanitize_input(data)
+    sanitized_data = InputSanitizer.recursive_sanitize(data)
 
     required_fields = ['name', 'description', 'price', 'category_id']
     if not all(field in sanitized_data for field in required_fields):
@@ -59,8 +61,8 @@ def update_inventory(inventory_id):
 
     try:
         new_quantity = int(data['quantity'])
+        cache.delete(f'view//api/products/{inventory_item.product_id}')
         cache.delete('view//api/products')
-        cache.delete('view//api/products/{}'.format(product_id))
     except ValueError:
         return jsonify({"error": "Invalid quantity format"}), 400
 
@@ -151,15 +153,15 @@ def update_product(product_id):
     if not ProductService.get_product_by_id(product_id):
         return jsonify(status="error", message="Product not found"), 404
 
-    sanitized_data = sanitize_input(data)
+    sanitized_data = InputSanitizer.recursive_sanitize(data)
 
     try:
         updated_product = ProductService.update_product(product_id, sanitized_data)
+        cache.delete('view//api/products')
+        cache.delete(f'view//api/products/{product_id}')
         return jsonify(status="success", data=updated_product.to_dict()), 200
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400
-        cache.delete('view//api/products') 
-        cache.delete('view//api/products/{}'.format(product_id))
     except Exception as e:
         # Log the error e
         return jsonify(status="error", message="An internal error occurred while updating the product."), 500
@@ -175,13 +177,15 @@ def delete_product(product_id):
     Delete a product.
     """
     hard_delete = request.args.get('hard', 'false').lower() == 'true'
-    cache.delete('view//api/products') 
-    cache.delete('view//api/products/{}'.format(product_id))
     if hard_delete:
         if ProductService.hard_delete_product(product_id):
+            cache.delete('view//api/products')
+            cache.delete(f'view//api/products/{product_id}')
             return jsonify(status="success", message="Product permanently deleted")
     else:
         if ProductService.soft_delete_product(product_id):
+            cache.delete('view//api/products')
+            cache.delete(f'view//api/products/{product_id}')
             return jsonify(status="success", message="Product soft-deleted successfully")
     return jsonify(status="error", message="Product not found"), 404
 

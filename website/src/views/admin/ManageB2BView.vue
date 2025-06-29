@@ -72,7 +72,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useAdminB2BStore } from '@/js/stores/adminB2B';
 import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
-import Modal from '@/js/admin/components/Modal.vue';
+import Modal from '@/components/ui/Modal.vue'; // Path corrected for consistency
 
 const b2bStore = useAdminB2BStore();
 

@@ -15,7 +15,7 @@ ph = PasswordHasher()
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
-    _email = db.Column('email', db.String(120), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False, comment="Stores the hashed password, not plaintext.")
     password_hash = db.Column(db.String(255), nullable=False)
     _first_name = db.Column('first_name', db.String(50), nullable=False)
@@ -29,8 +29,8 @@ class User(db.Model, UserMixin):
     language_preference = db.Column(db.Enum(LanguagePreference), default=LanguagePreference.FR, nullable=False)
     subscribed_to_newsletter = db.Column(db.Boolean, default=False)
 
+    orders = db.relationship('Order', backref='user', lazy=True, cascade="all, delete-orphan")
     addresses = db.relationship('Address', backref='user', lazy=True, cascade="all, delete-orphan")
-    orders = db.relationship('Order', backref='user', lazy=True)
     cart = relationship('Cart', uselist=False, back_populates='user', cascade="all, delete-orphan")
     reviews = db.relationship('Review', backref='user', lazy=True)
     wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True, cascade="all, delete-orphan")

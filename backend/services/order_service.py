@@ -5,7 +5,7 @@ from backend.models.product_models import ProductItem, Product
 from backend.models.cart_models import Cart
 from backend.models.address_models import Address
 from backend.services.loyalty_service import LoyaltyService
-from .exceptions import ServiceError, NotFoundException
+from .exceptions import ServiceError, NotFoundException, ValidationException
 from sqlalchemy.orm import joinedload, subqueryload
 from backend.models.user_models import User
 from backend.models.b2b_models import B2BUser
@@ -16,8 +16,9 @@ from backend.services.pdf_service import PDFService
 from flask import current_app
 from .notification_service import NotificationService
 from .pdf_service import PDFService
+from .monitoring_service import MonitoringService
 from ..extensions import socketio
-
+from backend.services.invoice_service import InvoiceService
 
 
 
@@ -156,7 +157,10 @@ class OrderService:
                     order_id=new_order.id
                 )
             except Exception as e:
-                current_app.logger.error(f"Failed to award loyalty points for order {new_order.id}: {e}")
+                MonitoringService.log_error(
+                    f"Failed to award loyalty points for order {new_order.id}: {e}",
+                    "OrderService"
+                )
 
             # 9. Handle referral logic for the new user's first order
             try:
@@ -165,25 +169,41 @@ class OrderService:
                     order_total_euros=new_order.total_amount
                 )
             except Exception as e:
-                 current_app.logger.error(f"Failed to process referral for order {new_order.id}: {e}")
+                MonitoringService.log_error(
+                    f"Failed to process referral for order {new_order.id}: {e}",
+                    "OrderService"
+                )
 
             # 10. Offload PDF and Email generation to Celery
             try:
                 InvoiceService.create_invoice_for_order.delay(new_order.id)
                 NotificationService.send_order_confirmation_email.delay(new_order.id)
-                current_app.logger.info(f"Successfully queued post-order tasks for order {new_order.id}")
+                MonitoringService.log_info(
+                    f"Successfully queued post-order tasks for order {new_order.id}",
+                    "OrderService"
+                )
             except Exception as e:
-                current_app.logger.error(f"Failed to queue post-order tasks for order {new_order.id}: {e}")
+                MonitoringService.log_error(
+                    f"Failed to queue post-order tasks for order {new_order.id}: {e}",
+                    "OrderService"
+                )
 
             return new_order
 
         except (ValidationException, NotFoundException) as e:
             db.session.rollback()
-            current_app.logger.warning(f"Order creation failed for user {user_id}: {str(e)}")
+            MonitoringService.log_warning(
+                f"Order creation failed for user {user_id}: {str(e)}",
+                "OrderService"
+            )
             raise e
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to create order from cart for user {user_id}: {str(e)}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to create order from cart for user {user_id}: {str(e)}",
+                "OrderService",
+                exc_info=True
+            )
             raise ServiceError("Could not create order due to an unexpected error.")
 
 
@@ -252,7 +272,11 @@ class OrderService:
             return new_order
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to process guest order: {str(e)}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to process guest order: {str(e)}",
+                "OrderService",
+                exc_info=True
+            )
             raise ServiceError("Could not process the guest order.")
 
     @staticmethod
@@ -292,7 +316,10 @@ class OrderService:
         It allocates serialized items and updates the order status.
         This entire operation is a single atomic transaction.
         """
-        current_app.logger.info(f"Starting fulfillment service for order_id: {order_id}")
+        MonitoringService.log_info(
+            f"Starting fulfillment service for order_id: {order_id}",
+            "OrderService"
+        )
         
         order = Order.query.get(order_id)
         if not order:
@@ -309,11 +336,18 @@ class OrderService:
             # Once all items are allocated, the order can be moved to 'Awaiting Shipment'.
             order.status = 'awaiting_shipment'
             db.session.commit()
-            current_app.logger.info(f"Successfully fulfilled and allocated items for order_id: {order_id}")
+            MonitoringService.log_info(
+                f"Successfully fulfilled and allocated items for order_id: {order_id}",
+                "OrderService"
+            )
 
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"CRITICAL: Failed to fulfill order {order_id}. Manual intervention required. Error: {str(e)}", exc_info=True)
+            MonitoringService.log_critical(
+                f"CRITICAL: Failed to fulfill order {order_id}. Manual intervention required. Error: {str(e)}",
+                "OrderService",
+                exc_info=True
+            )
             raise ServiceError(f"Fulfillment failed for order {order_id}.")
 
     @staticmethod
@@ -342,4 +376,7 @@ class OrderService:
             item.status = 'sold'
             item.order_item_id = order_item_id
         
-        current_app.logger.info(f"Allocated {len(items_to_allocate)} items for order_item_id {order_item_id}")
+        MonitoringService.log_info(
+            f"Allocated {len(items_to_allocate)} items for order_item_id {order_item_id}",
+            "OrderService"
+        )

@@ -5,6 +5,7 @@ from backend.models.inventory_models import ProductItem
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
 from backend.utils.sanitization import sanitize_input
 from backend.services.audit_log_service import AuditLogService
+from backend.services.monitoring_service import MonitoringService
 from flask import current_app, request
 from flask_jwt_extended import get_jwt_identity
 from backend.models.user_models import User
@@ -148,12 +149,19 @@ class ProductService:
                 new_product.variants.append(new_variant)
 
             db.session.commit()
-            current_app.logger.info(f"Created new product '{new_product.name}' with {len(new_product.variants)} variants.")
+            MonitoringService.log_info(
+                f"Created new product '{new_product.name}' with {len(new_product.variants)} variants.",
+                "ProductService"
+            )
             return new_product
 
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to create product with variants: {e}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to create product with variants: {e}",
+                "ProductService",
+                exc_info=True
+            )
             raise ServiceError("Product creation failed due to a database error.")
 
     @staticmethod
@@ -290,12 +298,19 @@ class ProductService:
             
             db.session.commit()
             
-            current_app.logger.info(f"Product created successfully: {product.name} (ID: {product.id})")
+            MonitoringService.log_info(
+                f"Product created successfully: {product.name} (ID: {product.id})",
+                "ProductService"
+            )
             return product.to_dict(context='admin')
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to create product: {str(e)}")
+            MonitoringService.log_error(
+                f"Failed to create product: {str(e)}",
+                "ProductService",
+                exc_info=True
+            )
             raise ValidationException(f"Failed to create product: {str(e)}")
     
     @staticmethod
@@ -344,12 +359,19 @@ class ProductService:
             
             db.session.commit()
             
-            current_app.logger.info(f"Product updated successfully: {product.name} (ID: {product.id})")
+            MonitoringService.log_info(
+                f"Product updated successfully: {product.name} (ID: {product.id})",
+                "ProductService"
+            )
             return product.to_dict(context='admin')
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to update product {product_id}: {str(e)}")
+            MonitoringService.log_error(
+                f"Failed to update product {product_id}: {str(e)}",
+                "ProductService",
+                exc_info=True
+            )
             raise ValidationException(f"Failed to update product: {str(e)}")
     
     @staticmethod
@@ -373,11 +395,18 @@ class ProductService:
             
             db.session.commit()
             
-            current_app.logger.info(f"Product soft deleted: {product.name} (ID: {product.id})")
+            MonitoringService.log_info(
+                f"Product soft deleted: {product.name} (ID: {product.id})",
+                "ProductService"
+            )
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to delete product {product_id}: {str(e)}")
+            MonitoringService.log_error(
+                f"Failed to delete product {product_id}: {str(e)}",
+                "ProductService",
+                exc_info=True
+            )
             raise ValidationException(f"Failed to delete product: {str(e)}")
     
     @staticmethod

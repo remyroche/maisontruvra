@@ -16,9 +16,10 @@ module.exports = {
         signature: ['Dancing Script', 'cursive'],
       },
       colors: {
-        'brand-dark-brown': '#3a322f',
-        'brand-cream': '#f9f5f0',
-        'brand-burgundy': '#800020',
+        'brand-dark-brown': '#3C2415',
+        'brand-cream': '#F5F1E8',
+        'brand-burgundy': '#8B1538',
+        'brand-gold': '#D4AF37',
         'brand-light-gray': '#e9e9e9',
         'brand-dark-gray': '#5a5a5a',
       }

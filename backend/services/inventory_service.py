@@ -1,10 +1,11 @@
 from ..models import Inventory, InventoryReservation
 from .. import db
-from .exceptions import ServiceError
+from .exceptions import ServiceError, NotFoundException
 from flask import session, current_app
 from datetime import datetime, timedelta
 from .passport_service import PassportService
 from .notification_service import NotificationService
+from .monitoring_service import MonitoringService
 from ..extensions import cache
 
 
@@ -26,6 +27,7 @@ class InventoryService:
         inventory_item = Inventory.query.with_for_update().get(inventory_id)
         if not inventory_item:
             raise NotFoundException("Inventory item not found.")
+        product_id = inventory_item.product_id
             
         try:
             # 1. Update the total stock quantity
@@ -37,18 +39,26 @@ class InventoryService:
 
             # 3. Commit the entire transaction
             db.session.commit()
-            current_app.logger.info(f"Added {quantity_to_add} units to inventory for product {inventory_item.product_id}. {quantity_to_add} passports created.")
+            MonitoringService.log_info(
+                f"Added {quantity_to_add} units to inventory for product {inventory_item.product_id}. {quantity_to_add} passports created.",
+                "InventoryService"
+            )
 
+            # Invalidate cache for the specific product and the general product list
             cache.delete('view//api/products/{}'.format(product_id)) 
             cache.delete('view//api/products')
-            NotificationService.trigger_back_in_stock_notifications.delay(product_id)
+            NotificationService.trigger_back_in_stock_notifications.delay(inventory_item.product_id)
 
             
         except Exception as e:
             # If any part fails (e.g., file write error), roll back everything.
             # No quantity will be updated, and no passports will be saved.
             db.session.rollback()
-            current_app.logger.error(f"Failed to add stock for inventory {inventory_id}: {e}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to add stock for inventory {inventory_id}: {e}",
+                "InventoryService",
+                exc_info=True
+            )
             raise ServiceError("Failed to add stock and create passports.")
 
     @staticmethod
@@ -157,18 +167,30 @@ class InventoryService:
             raise ServiceError("A valid user ID is required to release all reservations.", 400)
             
         try:
+            # Find which products will be affected before deleting the reservations
+            reservations_to_delete = InventoryReservation.query.filter_by(user_id=user_id).join(Inventory).all()
+            product_ids_to_clear = {res.inventory.product_id for res in reservations_to_delete}
+
             # Use synchronize_session=False for a more efficient bulk delete,
             # as the session is being managed by the calling service (CartService).
             num_deleted = InventoryReservation.query.filter_by(user_id=user_id).delete(synchronize_session=False)
             # This does not commit the session; the calling service is responsible for the commit.
-            current_app.logger.info(f"Released {num_deleted} total reservations for user {user_id} as part of a larger transaction.")
-
-            cache.delete('view//api/products/{}'.format(product_id)) 
-            cache.delete('view//api/products') 
+            if num_deleted > 0:
+                MonitoringService.log_info(
+                    f"Released {num_deleted} total reservations for user {user_id} as part of a larger transaction.",
+                    "InventoryService"
+                )
+                for pid in product_ids_to_clear:
+                    cache.delete(f'view//api/products/{pid}')
+                cache.delete('view//api/products')
 
         except Exception as e:
             # The calling service should handle rollback.
-            current_app.logger.error(f"Error releasing all reservations for user {user_id}: {str(e)}", exc_info=True)
+            MonitoringService.log_error(
+                f"Error releasing all reservations for user {user_id}: {str(e)}",
+                "InventoryService",
+                exc_info=True
+            )
             # Re-raise the exception to ensure the calling service's transaction fails.
             raise ServiceError(f"Could not release all inventory reservations for user {user_id}.")
 
@@ -179,12 +201,30 @@ class InventoryService:
         A cleanup function to be run periodically by a background task.
         It finds and deletes all expired reservations.
         """
-        expired_count = InventoryReservation.query.filter(InventoryReservation.expires_at <= datetime.utcnow()).delete()
+        # First, find which products will be affected by the expiration
+        reservations_to_expire = InventoryReservation.query.filter(
+            InventoryReservation.expires_at <= datetime.utcnow()
+        ).join(Inventory).all()
+
+        if not reservations_to_expire:
+            return 0
+
+        product_ids_to_clear = {res.inventory.product_id for res in reservations_to_expire}
+        reservation_ids = [res.id for res in reservations_to_expire]
+
+        # Perform the bulk delete
+        expired_count = InventoryReservation.query.filter(
+            InventoryReservation.id.in_(reservation_ids)
+        ).delete(synchronize_session=False)
+
         db.session.commit()
+
         if expired_count > 0:
-            current_app.logger.info(f"Released {expired_count} expired inventory reservations.")
-
-        cache.delete('view//api/products/{}'.format(product_id)) 
-        cache.delete('view//api/products') 
-
+            MonitoringService.log_info(
+                f"Released {expired_count} expired inventory reservations.",
+                "InventoryService"
+            )
+            for pid in product_ids_to_clear:
+                cache.delete(f'view//api/products/{pid}')
+            cache.delete('view//api/products')
         return expired_count

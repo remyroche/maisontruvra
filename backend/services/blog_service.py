@@ -7,6 +7,7 @@ from ..services.exceptions import NotFoundException, ValidationException
 from backend.utils.input_sanitizer import InputSanitizer # Corrected: Use InputSanitizer
 import bleach
 import re
+from .monitoring_service import MonitoringService
 from .exceptions import ServiceError
 from flask import current_app # Added: Import current_app
 
@@ -105,7 +106,9 @@ class BlogService:
             return new_post
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Database error creating blog post: {e}", exc_info=True)
+            MonitoringService.log_error(
+                f"Database error creating blog post: {e}", "BlogService", exc_info=True
+            )
             raise ServiceError("Could not create blog post.")
 
     def get_all_articles(self):
@@ -169,7 +172,9 @@ class BlogService:
             return post
         except Exception as e:
             self.session.rollback() # Corrected: Use self.session
-            current_app.logger.error(f"Database error updating blog post: {e}", exc_info=True)
+            MonitoringService.log_error(
+                f"Database error updating blog post: {e}", "BlogService", exc_info=True
+            )
             raise ServiceError("Could not update blog post.")
 
     def delete_article(self, article_id: int):

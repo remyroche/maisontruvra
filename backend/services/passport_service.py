@@ -4,6 +4,7 @@ from flask import render_template, current_app
 from backend.database import db
 from backend.models.product_models import Product
 from backend.models.passport_models import ProductPassport
+from .monitoring_service import MonitoringService
 from .exceptions import ServiceError, NotFoundException
 from playwright.sync_api import sync_playwright
 
@@ -16,7 +17,10 @@ class PassportService:
         passport record in the database.
         This is called by a Celery task.
         """
-        current_app.logger.info(f"Starting PDF generation for passport_id: {passport_id}")
+        MonitoringService.log_info(
+                f"Starting PDF generation for passport_id: {passport_id}",
+                "PassportService"
+            )
 
         # 1. Fetch passport and related product data from the database
         passport = ProductPassport.query.options(
@@ -24,7 +28,10 @@ class PassportService:
         ).get(passport_id)
 
         if not passport:
-            current_app.logger.error(f"Could not generate passport: Passport {passport_id} not found.")
+            MonitoringService.log_error(
+                f"Could not generate passport: Passport {passport_id} not found.",
+                "PassportService"
+            )
             raise ValueError(f"Passport {passport_id} not found")
 
         # 2. Build the context dictionary for the template
@@ -76,12 +83,17 @@ class PassportService:
 
             db.session.commit()
 
-            current_app.logger.info(f"PDF generation for passport {passport.id} completed. Saved to {filename}")
+            MonitoringService.log_info(
+                f"PDF generation for passport {passport.id} completed. Saved to {filename}",
+                "PassportService"
+            )
             return True
 
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"An error occurred during PDF generation for passport {passport_id}: {e}", exc_info=True)
+            MonitoringService.log_error(
+                f"An error occurred during PDF generation for passport {passport_id}: {e}", "PassportService", exc_info=True
+            )
             # The Celery task's autoretry will handle this exception.
             raise
 
@@ -138,11 +150,16 @@ class PassportService:
             # 5. Store the relative path to the HTML file in the database record (optional but good practice)
             # new_passport.html_path = file_path 
 
-            current_app.logger.info(f"Generated passport {new_passport.unique_identifier} for product {product.id}")
+            MonitoringService.log_info(
+                f"Generated passport {new_passport.unique_identifier} for product {product.id}",
+                "PassportService"
+            )
             
             return new_passport
 
         except Exception as e:
             # The calling function should handle the rollback.
-            current_app.logger.error(f"Failed to create and render passport for product {product_id}: {e}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to create and render passport for product {product_id}: {e}", "PassportService", exc_info=True
+            )
             raise ServiceError("Passport creation failed.")

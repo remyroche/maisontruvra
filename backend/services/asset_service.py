@@ -4,6 +4,7 @@ from flask import current_app
 from backend.database import db
 from backend.models.asset_models import Asset
 from .exceptions import ServiceError, NotFoundException
+from .monitoring_service import MonitoringService
 from werkzeug.utils import secure_filename
 from backend.services.exceptions import InvalidUsageException
 
@@ -53,14 +54,21 @@ class AssetService:
             db.session.add(new_asset)
             db.session.commit()
 
-            current_app.logger.info(f"Uploaded new asset: {unique_filename}")
+            MonitoringService.log_info(
+                f"Uploaded new asset: {unique_filename}",
+                "AssetService"
+            )
             return new_asset
         except Exception as e:
             db.session.rollback()
             # Clean up the saved file if DB operation fails
             if os.path.exists(file_path):
                 os.remove(file_path)
-            current_app.logger.error(f"Failed to upload asset {original_filename}: {e}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to upload asset {original_filename}: {e}",
+                "AssetService",
+                exc_info=True
+            )
             raise ServiceError("Could not save asset.")
 
     @staticmethod
@@ -80,11 +88,18 @@ class AssetService:
             # Delete record from database
             db.session.delete(asset)
             db.session.commit()
-            current_app.logger.info(f"Deleted asset: {asset.filename}")
+            MonitoringService.log_info(
+                f"Deleted asset: {asset.filename}",
+                "AssetService"
+            )
             return True
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to delete asset {asset.filename}: {e}", exc_info=True)
+            MonitoringService.log_error(
+                f"Failed to delete asset {asset.filename}: {e}",
+                "AssetService",
+                exc_info=True
+            )
             raise ServiceError("Could not delete asset.")
             
     @staticmethod

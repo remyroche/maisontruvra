@@ -1,6 +1,7 @@
 from backend.database import db
 from backend.models.user_models import User
 from backend.models.referral_models import Referral
+from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
 from backend.utils.sanitization import sanitize_input
 from backend.services.audit_log_service import AuditLogService
@@ -62,12 +63,15 @@ class ReferralService:
                 details=f"Generated referral code: {code}"
             )
             
-            current_app.logger.info(f"Generated referral code {code} for user {user_id}")
+            MonitoringService.log_info(
+                f"Generated referral code {code} for user {user_id}",
+                "ReferralService"
+            )
             return code
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error generating referral code for user {user_id}: {str(e)}")
+            MonitoringService.log_error(f"Error generating referral code for user {user_id}: {str(e)}")
             raise ServiceError(f"Failed to generate referral code: {str(e)}")
     
     @staticmethod
@@ -112,12 +116,15 @@ class ReferralService:
                 details=f"Applied referral code: {referral_code}"
             )
             
-            current_app.logger.info(f"User {user_id} applied referral code {referral_code}")
+            MonitoringService.log_info(
+                f"User {user_id} applied referral code {referral_code}",
+                "ReferralService"
+            )
             return True
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error applying referral code {referral_code} for user {user_id}: {str(e)}")
+            MonitoringService.log_error(f"Error applying referral code {referral_code} for user {user_id}: {str(e)}")
             raise ServiceError(f"Failed to apply referral code: {str(e)}")
     
     @staticmethod
@@ -146,12 +153,15 @@ class ReferralService:
                 details=f"Completed referral for user {user_id}"
             )
             
-            current_app.logger.info(f"Completed referral for user {user_id}")
+            MonitoringService.log_info(
+                f"Completed referral for user {user_id}",
+                "ReferralService"
+            )
             return True
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error completing referral for user {user_id}: {str(e)}")
+            MonitoringService.log_error(f"Error completing referral for user {user_id}: {str(e)}")
             raise ServiceError(f"Failed to complete referral: {str(e)}")
     
     @staticmethod
@@ -186,7 +196,7 @@ class ReferralService:
             return result
             
         except Exception as e:
-            current_app.logger.error(f"Error getting referrals for user {user_id}: {str(e)}")
+            MonitoringService.log_error(f"Error getting referrals for user {user_id}: {str(e)}")
             raise ServiceError(f"Failed to get referrals: {str(e)}")
     
     @staticmethod
@@ -216,7 +226,7 @@ class ReferralService:
             }
             
         except Exception as e:
-            current_app.logger.error(f"Error getting referral stats for user {user_id}: {str(e)}")
+            MonitoringService.log_error(f"Error getting referral stats for user {user_id}: {str(e)}")
             raise ServiceError(f"Failed to get referral stats: {str(e)}")
     
     @staticmethod
@@ -237,5 +247,5 @@ class ReferralService:
             return True
             
         except Exception as e:
-            current_app.logger.error(f"Error validating referral code {referral_code}: {str(e)}")
+            MonitoringService.log_error(f"Error validating referral code {referral_code}: {str(e)}")
             return False

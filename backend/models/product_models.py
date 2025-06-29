@@ -1,7 +1,16 @@
+import uuid
+from sqlalchemy.dialects.postgresql import UUID
 from backend.database import db
 from .base import BaseModel, SoftDeleteMixin
 
-class StockNotificationRequest(Base):
+
+# Table d'association pour la relation Many-to-Many entre Product et LoyaltyTier
+product_tier_visibility = db.Table('product_tier_visibility',
+    db.Column('product_id', db.Integer, db.ForeignKey('products.id'), primary_key=True),
+    db.Column('tier_id', db.Integer, db.ForeignKey('loyalty_tiers.id'), primary_key=True)
+)
+
+class StockNotificationRequest(BaseModel):
     __tablename__ = 'stock_notification_requests'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
@@ -16,21 +25,27 @@ class StockNotificationRequest(Base):
 class Product(BaseModel, SoftDeleteMixin):
     __tablename__ = 'products'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), nullable=False)
+    name = db.Column(db.String(255), nullable=False)
     slug = db.Column(db.String(120), unique=True, nullable=False)
     description = db.Column(db.Text, nullable=True)
     price = db.Column(db.Numeric(10, 2), nullable=False)
     base_sku = db.Column(db.String(100), nullable=False, unique=True)
-    is_published = db.Column(db.Boolean, default=True)
+    is_published = db.Column(db.Boolean, default=False, nullable=False)
     product_type = db.Column(db.String(50), default='standard') # e.g., standard, b2b_exclusive, blog
+    
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     collection_id = db.Column(db.Integer, db.ForeignKey('collections.id'), nullable=True)
+    
+    category = db.relationship('Category', back_populates='products')
+    collection = db.relationship('Collection', back_populates='products')
+    
     images = db.relationship('ProductImage', back_populates='product', cascade="all, delete-orphan")
-    reviews = db.relationship('Review', back_populates='product', cascade="all, delete-orphan")
+    reviews = db.relationship('Review', back_populates='product', lazy=True, cascade="all, delete-orphan")
     inventory = db.relationship('Inventory', back_populates='product', uselist=False, cascade="all, delete-orphan")
-    stock = db.Column(db.Integer, default=0)
+    variants = db.relationship('ProductVariant', back_populates='product', cascade="all, delete-orphan")
     passport = db.relationship('ProductPassport', back_populates='product', uselist=False, cascade="all, delete-orphan")
-    is_published = db.Column(db.Boolean, default=False, nullable=False)
+    
+    stock = db.Column(db.Integer, default=0)
 
     # --- New Fields ---
     internal_note = db.Column(db.Text, nullable=True) # Note for staff
@@ -40,13 +55,16 @@ class Product(BaseModel, SoftDeleteMixin):
     is_b2b_visible = db.Column(db.Boolean, default=True)
     
     # Many-to-Many relationship for tier-specific visibility
-    # If a product is linked to any tiers here, it's ONLY visible to those tiers.
-    # If this relationship is empty, it's visible to all users (respecting the b2c/b2b flags).
     restricted_to_tiers = db.relationship(
         'LoyaltyTier', 
         secondary=product_tier_visibility,
         backref=db.backref('visible_products', lazy='dynamic')
     )
+    
+    @property
+    def is_active(self):
+        """A product is active if it's not deleted and is published."""
+        return not self.is_deleted and self.is_published
     
     def to_public_dict(self, include_variants=False, include_reviews=False):
         """Public view of a product."""
@@ -55,7 +73,7 @@ class Product(BaseModel, SoftDeleteMixin):
             'name': self.name,
             'slug': self.slug,
             'description': self.description,
-            'price': self.price,
+            'price': str(self.price),
             'images': [image.url for image in self.images],
             'category': self.category.name if self.category else None,
             'collection': self.collection.name if self.collection else None,
@@ -65,7 +83,7 @@ class Product(BaseModel, SoftDeleteMixin):
         if include_variants:
             data['variants'] = [v.to_dict() for v in self.variants]
         if include_reviews:
-            data['reviews'] = [r.to_public_dict() for r in self.reviews]
+            data['reviews'] = [r.to_public_dict() for r in self.reviews if r.approved]
         return data
     
     def to_admin_dict(self):
@@ -73,12 +91,12 @@ class Product(BaseModel, SoftDeleteMixin):
         data = self.to_public_dict(include_variants=True, include_reviews=True)
         data.update({
             'is_active': self.is_active,
-            'base_sku': self.base_sku,
+            'is_published': self.is_published,
             'inventory': self.inventory.quantity if self.inventory else 0,
             'is_b2c_visible': self.is_b2c_visible,
             'is_b2b_visible': self.is_b2b_visible,
-            'restricted_to_tier_ids': [str(tier.id) for tier in self.restricted_to_tiers],
-            'internal_note': self.internal_note
+            'restricted_to_tier_ids': [tier.id for tier in self.restricted_to_tiers],
+            'internal_note': self.internal_note,
         })
         return data
 
@@ -95,7 +113,7 @@ class Product(BaseModel, SoftDeleteMixin):
             return self.to_b2b_dict()
         return self.to_public_dict(**kwargs)
 
-class ProductVariant(db.Model, SoftDeleteMixin):
+class ProductVariant(BaseModel, SoftDeleteMixin):
     """
     Represents a specific, purchasable version of a Product.
     This model holds the unique SKU, price, and inventory for each variation.
@@ -137,7 +155,7 @@ class Category(BaseModel, SoftDeleteMixin):
     name = db.Column(db.String(100), unique=True, nullable=False)
     slug = db.Column(db.String(100), unique=True, nullable=False)
     
-    products = db.relationship('Product', back_populates='category')
+    products = db.relationship('Product', back_populates='category', lazy='dynamic')
 
     def to_dict(self):
         return {'id': self.id, 'name': self.name, 'slug': self.slug, 'is_deleted': self.is_deleted}
@@ -148,7 +166,7 @@ class Collection(BaseModel, SoftDeleteMixin):
     name = db.Column(db.String(100), unique=True, nullable=False)
     slug = db.Column(db.String(100), unique=True, nullable=False)
     
-    products = db.relationship('Product', back_populates='collection')
+    products = db.relationship('Product', back_populates='collection', lazy='dynamic')
 
     def to_dict(self):
         return {'id': self.id, 'name': self.name, 'slug': self.slug, 'is_deleted': self.is_deleted}
@@ -165,30 +183,36 @@ class ProductImage(BaseModel, SoftDeleteMixin):
 class Review(BaseModel, SoftDeleteMixin):
     __tablename__ = 'reviews'
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     rating = db.Column(db.Integer, nullable=False)
-    comment = db.Column(db.Text, nullable=True)
+    title = db.Column(db.String(255), nullable=False)
+    comment = db.Column(db.Text)
     status = db.Column(db.String(50), default='pending') # pending, approved, rejected
     
     product = db.relationship('Product', back_populates='reviews')
     user = db.relationship('User')
+
+    @property
+    def approved(self):
+        return self.status == 'approved'
 
     def to_public_dict(self):
         return {
             'id': self.id,
             'rating': self.rating,
             'title': self.title,
-            'text': self.text,
-            'author': self.user.first_name,
+            'text': self.comment,
+            'author': self.user.first_name if self.user else 'Anonymous',
             'created_at': self.created_at.isoformat(),
             'is_deleted': self.is_deleted,
         }
 
     def to_admin_dict(self):
         data = self.to_public_dict()
-        data['user'] = self.user.to_public_dict()
+        data['user'] = self.user.to_public_dict() if self.user else None
         data['product_id'] = self.product_id
+        data['status'] = self.status
         data['approved'] = self.approved
         return data
 

@@ -1,5 +1,6 @@
 from backend.database import db
 from backend.models.user_models import User, UserRole
+from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
 from backend.utils.sanitization import sanitize_input
 from backend.services.audit_log_service import AuditLogService
@@ -79,12 +80,19 @@ class UserService:
 
             db.session.commit()
 
-            current_app.logger.info(f"User created successfully: {user.email} (ID: {user.id})")
+            MonitoringService.log_info(
+                f"User created successfully: {user.email} (ID: {user.id})",
+                "UserService"
+            )
             return user.to_dict(context='admin')
 
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to create user: {str(e)}")
+            MonitoringService.log_error(
+                f"Failed to create user: {str(e)}",
+                "UserService",
+                exc_info=True
+            )
             raise ValidationException(f"Failed to create user: {str(e)}")
 
     def update_user_language(self, user_id, language, user_type='b2c'):
@@ -155,12 +163,19 @@ class UserService:
 
             db.session.commit()
 
-            current_app.logger.info(f"User updated successfully: {user.email} (ID: {user.id})")
+            MonitoringService.log_info(
+                f"User updated successfully: {user.email} (ID: {user.id})",
+                "UserService"
+            )
             return user.to_dict(context='admin')
 
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to update user {user_id}: {str(e)}")
+            MonitoringService.log_error(
+                f"Failed to update user {user_id}: {str(e)}",
+                "UserService",
+                exc_info=True
+            )
             raise ValidationException(f"Failed to update user: {str(e)}")
 
     @staticmethod
@@ -184,9 +199,16 @@ class UserService:
 
             db.session.commit()
 
-            current_app.logger.info(f"User soft deleted: {user.email} (ID: {user.id})")
+            MonitoringService.log_info(
+                f"User soft deleted: {user.email} (ID: {user.id})",
+                "UserService"
+            )
 
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Failed to delete user {user_id}: {str(e)}")
+            MonitoringService.log_error(
+                f"Failed to delete user {user_id}: {str(e)}",
+                "UserService",
+                exc_info=True
+            )
             raise ValidationException(f"Failed to delete user: {str(e)}")

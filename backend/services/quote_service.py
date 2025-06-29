@@ -1,6 +1,7 @@
 from backend.database import db
 from backend.models.invoice_models import Quote, Invoice
 from backend.models.b2b_models import B2BAccount
+from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
 from backend.utils.sanitization import sanitize_input
 from backend.services.audit_log_service import AuditLogService
@@ -22,7 +23,7 @@ class QuoteService:
             quotes = Quote.query.order_by(Quote.created_at.desc()).all()
             return quotes
         except Exception as e:
-            current_app.logger.error(f"Error getting all quotes: {str(e)}")
+            MonitoringService.log_error(f"Error getting all quotes: {str(e)}")
             raise ServiceError(f"Failed to get quotes: {str(e)}")
     
     @staticmethod
@@ -55,7 +56,7 @@ class QuoteService:
                 'has_prev': pagination.has_prev
             }
         except Exception as e:
-            current_app.logger.error(f"Error getting paginated quotes: {str(e)}")
+            MonitoringService.log_error(f"Error getting paginated quotes: {str(e)}")
             raise ServiceError(f"Failed to get quotes: {str(e)}")
     
     @staticmethod
@@ -68,7 +69,7 @@ class QuoteService:
                 raise NotFoundException("Quote not found")
             return quote
         except Exception as e:
-            current_app.logger.error(f"Error getting quote {quote_id}: {str(e)}")
+            MonitoringService.log_error(f"Error getting quote {quote_id}: {str(e)}")
             raise ServiceError(f"Failed to get quote: {str(e)}")
     
     @staticmethod
@@ -111,12 +112,15 @@ class QuoteService:
                 details=f"Created quote for B2B account {b2b_account_id}"
             )
             
-            current_app.logger.info(f"Created quote {quote.id} for B2B account {b2b_account_id}")
+            MonitoringService.log_info(
+                f"Created quote {quote.id} for B2B account {b2b_account_id}",
+                "QuoteService"
+            )
             return quote
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error creating quote: {str(e)}")
+            MonitoringService.log_error(f"Error creating quote: {str(e)}")
             raise ServiceError(f"Failed to create quote: {str(e)}")
     
     @staticmethod
@@ -150,12 +154,15 @@ class QuoteService:
                 details=f"Updated quote {quote_id}"
             )
             
-            current_app.logger.info(f"Updated quote {quote_id}")
+            MonitoringService.log_info(
+                f"Updated quote {quote_id}",
+                "QuoteService"
+            )
             return quote
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error updating quote {quote_id}: {str(e)}")
+            MonitoringService.log_error(f"Error updating quote {quote_id}: {str(e)}")
             raise ServiceError(f"Failed to update quote: {str(e)}")
     
     @staticmethod
@@ -184,12 +191,15 @@ class QuoteService:
                 details=f"Deleted quote {quote_id}"
             )
             
-            current_app.logger.info(f"Deleted quote {quote_id}")
+            MonitoringService.log_info(
+                f"Deleted quote {quote_id}",
+                "QuoteService"
+            )
             return True
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error deleting quote {quote_id}: {str(e)}")
+            MonitoringService.log_error(f"Error deleting quote {quote_id}: {str(e)}")
             raise ServiceError(f"Failed to delete quote: {str(e)}")
     
     @staticmethod
@@ -219,12 +229,15 @@ class QuoteService:
                 details=f"Approved quote {quote_id}"
             )
             
-            current_app.logger.info(f"Approved quote {quote_id}")
+            MonitoringService.log_info(
+                f"Approved quote {quote_id}",
+                "QuoteService"
+            )
             return quote
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error approving quote {quote_id}: {str(e)}")
+            MonitoringService.log_error(f"Error approving quote {quote_id}: {str(e)}")
             raise ServiceError(f"Failed to approve quote: {str(e)}")
     
     @staticmethod
@@ -257,12 +270,15 @@ class QuoteService:
                 details=f"Rejected quote {quote_id}: {reason or 'No reason provided'}"
             )
             
-            current_app.logger.info(f"Rejected quote {quote_id}")
+            MonitoringService.log_info(
+                f"Rejected quote {quote_id}",
+                "QuoteService"
+            )
             return quote
             
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error rejecting quote {quote_id}: {str(e)}")
+            MonitoringService.log_error(f"Error rejecting quote {quote_id}: {str(e)}")
             raise ServiceError(f"Failed to reject quote: {str(e)}")
     
     @staticmethod
@@ -276,5 +292,5 @@ class QuoteService:
             return quotes
             
         except Exception as e:
-            current_app.logger.error(f"Error getting quotes for account {b2b_account_id}: {str(e)}")
+            MonitoringService.log_error(f"Error getting quotes for account {b2b_account_id}: {str(e)}")
             raise ServiceError(f"Failed to get quotes: {str(e)}")

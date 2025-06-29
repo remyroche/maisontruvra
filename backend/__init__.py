@@ -1,30 +1,38 @@
-from flask import Flask
-from .extensions import db, login_manager, csrf, migrat
-from flask_login import LoginManager
-from flask_cors import CORS
-from flask_mail import Mail
+from flask import Flask, request, session
 from celery import Celery
-from .extensions import cache
-from . import config # Use relative import for config
+from flask_talisman import Talisman
 from datetime import datetime
 import os
-from argon2 import PasswordHasher
+
+# Import extension instances from the central extensions file
+from .extensions import (
+    db,
+    migrate,
+    login_manager,
+    mail,
+    limiter,
+    redis_client,
+    socketio,
+    jwt,
+    csrf,
+    cache,
+    cors,
+    password_hasher
+)
+
+from . import config
 from .middleware import setup_middleware, check_staff_session, mfa_check_middleware
-from .utils.input_sanitizer import InputSanitizer, init_app_middleware
+from .utils.input_sanitizer import init_app_middleware
 from .loggers import setup_logging, security_logger
 from .logger_and_error_handler import register_error_handlers
 from flask_login import user_logged_in, user_unauthorized
-from flask import request, session
 from .utils.vite import vite_asset
-from .database import db, setup_database_security
-
-migrate = Migrate()
-ph = PasswordHasher()
-login_manager = LoginManager()
+from .database import setup_database_security
+ 
+# Configure extensions that need it before app context
 login_manager.login_view = 'auth.login'
 login_manager.login_message_category = 'info'
-mail = Mail()
-celery = Celery(__name__, broker=config.Config.CELERY_BROKER_URL) # No change needed here, config is now correctly imported
+celery = Celery(__name__, broker=config.Config.CELERY_BROKER_URL)
  
 def create_app(config_class=config.Config):
     app = Flask(__name__)
@@ -60,10 +68,10 @@ def create_app(config_class=config.Config):
     migrate.init_app(app, db)
     login_manager.init_app(app)
     csrf.init_app(app)
-    migrate.init_app(app, db)
-    CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}})
+    cors.init_app(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}})
     mail.init_app(app)
     celery.conf.update(app.config)
+    jwt.init_app(app)
 
     # Function to initialize Celery with Flask app context
     def init_celery(app):
@@ -248,7 +256,7 @@ def create_app(config_class=config.Config):
     # Caching
     cache.init_app(app)
     limiter.init_app(app)
-    redis_client.init_app(app) 
+    redis_client.init_app(app)
     socketio.init_app(app, async_mode='eventlet')
 
     # === JWT Blocklist Implementation ===

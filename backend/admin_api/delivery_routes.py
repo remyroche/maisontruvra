@@ -1,13 +1,15 @@
-from flask import Blueprint, request, jsonify, jwta
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
+from ..utils.input_sanitizer import InputSanitizer
 from backend.services.delivery_service import DeliveryService
 from backend.services.loyalty_service import LoyaltyService
 
-delivery_admin_bp = Blueprint('delivery_admin_bp', __name__, url_prefix='/admin/delivery-methods')
+# This blueprint is registered in __init__.py with the prefix /api/admin/delivery
+admin_delivery_bp = Blueprint('admin_delivery_bp', __name__)
 
-@delivery_admin_bp.route('/settings', methods=['GET'])
+@admin_delivery_bp.route('/settings', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
 @roles_required ('Admin', 'Manager')
@@ -15,9 +17,9 @@ delivery_admin_bp = Blueprint('delivery_admin_bp', __name__, url_prefix='/admin/
 def get_settings():
     """Get all delivery countries and options."""
     settings = DeliveryService.get_delivery_settings()
-    return jsonify(settings), 200
+    return jsonify(status="success", data=settings), 200
 
-@delivery_admin_bp.route('/settings', methods=['POST'])
+@admin_delivery_bp.route('/settings', methods=['POST'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
 @roles_required ('Admin', 'Manager')
@@ -26,13 +28,13 @@ def update_settings():
     """Update delivery settings."""
     data = request.get_json()
     if not data:
-        return jsonify({"message": "No data provided"}), 400
+        return jsonify(status="error", message="No data provided"), 400
     
     DeliveryService.update_delivery_settings(data)
-    return jsonify({"message": "Delivery settings updated successfully"}), 200
+    return jsonify(status="success", message="Delivery settings updated successfully"), 200
 
 
-@delivery_admin_bp.route('/', methods=['GET'])
+@admin_delivery_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
 @roles_required ('Admin', 'Manager')
@@ -40,9 +42,9 @@ def update_settings():
 def get_delivery_methods():
     """Admin endpoint to get all delivery methods."""
     methods = DeliveryService.get_all_methods_for_admin()
-    return jsonify(status="success", data=methods)
+    return jsonify(status="success", data=methods), 200
 
-@delivery_admin_bp.route('/tiers', methods=['GET'])
+@admin_delivery_bp.route('/tiers', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
 @roles_required ('Admin', 'Manager')
@@ -50,16 +52,16 @@ def get_delivery_methods():
 def get_all_tiers():
     """Helper endpoint to get all loyalty tiers for the form."""
     tiers = LoyaltyService.get_all_tier_discounts() # Reusing this as it returns names and discounts
-    return jsonify(status="success", data=tiers)
+    return jsonify(status="success", data=tiers), 200
 
-@delivery_admin_bp.route('/', methods=['POST'])
+@admin_delivery_bp.route('/', methods=['POST'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
 @roles_required ('Admin', 'Manager')
 @admin_required
 def create_delivery_method():
     """Admin endpoint to create a new delivery method."""
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.recursive_sanitize(request.get_json())
     if not data or not data.get('name') or 'price' not in data:
         return jsonify(status="error", message="Name and price are required."), 400
     
@@ -70,21 +72,21 @@ def create_delivery_method():
         return jsonify(status="error", message=str(e)), 500
 
 
-@delivery_admin_bp.route('/<int:method_id>', methods=['PUT'])
+@admin_delivery_bp.route('/<int:method_id>', methods=['PUT'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
 @roles_required ('Admin', 'Manager')
 @admin_required
 def update_delivery_method(method_id):
     """Admin endpoint to update a delivery method."""
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.recursive_sanitize(request.get_json())
     try:
         updated_method = DeliveryService.update_method(method_id, data)
-        return jsonify(status="success", data=updated_method.to_dict())
+        return jsonify(status="success", data=updated_method.to_dict()), 200
     except Exception as e:
         return jsonify(status="error", message=str(e)), 500
 
-@delivery_admin_bp.route('/<int:method_id>', methods=['DELETE'])
+@admin_delivery_bp.route('/<int:method_id>', methods=['DELETE'])
 @permissions_required('MANAGE_DELIVERY')
 @log_admin_action
 @roles_required ('Admin', 'Manager')
@@ -101,15 +103,16 @@ def delete_delivery_method(method_id):
 
 
 # --- Public-Facing API ---
-delivery_public_bp = Blueprint('delivery_public_bp', __name__, url_prefix='/api/delivery-methods')
+# Note: This blueprint is not currently registered in backend/__init__.py
+delivery_public_bp = Blueprint('delivery_public_bp', __name__)
 
 @delivery_public_bp.route('/', methods=['GET'])
-@jwt_required()
+@jwt_required() # Assuming this is for authenticated B2C/B2B users
 def get_public_delivery_methods():
-    """Public endpoint for B2B users to fetch available delivery methods."""
+    """Public endpoint for authenticated users to fetch available delivery methods."""
     user_id = get_jwt_identity()
     try:
         methods = DeliveryService.get_available_methods_for_user(user_id)
-        return jsonify(status="success", data=methods)
+        return jsonify(status="success", data=methods), 200
     except Exception as e:
         return jsonify(status="error", message=str(e)), 500

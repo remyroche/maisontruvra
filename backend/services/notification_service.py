@@ -2,7 +2,8 @@ from backend.database import db
 from backend.models.product_models import Product
 from backend.models.user_models import User
 from backend.models.inventory_models import StockNotification
-from .exceptions import ServiceError, NotFoundException
+from .monitoring_service import MonitoringService
+from .exceptions import ServiceError, NotFoundException, ValidationException
 from flask import current_app
 from ..models import StockNotificationRequest
 from ..tasks import send_back_in_stock_email_task
@@ -63,5 +64,8 @@ class NotificationService:
             n.notified = True
         
         db.session.commit()
-        current_app.logger.info(f"Cleared {len(subscribers)} stock notifications for product {product_id}")
+        MonitoringService.log_info(
+            f"Cleared {len(subscribers)} stock notifications for product {product_id}",
+            "NotificationService"
+        )
         return subscribers

@@ -12,6 +12,7 @@ from flask_mail import Message
 from threading import Thread
 from backend.extensions import mail
 from backend.tasks import send_email_task
+from backend.services.monitoring_service import MonitoringService
 from flask import render_template, current_app
 
 class EmailService:
@@ -24,7 +25,10 @@ class EmailService:
         self.from_email = os.getenv('FROM_EMAIL', self.smtp_username)
         
         if not self.smtp_username or not self.smtp_password:
-            current_app.logger.warning("SMTP credentials not configured")
+            MonitoringService.log_warning(
+                "SMTP credentials not configured",
+                "EmailService"
+            )
    
 
     def send_email(self, to_email: str, subject: str, body: str, 
@@ -33,7 +37,10 @@ class EmailService:
         """Send an email"""
         try:
             if not self.smtp_username or not self.smtp_password:
-                current_app.logger.error("SMTP credentials not configured")
+                MonitoringService.log_error(
+                    "SMTP credentials not configured",
+                    "EmailService"
+                )
                 return {"success": False, "message": "Email service not configured"}
             
             # Create message
@@ -75,11 +82,18 @@ class EmailService:
             server.sendmail(self.from_email, to_email, text)
             server.quit()
             
-            current_app.logger.info(f"Email sent successfully to {to_email}")
+            MonitoringService.log_info(
+                f"Email sent successfully to {to_email}",
+                "EmailService"
+            )
             return {"success": True, "message": "Email sent successfully"}
             
         except Exception as e:
-            current_app.logger.error(f"Failed to send email to {to_email}: {str(e)}")
+            MonitoringService.log_error(
+                f"Failed to send email to {to_email}: {str(e)}",
+                "EmailService",
+                exc_info=True
+            )
             return {"success": False, "message": f"Failed to send email: {str(e)}"}
     
     @staticmethod
@@ -92,11 +106,17 @@ class EmailService:
         the main application threads.
         """
         html_body = render_template(template_name, **context)
-        current_app.logger.info(f"CELERY WORKER: SIMULATING EMAIL SEND to {recipient}")
+        MonitoringService.log_info(
+            f"CELERY WORKER: SIMULATING EMAIL SEND to {recipient}",
+            "EmailService"
+        )
         # In a real application, the logic to connect to an SMTP server
         # or an email API service (like SendGrid, Mailgun) would be here.
         # Example: mail.send(msg)
-        current_app.logger.info(f"CELERY WORKER: Email to {recipient} sent successfully.")
+        MonitoringService.log_info(
+            f"CELERY WORKER: Email to {recipient} sent successfully.",
+            "EmailService"
+        )
               
 
     # --- B2C & General User Emails ---

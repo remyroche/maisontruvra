@@ -4,12 +4,46 @@ import re
 import subprocess
 import json
 import sys
-from typing import List
+import hashlib
+import datetime
+import argparse
+from pathlib import Path
+from typing import List, Dict, Tuple, Optional
+from dataclasses import dataclass, asdict
 
 # --- Configuration ---
 # Directories to scan
 BACKEND_DIR = 'backend'
 FRONTEND_DIR = 'website'
+
+# Security finding data structure
+@dataclass
+class SecurityFinding:
+    severity: str  # HIGH, MEDIUM, LOW, INFO
+    category: str  # e.g., "Authentication", "Input Validation", "Dependencies"
+    title: str
+    description: str
+    file_path: str
+    line_number: int
+    code_snippet: str = ""
+    recommendation: str = ""
+    cwe_id: Optional[str] = None  # Common Weakness Enumeration ID
+    
+    def to_dict(self):
+        return asdict(self)
+
+# Audit configuration
+@dataclass
+class AuditConfig:
+    include_low_severity: bool = False
+    output_format: str = "console"  # console, json, html
+    output_file: Optional[str] = None
+    skip_dependency_check: bool = False
+    skip_static_analysis: bool = False
+    custom_rules_file: Optional[str] = None
+    
+# Global findings list
+findings: List[SecurityFinding] = []
 
 # ANSI color codes for better readability
 class Colors:
@@ -175,6 +209,23 @@ def run_pip_audit():
         print(f"{Colors.RED}Error: Could not decode pip-audit JSON output.{Colors.ENDC}")
         return 1
 
+def add_finding(severity: str, category: str, title: str, description: str, 
+                file_path: str, line_number: int, code_snippet: str = "", 
+                recommendation: str = "", cwe_id: Optional[str] = None):
+    """Add a security finding to the global findings list."""
+    finding = SecurityFinding(
+        severity=severity,
+        category=category,
+        title=title,
+        description=description,
+        file_path=file_path,
+        line_number=line_number,
+        code_snippet=code_snippet,
+        recommendation=recommendation,
+        cwe_id=cwe_id
+    )
+    findings.append(finding)
+
 def print_finding(level: str, message: str, file_path: str, line_num: int):
     color = {
         "HIGH": Colors.RED, "MEDIUM": Colors.YELLOW, "LOW": Colors.BLUE
@@ -266,7 +317,7 @@ def check_unsanitized_input(py_files: List[str]) -> int:
                 found_issues += 1
 
     if found_issues == 0:
-        print(f"{Colors.GREEN}✔ No obvious unsanitized input patterns found.{Colors.RESET}")
+        print(f"{Colors.GREEN}✔ No obvious unsanitized input patterns found.{Colors.ENDC}")
 
 def check_secure_cookies(config_file: str):
     """
@@ -274,7 +325,7 @@ def check_secure_cookies(config_file: str):
     """
     print_header("Checking for Secure Cookie Configuration")
     if not os.path.exists(config_file):
-        print(f"{Colors.YELLOW}Config file '{config_file}' not found. Skipping check.{Colors.RESET}")
+        print(f"{Colors.YELLOW}Config file '{config_file}' not found. Skipping check.{Colors.ENDC}")
         return
 
     with open(config_file, 'r', encoding='utf-8') as f:
@@ -301,7 +352,7 @@ def check_secure_cookies(config_file: str):
             found_issues += 1
 
     if found_issues == 0:
-        print(f"{Colors.GREEN}✔ Cookie configurations appear secure.{Colors.RESET}")
+        print(f"{Colors.GREEN}✔ Cookie configurations appear secure.{Colors.ENDC}")
 
 # --- Frontend Checks ---
 
@@ -336,7 +387,7 @@ def check_xss_vulnerabilities(vue_files: List[str]):
                 found_issues += 1
     
     if found_issues == 0:
-        print(f"{Colors.GREEN}✔ No unsanitized v-html uses found.{Colors.RESET}")
+        print(f"{Colors.GREEN}✔ No unsanitized v-html uses found.{Colors.ENDC}")
 
 
 def check_dependency_vulnerabilities(directory: str, command: str):
@@ -354,66 +405,699 @@ def check_dependency_vulnerabilities(directory: str, command: str):
         )
         
         if "found 0 vulnerabilities" in result.stdout or "found 0 vulnerabilities" in result.stderr:
-            print(f"{Colors.GREEN}✔ No vulnerabilities found.{Colors.RESET}")
+            print(f"{Colors.GREEN}✔ No vulnerabilities found.{Colors.ENDC}")
         elif "vulnerabilities found" in result.stdout or "vulnerabilities found" in result.stderr:
-             print(f"{Colors.RED}Vulnerabilities found! Run '{command}' in '{directory}' for details.{Colors.RESET}")
+             print(f"{Colors.RED}Vulnerabilities found! Run '{command}' in '{directory}' for details.{Colors.ENDC}")
              print(result.stdout)
         else:
-            print(f"{Colors.YELLOW}Could not determine vulnerability status. Please run '{command}' manually.{Colors.RESET}")
+            print(f"{Colors.YELLOW}Could not determine vulnerability status. Please run '{command}' manually.{Colors.ENDC}")
 
     except FileNotFoundError:
-        print(f"{Colors.YELLOW}Command for '{command}' not found. Skipping dependency check.{Colors.RESET}")
+        print(f"{Colors.YELLOW}Command for '{command}' not found. Skipping dependency check.{Colors.ENDC}")
     except Exception as e:
-        print(f"{Colors.RED}An error occurred while running dependency audit: {e}{Colors.RESET}")
+        print(f"{Colors.RED}An error occurred while running dependency audit: {e}{Colors.ENDC}")
 
+# --- Enhanced Security Checks ---
+
+def check_hardcoded_secrets(files: List[str]) -> int:
+    """Check for hardcoded secrets, API keys, passwords, etc."""
+    print_header("Enhanced Check: Hardcoded Secrets Detection")
+    found_issues = 0
+    
+    # Common patterns for secrets
+    secret_patterns = [
+        (r'password\s*=\s*["\'][^"\']{8,}["\']', "Hardcoded Password", "CWE-798"),
+        (r'api[_-]?key\s*=\s*["\'][^"\']{16,}["\']', "Hardcoded API Key", "CWE-798"),
+        (r'secret[_-]?key\s*=\s*["\'][^"\']{16,}["\']', "Hardcoded Secret Key", "CWE-798"),
+        (r'token\s*=\s*["\'][^"\']{20,}["\']', "Hardcoded Token", "CWE-798"),
+        (r'aws[_-]?access[_-]?key[_-]?id\s*=\s*["\'][^"\']+["\']', "AWS Access Key", "CWE-798"),
+        (r'aws[_-]?secret[_-]?access[_-]?key\s*=\s*["\'][^"\']+["\']', "AWS Secret Key", "CWE-798"),
+        (r'database[_-]?url\s*=\s*["\'].*://.*:.*@.*["\']', "Database URL with Credentials", "CWE-798"),
+        (r'smtp[_-]?password\s*=\s*["\'][^"\']+["\']', "SMTP Password", "CWE-798"),
+    ]
+    
+    for file_path in files:
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                lines = content.splitlines()
+            
+            for pattern, title, cwe_id in secret_patterns:
+                for match in re.finditer(pattern, content, re.IGNORECASE):
+                    line_num = content.count('\n', 0, match.start()) + 1
+                    line_content = lines[line_num - 1].strip() if line_num <= len(lines) else ""
+                    
+                    # Skip if it's a comment or example
+                    if line_content.strip().startswith('#') or 'example' in line_content.lower():
+                        continue
+                    
+                    add_finding(
+                        severity="HIGH",
+                        category="Secrets Management",
+                        title=title,
+                        description=f"Potential hardcoded secret detected: {match.group()}",
+                        file_path=file_path,
+                        line_number=line_num,
+                        code_snippet=line_content,
+                        recommendation="Use environment variables or secure secret management systems",
+                        cwe_id=cwe_id
+                    )
+                    print_finding("HIGH", f"{title} detected", file_path, line_num)
+                    found_issues += 1
+                    
+        except Exception as e:
+            print(f"{Colors.YELLOW}Warning: Could not read file {file_path}: {e}{Colors.ENDC}")
+    
+    if found_issues == 0:
+        print(f"{Colors.GREEN}✔ No hardcoded secrets detected.{Colors.ENDC}")
+    return found_issues
+
+def check_sql_injection_patterns(py_files: List[str]) -> int:
+    """Check for potential SQL injection vulnerabilities."""
+    print_header("Enhanced Check: SQL Injection Patterns")
+    found_issues = 0
+    
+    # Patterns that might indicate SQL injection vulnerabilities
+    sql_patterns = [
+        (r'execute\s*\(\s*["\'].*%s.*["\'].*%', "String formatting in SQL execute"),
+        (r'execute\s*\(\s*f["\'].*\{.*\}.*["\']', "f-string in SQL execute"),
+        (r'query\s*\(\s*["\'].*%s.*["\'].*%', "String formatting in SQL query"),
+        (r'query\s*\(\s*f["\'].*\{.*\}.*["\']', "f-string in SQL query"),
+        (r'\.format\s*\(.*\).*execute', "String format with execute"),
+        (r'SELECT.*\+.*FROM', "String concatenation in SELECT"),
+        (r'INSERT.*\+.*VALUES', "String concatenation in INSERT"),
+        (r'UPDATE.*\+.*SET', "String concatenation in UPDATE"),
+        (r'DELETE.*\+.*FROM', "String concatenation in DELETE"),
+    ]
+    
+    for file_path in py_files:
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                lines = content.splitlines()
+            
+            for pattern, description in sql_patterns:
+                for match in re.finditer(pattern, content, re.IGNORECASE):
+                    line_num = content.count('\n', 0, match.start()) + 1
+                    line_content = lines[line_num - 1].strip() if line_num <= len(lines) else ""
+                    
+                    add_finding(
+                        severity="HIGH",
+                        category="Input Validation",
+                        title="Potential SQL Injection",
+                        description=f"{description}: {match.group()}",
+                        file_path=file_path,
+                        line_number=line_num,
+                        code_snippet=line_content,
+                        recommendation="Use parameterized queries or ORM methods",
+                        cwe_id="CWE-89"
+                    )
+                    print_finding("HIGH", f"Potential SQL injection: {description}", file_path, line_num)
+                    found_issues += 1
+                    
+        except Exception as e:
+            print(f"{Colors.YELLOW}Warning: Could not read file {file_path}: {e}{Colors.ENDC}")
+    
+    if found_issues == 0:
+        print(f"{Colors.GREEN}✔ No obvious SQL injection patterns found.{Colors.ENDC}")
+    return found_issues
+
+def check_weak_crypto_patterns(files: List[str]) -> int:
+    """Check for weak cryptographic practices."""
+    print_header("Enhanced Check: Weak Cryptography")
+    found_issues = 0
+    
+    weak_crypto_patterns = [
+        (r'hashlib\.md5\(', "MD5 hash usage", "Use SHA-256 or stronger", "CWE-327"),
+        (r'hashlib\.sha1\(', "SHA-1 hash usage", "Use SHA-256 or stronger", "CWE-327"),
+        (r'random\.random\(\)', "Weak random number generation", "Use secrets module for cryptographic purposes", "CWE-338"),
+        (r'DES\.new\(', "DES encryption", "Use AES or stronger encryption", "CWE-327"),
+        (r'RC4\.new\(', "RC4 encryption", "Use AES or stronger encryption", "CWE-327"),
+        (r'ssl\.PROTOCOL_TLS', "Deprecated SSL protocol", "Use TLS 1.2 or higher", "CWE-327"),
+        (r'ssl_version\s*=\s*ssl\.PROTOCOL_SSLv', "SSL version usage", "Use TLS 1.2 or higher", "CWE-327"),
+    ]
+    
+    for file_path in files:
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                lines = content.splitlines()
+            
+            for pattern, title, recommendation, cwe_id in weak_crypto_patterns:
+                for match in re.finditer(pattern, content):
+                    line_num = content.count('\n', 0, match.start()) + 1
+                    line_content = lines[line_num - 1].strip() if line_num <= len(lines) else ""
+                    
+                    add_finding(
+                        severity="MEDIUM",
+                        category="Cryptography",
+                        title=title,
+                        description=f"Weak cryptographic practice detected: {match.group()}",
+                        file_path=file_path,
+                        line_number=line_num,
+                        code_snippet=line_content,
+                        recommendation=recommendation,
+                        cwe_id=cwe_id
+                    )
+                    print_finding("MEDIUM", title, file_path, line_num)
+                    found_issues += 1
+                    
+        except Exception as e:
+            print(f"{Colors.YELLOW}Warning: Could not read file {file_path}: {e}{Colors.ENDC}")
+    
+    if found_issues == 0:
+        print(f"{Colors.GREEN}✔ No weak cryptography patterns found.{Colors.ENDC}")
+    return found_issues
+
+def check_file_permissions() -> int:
+    """Check for insecure file permissions."""
+    print_header("Enhanced Check: File Permissions")
+    found_issues = 0
+    
+    sensitive_files = [
+        '.env', '.env.local', '.env.production',
+        'config.py', 'settings.py',
+        'private_key.pem', 'id_rsa', 'id_dsa',
+        'database.db', '*.key', '*.pem'
+    ]
+    
+    for pattern in sensitive_files:
+        for file_path in Path('.').rglob(pattern):
+            if file_path.is_file():
+                stat = file_path.stat()
+                mode = oct(stat.st_mode)[-3:]  # Get last 3 digits of octal mode
+                
+                # Check if file is readable by others (world-readable)
+                if int(mode[2]) & 4:  # Others have read permission
+                    add_finding(
+                        severity="HIGH",
+                        category="File Permissions",
+                        title="World-readable sensitive file",
+                        description=f"Sensitive file {file_path} is readable by others (permissions: {mode})",
+                        file_path=str(file_path),
+                        line_number=1,
+                        recommendation="Restrict file permissions to owner only (chmod 600)",
+                        cwe_id="CWE-732"
+                    )
+                    print_finding("HIGH", f"World-readable sensitive file (permissions: {mode})", str(file_path), 1)
+                    found_issues += 1
+    
+    if found_issues == 0:
+        print(f"{Colors.GREEN}✔ No insecure file permissions found.{Colors.ENDC}")
+    return found_issues
+
+def check_debug_information(files: List[str]) -> int:
+    """Check for debug information that might leak sensitive data."""
+    print_header("Enhanced Check: Debug Information Leakage")
+    found_issues = 0
+    
+    debug_patterns = [
+        (r'DEBUG\s*=\s*True', "Debug mode enabled", "Disable debug mode in production"),
+        (r'print\s*\(\s*.*password.*\)', "Password in print statement", "Remove debug prints with sensitive data"),
+        (r'console\.log\s*\(\s*.*password.*\)', "Password in console.log", "Remove debug logs with sensitive data"),
+        (r'logger\.debug\s*\(\s*.*password.*\)', "Password in debug log", "Remove sensitive data from logs"),
+        (r'traceback\.print_exc\(\)', "Exception traceback printing", "Use proper error handling in production"),
+    ]
+    
+    for file_path in files:
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                lines = content.splitlines()
+            
+            for pattern, title, recommendation in debug_patterns:
+                for match in re.finditer(pattern, content, re.IGNORECASE):
+                    line_num = content.count('\n', 0, match.start()) + 1
+                    line_content = lines[line_num - 1].strip() if line_num <= len(lines) else ""
+                    
+                    add_finding(
+                        severity="MEDIUM",
+                        category="Information Disclosure",
+                        title=title,
+                        description=f"Debug information detected: {match.group()}",
+                        file_path=file_path,
+                        line_number=line_num,
+                        code_snippet=line_content,
+                        recommendation=recommendation,
+                        cwe_id="CWE-200"
+                    )
+                    print_finding("MEDIUM", title, file_path, line_num)
+                    found_issues += 1
+                    
+        except Exception as e:
+            print(f"{Colors.YELLOW}Warning: Could not read file {file_path}: {e}{Colors.ENDC}")
+    
+    if found_issues == 0:
+        print(f"{Colors.GREEN}✔ No debug information leakage found.{Colors.ENDC}")
+    return found_issues
+
+def check_https_enforcement(files: List[str]) -> int:
+    """Check for HTTPS enforcement and secure connections."""
+    print_header("Enhanced Check: HTTPS/TLS Security")
+    found_issues = 0
+    
+    for file_path in files:
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                lines = content.splitlines()
+            
+            # Check for HTTP URLs (should be HTTPS)
+            http_patterns = [
+                (r'http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0)', "HTTP URL found", "Use HTTPS instead of HTTP"),
+                (r'["\']http://[^"\']*["\']', "Hardcoded HTTP URL", "Replace with HTTPS URL"),
+                (r'url\s*=\s*["\']http://[^"\']*["\']', "HTTP URL in configuration", "Use HTTPS URLs"),
+                (r'api[_-]?url\s*=\s*["\']http://[^"\']*["\']', "HTTP API URL", "Use HTTPS for API endpoints"),
+            ]
+            
+            for pattern, title, recommendation in http_patterns:
+                for match in re.finditer(pattern, content, re.IGNORECASE):
+                    line_num = content.count('\n', 0, match.start()) + 1
+                    line_content = lines[line_num - 1].strip() if line_num <= len(lines) else ""
+                    
+                    # Skip if it's a comment or example
+                    if line_content.strip().startswith('#') or line_content.strip().startswith('//'):
+                        continue
+                    
+                    add_finding(
+                        severity="HIGH",
+                        category="HTTPS/TLS",
+                        title=title,
+                        description=f"Insecure HTTP connection detected: {match.group()}",
+                        file_path=file_path,
+                        line_number=line_num,
+                        code_snippet=line_content,
+                        recommendation=recommendation,
+                        cwe_id="CWE-319"
+                    )
+                    print_finding("HIGH", title, file_path, line_num)
+                    found_issues += 1
+            
+            # Check for SSL/TLS configuration issues
+            ssl_patterns = [
+                (r'ssl_verify\s*=\s*False', "SSL verification disabled", "Enable SSL certificate verification"),
+                (r'verify\s*=\s*False', "Certificate verification disabled", "Enable certificate verification"),
+                (r'SSLOPT_NO_VERIFY', "SSL verification disabled", "Remove SSLOPT_NO_VERIFY flag"),
+                (r'ssl\.CERT_NONE', "SSL certificate verification disabled", "Use ssl.CERT_REQUIRED"),
+                (r'requests\.get\([^)]*verify\s*=\s*False', "Requests without SSL verification", "Remove verify=False parameter"),
+                (r'urllib3\.disable_warnings', "SSL warnings disabled", "Fix SSL issues instead of disabling warnings"),
+            ]
+            
+            for pattern, title, recommendation in ssl_patterns:
+                for match in re.finditer(pattern, content, re.IGNORECASE):
+                    line_num = content.count('\n', 0, match.start()) + 1
+                    line_content = lines[line_num - 1].strip() if line_num <= len(lines) else ""
+                    
+                    add_finding(
+                        severity="HIGH",
+                        category="HTTPS/TLS",
+                        title=title,
+                        description=f"SSL/TLS security issue: {match.group()}",
+                        file_path=file_path,
+                        line_number=line_num,
+                        code_snippet=line_content,
+                        recommendation=recommendation,
+                        cwe_id="CWE-295"
+                    )
+                    print_finding("HIGH", title, file_path, line_num)
+                    found_issues += 1
+            
+            # Check for Flask HTTPS enforcement
+            if file_path.endswith('.py') and ('flask' in content.lower() or 'app.run' in content):
+                # Check for HTTPS redirect
+                https_redirect_patterns = [
+                    r'@app\.before_request.*force_https',
+                    r'if.*request\.is_secure.*redirect',
+                    r'FORCE_HTTPS\s*=\s*True',
+                    r'SSL_REDIRECT\s*=\s*True',
+                ]
+                
+                has_https_redirect = any(re.search(pattern, content, re.IGNORECASE) for pattern in https_redirect_patterns)
+                
+                # Check for secure cookie settings
+                secure_cookie_patterns = [
+                    r'SESSION_COOKIE_SECURE\s*=\s*True',
+                    r'SESSION_COOKIE_HTTPONLY\s*=\s*True',
+                    r'REMEMBER_COOKIE_SECURE\s*=\s*True',
+                ]
+                
+                secure_cookies = sum(1 for pattern in secure_cookie_patterns if re.search(pattern, content))
+                
+                if not has_https_redirect and '@app.route' in content:
+                    add_finding(
+                        severity="MEDIUM",
+                        category="HTTPS/TLS",
+                        title="Missing HTTPS Enforcement",
+                        description="Flask application without HTTPS redirect",
+                        file_path=file_path,
+                        line_number=1,
+                        recommendation="Implement HTTPS redirect for all HTTP requests",
+                        cwe_id="CWE-319"
+                    )
+                    print_finding("MEDIUM", "Missing HTTPS enforcement", file_path, 1)
+                    found_issues += 1
+                
+                if secure_cookies < 2 and 'session' in content.lower():
+                    add_finding(
+                        severity="MEDIUM",
+                        category="HTTPS/TLS",
+                        title="Insecure Cookie Configuration",
+                        description="Session cookies not configured for HTTPS",
+                        file_path=file_path,
+                        line_number=1,
+                        recommendation="Set SESSION_COOKIE_SECURE=True and SESSION_COOKIE_HTTPONLY=True",
+                        cwe_id="CWE-614"
+                    )
+                    print_finding("MEDIUM", "Insecure cookie configuration", file_path, 1)
+                    found_issues += 1
+            
+            # Check for JavaScript/Frontend HTTPS issues
+            if file_path.endswith(('.js', '.vue', '.ts')):
+                # Check for mixed content issues
+                mixed_content_patterns = [
+                    (r'src\s*=\s*["\']http://[^"\']*["\']', "HTTP resource in HTTPS page"),
+                    (r'href\s*=\s*["\']http://[^"\']*["\']', "HTTP link in HTTPS page"),
+                    (r'fetch\s*\(\s*["\']http://[^"\']*["\']', "HTTP fetch request"),
+                    (r'axios\.get\s*\(\s*["\']http://[^"\']*["\']', "HTTP axios request"),
+                ]
+                
+                for pattern, title in mixed_content_patterns:
+                    for match in re.finditer(pattern, content, re.IGNORECASE):
+                        line_num = content.count('\n', 0, match.start()) + 1
+                        line_content = lines[line_num - 1].strip() if line_num <= len(lines) else ""
+                        
+                        # Skip localhost and development URLs
+                        if 'localhost' in match.group() or '127.0.0.1' in match.group():
+                            continue
+                        
+                        add_finding(
+                            severity="HIGH",
+                            category="HTTPS/TLS",
+                            title=title,
+                            description=f"Mixed content issue: {match.group()}",
+                            file_path=file_path,
+                            line_number=line_num,
+                            code_snippet=line_content,
+                            recommendation="Use HTTPS URLs or protocol-relative URLs (//)",
+                            cwe_id="CWE-319"
+                        )
+                        print_finding("HIGH", title, file_path, line_num)
+                        found_issues += 1
+                        
+        except Exception as e:
+            print(f"{Colors.YELLOW}Warning: Could not read file {file_path}: {e}{Colors.ENDC}")
+    
+    if found_issues == 0:
+        print(f"{Colors.GREEN}✔ HTTPS/TLS configuration looks secure.{Colors.ENDC}")
+    return found_issues
+
+def check_network_security_headers(py_files: List[str]) -> int:
+    """Check for security headers implementation."""
+    print_header("Enhanced Check: Security Headers")
+    found_issues = 0
+    
+    security_headers = [
+        ('Strict-Transport-Security', 'HSTS header', 'Implement HSTS to enforce HTTPS'),
+        ('Content-Security-Policy', 'CSP header', 'Implement Content Security Policy'),
+        ('X-Frame-Options', 'Clickjacking protection', 'Add X-Frame-Options header'),
+        ('X-Content-Type-Options', 'MIME sniffing protection', 'Add X-Content-Type-Options: nosniff'),
+        ('Referrer-Policy', 'Referrer policy', 'Implement appropriate referrer policy'),
+        ('Permissions-Policy', 'Feature policy', 'Consider implementing Permissions-Policy'),
+    ]
+    
+    for file_path in py_files:
+        if 'routes' not in file_path and 'app' not in file_path:
+            continue
+            
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            
+            # Check if Flask security headers are implemented
+            if 'flask' in content.lower():
+                headers_found = []
+                
+                for header_name, description, recommendation in security_headers:
+                    # Check for header implementation
+                    header_patterns = [
+                        rf'["\']?{header_name}["\']?\s*:\s*["\'][^"\']+["\']',
+                        rf'response\.headers\[["\']?{header_name}["\']?\]',
+                        rf'@app\.after_request.*{header_name}',
+                    ]
+                    
+                    header_found = any(re.search(pattern, content, re.IGNORECASE) for pattern in header_patterns)
+                    if header_found:
+                        headers_found.append(header_name)
+                
+                # Check for missing critical headers
+                critical_headers = ['Strict-Transport-Security', 'Content-Security-Policy', 'X-Frame-Options']
+                missing_critical = [h for h in critical_headers if h not in headers_found]
+                
+                if missing_critical and '@app.route' in content:
+                    for header in missing_critical:
+                        header_info = next((h for h in security_headers if h[0] == header), None)
+                        if header_info:
+                            add_finding(
+                                severity="MEDIUM",
+                                category="Security Headers",
+                                title=f"Missing {header_info[1]}",
+                                description=f"Critical security header {header} not implemented",
+                                file_path=file_path,
+                                line_number=1,
+                                recommendation=header_info[2],
+                                cwe_id="CWE-693"
+                            )
+                            print_finding("MEDIUM", f"Missing {header} header", file_path, 1)
+                            found_issues += 1
+                            
+        except Exception as e:
+            print(f"{Colors.YELLOW}Warning: Could not read file {file_path}: {e}{Colors.ENDC}")
+    
+    if found_issues == 0:
+        print(f"{Colors.GREEN}✔ Security headers configuration looks good.{Colors.ENDC}")
+    return found_issues
+
+def generate_report(config: AuditConfig):
+    """Generate security audit report in specified format."""
+    if config.output_format == "json":
+        report = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "total_findings": len(findings),
+            "severity_breakdown": {
+                "HIGH": len([f for f in findings if f.severity == "HIGH"]),
+                "MEDIUM": len([f for f in findings if f.severity == "MEDIUM"]),
+                "LOW": len([f for f in findings if f.severity == "LOW"]),
+                "INFO": len([f for f in findings if f.severity == "INFO"]),
+            },
+            "findings": [f.to_dict() for f in findings]
+        }
+        
+        output_file = config.output_file or f"security_audit_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(output_file, 'w') as f:
+            json.dump(report, f, indent=2)
+        print(f"{Colors.GREEN}Report saved to: {output_file}{Colors.ENDC}")
+    
+    elif config.output_format == "html":
+        html_content = generate_html_report()
+        output_file = config.output_file or f"security_audit_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+        with open(output_file, 'w') as f:
+            f.write(html_content)
+        print(f"{Colors.GREEN}HTML report saved to: {output_file}{Colors.ENDC}")
+
+def generate_html_report() -> str:
+    """Generate HTML security audit report."""
+    severity_colors = {
+        "HIGH": "#dc3545",
+        "MEDIUM": "#fd7e14", 
+        "LOW": "#0dcaf0",
+        "INFO": "#6c757d"
+    }
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Security Audit Report</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+            .header {{ background: #f8f9fa; padding: 20px; border-radius: 5px; }}
+            .finding {{ margin: 15px 0; padding: 15px; border-left: 4px solid; }}
+            .HIGH {{ border-color: {severity_colors['HIGH']}; background: #f8d7da; }}
+            .MEDIUM {{ border-color: {severity_colors['MEDIUM']}; background: #fff3cd; }}
+            .LOW {{ border-color: {severity_colors['LOW']}; background: #d1ecf1; }}
+            .INFO {{ border-color: {severity_colors['INFO']}; background: #e2e3e5; }}
+            .code {{ background: #f8f9fa; padding: 10px; font-family: monospace; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Security Audit Report</h1>
+            <p>Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+            <p>Total Findings: {len(findings)}</p>
+        </div>
+    """
+    
+    for finding in findings:
+        html += f"""
+        <div class="finding {finding.severity}">
+            <h3>{finding.title} ({finding.severity})</h3>
+            <p><strong>Category:</strong> {finding.category}</p>
+            <p><strong>File:</strong> {finding.file_path}:{finding.line_number}</p>
+            <p><strong>Description:</strong> {finding.description}</p>
+            {f'<div class="code">{finding.code_snippet}</div>' if finding.code_snippet else ''}
+            {f'<p><strong>Recommendation:</strong> {finding.recommendation}</p>' if finding.recommendation else ''}
+            {f'<p><strong>CWE ID:</strong> {finding.cwe_id}</p>' if finding.cwe_id else ''}
+        </div>
+        """
+    
+    html += "</body></html>"
+    return html
+
+def run_enhanced_audit(config: AuditConfig):
+    """Run the enhanced security audit with all checks."""
+    print(f"{Colors.BOLD}Starting Enhanced Security Audit...{Colors.ENDC}")
+    
+    all_files = []
+    backend_py_files = []
+    frontend_files = []
+    
+    # Collect files
+    if os.path.isdir(BACKEND_DIR):
+        backend_py_files = find_files(BACKEND_DIR, '.py')
+        all_files.extend(backend_py_files)
+        all_files.extend(find_files(BACKEND_DIR, '.env'))
+        all_files.extend(find_files(BACKEND_DIR, '.yml'))
+        all_files.extend(find_files(BACKEND_DIR, '.yaml'))
+    
+    if os.path.isdir(FRONTEND_DIR):
+        frontend_files = find_files(FRONTEND_DIR, '.vue')
+        frontend_files.extend(find_files(FRONTEND_DIR, '.js'))
+        frontend_files.extend(find_files(FRONTEND_DIR, '.ts'))
+        all_files.extend(frontend_files)
+    
+    # Add root level files
+    all_files.extend([f for f in os.listdir('.') if f.endswith(('.py', '.env', '.yml', '.yaml'))])
+    
+    # Run enhanced security checks
+    total_issues = 0
+    
+    # Core security checks
+    total_issues += check_hardcoded_secrets(all_files)
+    total_issues += check_sql_injection_patterns(backend_py_files)
+    total_issues += check_weak_crypto_patterns(all_files)
+    total_issues += check_file_permissions()
+    total_issues += check_debug_information(all_files)
+    total_issues += check_https_enforcement(all_files)
+    total_issues += check_network_security_headers(backend_py_files)
+    
+    # Original checks
+    if backend_py_files:
+        total_issues += check_missing_permissions(backend_py_files)
+        total_issues += check_unsanitized_input(backend_py_files)
+        check_secure_cookies(os.path.join(BACKEND_DIR, 'config.py'))
+    
+    if frontend_files:
+        vue_files = [f for f in frontend_files if f.endswith('.vue')]
+        check_xss_vulnerabilities(vue_files)
+    
+    # Dependency checks (if not skipped)
+    if not config.skip_dependency_check:
+        if os.path.isdir(BACKEND_DIR):
+            total_issues += run_pip_audit()
+        if os.path.isdir(FRONTEND_DIR):
+            total_issues += run_npm_audit()
+    
+    # Static analysis (if not skipped)
+    if not config.skip_static_analysis:
+        if os.path.isdir(BACKEND_DIR):
+            total_issues += run_bandit_scan()
+    
+    # Generate report
+    if config.output_format != "console":
+        generate_report(config)
+    
+    # Summary
+    print_header("Enhanced Audit Summary")
+    severity_counts = {
+        "HIGH": len([f for f in findings if f.severity == "HIGH"]),
+        "MEDIUM": len([f for f in findings if f.severity == "MEDIUM"]),
+        "LOW": len([f for f in findings if f.severity == "LOW"]),
+        "INFO": len([f for f in findings if f.severity == "INFO"]),
+    }
+    
+    print(f"Total findings: {len(findings)}")
+    for severity, count in severity_counts.items():
+        if count > 0:
+            color = {"HIGH": Colors.RED, "MEDIUM": Colors.YELLOW, "LOW": Colors.BLUE, "INFO": Colors.ENDC}[severity]
+            print(f"  {color}{severity}: {count}{Colors.ENDC}")
+    
+    if len(findings) == 0:
+        print(f"{Colors.GREEN}{Colors.BOLD}✔ Congratulations! No security issues found.{Colors.ENDC}")
+        return 0
+    else:
+        high_medium = severity_counts["HIGH"] + severity_counts["MEDIUM"]
+        if high_medium > 0:
+            print(f"{Colors.RED}{Colors.BOLD}✖ Security audit failed with {high_medium} high/medium severity issues.{Colors.ENDC}")
+            return 1
+        else:
+            print(f"{Colors.YELLOW}⚠ Security audit completed with only low severity issues.{Colors.ENDC}")
+            return 0
 
 if __name__ == '__main__':
-    print(f"{Colors.BOLD}Starting security audit...{Colors.RESET}")
-
-    # --- Backend Audit ---
-    if os.path.isdir(BACKEND_DIR):
-        print_header("BACKEND AUDIT")
-        backend_py_files = find_files(BACKEND_DIR, '.py')
-        check_missing_permissions(backend_py_files)
-        check_unsanitized_input(backend_py_files)
-        check_secure_cookies(os.path.join(BACKEND_DIR, 'config.py'))
-        check_dependency_vulnerabilities(BACKEND_DIR, "pip-audit")
-    else:
-        print(f"{Colors.YELLOW}Backend directory '{BACKEND_DIR}' not found. Skipping backend checks.{Colors.RESET}")
-
-    # --- Frontend Audit ---
-    if os.path.isdir(FRONTEND_DIR):
-        print_header("FRONTEND AUDIT")
-        vue_files = find_files(FRONTEND_DIR, '.vue')
-        check_xss_vulnerabilities(vue_files)
-        check_dependency_vulnerabilities(FRONTEND_DIR, "npm audit")
-    else:
-        print(f"{Colors.YELLOW}Frontend directory '{FRONTEND_DIR}' not found. Skipping frontend checks.{Colors.RESET}")
-
-    print(f"\n{Colors.BOLD}Audit complete.{Colors.RESET}")
-
-
-
-def main():
-    """Main function to run all security audits."""
-    print(f"{Colors.BOLD}Starting Comprehensive Security Audit...{Colors.ENDC}")
+    parser = argparse.ArgumentParser(description='Enhanced Security Audit Tool')
+    parser.add_argument('--format', choices=['console', 'json', 'html'], default='console',
+                       help='Output format (default: console)')
+    parser.add_argument('--output', '-o', help='Output file path')
+    parser.add_argument('--include-low', action='store_true', 
+                       help='Include low severity findings')
+    parser.add_argument('--skip-deps', action='store_true',
+                       help='Skip dependency vulnerability checks')
+    parser.add_argument('--skip-static', action='store_true',
+                       help='Skip static analysis (bandit)')
+    parser.add_argument('--legacy', action='store_true',
+                       help='Run legacy audit mode')
     
-    bandit_issues = run_bandit_scan()
-    npm_issues = run_npm_audit()
+    args = parser.parse_args()
     
-    total_issues = bandit_issues + npm_issues
+    config = AuditConfig(
+        include_low_severity=args.include_low,
+        output_format=args.format,
+        output_file=args.output,
+        skip_dependency_check=args.skip_deps,
+        skip_static_analysis=args.skip_static
+    )
     
-    print_header("Audit Summary")
-    if total_issues == 0:
-        print(f"{Colors.OKGREEN}{Colors.BOLD}✔ Congratulations! The security audit passed with no high/medium severity issues found.{Colors.ENDC}")
+    if args.legacy:
+        # Run original audit
+        print(f"{Colors.BOLD}Starting security audit...{Colors.ENDC}")
+
+        # --- Backend Audit ---
+        if os.path.isdir(BACKEND_DIR):
+            print_header("BACKEND AUDIT")
+            backend_py_files = find_files(BACKEND_DIR, '.py')
+            check_missing_permissions(backend_py_files)
+            check_unsanitized_input(backend_py_files)
+            check_secure_cookies(os.path.join(BACKEND_DIR, 'config.py'))
+            check_dependency_vulnerabilities(BACKEND_DIR, "pip-audit")
+        else:
+            print(f"{Colors.YELLOW}Backend directory '{BACKEND_DIR}' not found. Skipping backend checks.{Colors.ENDC}")
+
+        # --- Frontend Audit ---
+        if os.path.isdir(FRONTEND_DIR):
+            print_header("FRONTEND AUDIT")
+            vue_files = find_files(FRONTEND_DIR, '.vue')
+            check_xss_vulnerabilities(vue_files)
+            check_dependency_vulnerabilities(FRONTEND_DIR, "npm audit")
+        else:
+            print(f"{Colors.YELLOW}Frontend directory '{FRONTEND_DIR}' not found. Skipping frontend checks.{Colors.ENDC}")
+
+        print(f"\n{Colors.BOLD}Audit complete.{Colors.ENDC}")
         sys.exit(0)
     else:
-        print(f"{Colors.FAIL}{Colors.BOLD}✖ Security audit failed with a total of {total_issues} issues found.{Colors.ENDC}")
-        print(f"  - Backend (Bandit): {bandit_issues} issues")
-        print(f"  - Frontend (npm): {npm_issues} vulnerabilities")
-        print(f"{Colors.WARNING}Please review the findings above and address them accordingly.{Colors.ENDC}")
-        sys.exit(1)
+        # Run enhanced audit
+        exit_code = run_enhanced_audit(config)
+        sys.exit(exit_code)
 
 
-if __name__ == "__main__":
-    main()
+
+
