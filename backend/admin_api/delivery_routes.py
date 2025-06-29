@@ -1,10 +1,36 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, jwta
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
 from ..utils.decorators import log_admin_action
 from backend.services.delivery_service import DeliveryService
 from backend.services.loyalty_service import LoyaltyService
 
 delivery_admin_bp = Blueprint('delivery_admin_bp', __name__, url_prefix='/admin/delivery-methods')
+
+@delivery_admin_bp.route('/settings', methods=['GET'])
+@permissions_required('MANAGE_DELIVERY')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def get_settings():
+    """Get all delivery countries and options."""
+    settings = DeliveryService.get_delivery_settings()
+    return jsonify(settings), 200
+
+@delivery_admin_bp.route('/settings', methods=['POST'])
+@permissions_required('MANAGE_DELIVERY')
+@log_admin_action
+@roles_required ('Admin', 'Manager')
+@admin_required
+def update_settings():
+    """Update delivery settings."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"message": "No data provided"}), 400
+    
+    DeliveryService.update_delivery_settings(data)
+    return jsonify({"message": "Delivery settings updated successfully"}), 200
+
 
 @delivery_admin_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')

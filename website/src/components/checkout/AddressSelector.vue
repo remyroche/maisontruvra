@@ -1,335 +1,136 @@
 <template>
-  <div class="bg-white rounded-lg shadow-sm border p-6">
-    <h3 class="text-lg font-semibold text-gray-900 mb-4">Adresse de livraison</h3>
-    
-    <!-- Loading State -->
-    <div v-if="isLoading" class="flex items-center justify-center py-8">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-burgundy"></div>
-    </div>
+  <div>
+    <h3 class="text-lg font-medium text-gray-900">{{ title }}</h3>
 
-    <!-- Address Selection -->
-    <div v-else>
-      <!-- Existing Addresses -->
-      <div v-if="addresses.length > 0" class="space-y-3 mb-6">
-        <div 
-          v-for="address in addresses" 
-          :key="address.id"
-          class="border rounded-lg p-4 cursor-pointer transition-colors"
-          :class="{
-            'border-brand-burgundy bg-brand-cream': selectedAddress?.id === address.id,
-            'border-gray-200 hover:border-gray-300': selectedAddress?.id !== address.id
-          }"
-          @click="selectAddress(address)"
-        >
-          <div class="flex items-start justify-between">
-            <div class="flex-1">
-              <div class="flex items-center mb-2">
-                <input 
-                  type="radio" 
-                  :checked="selectedAddress?.id === address.id"
-                  class="text-brand-burgundy focus:ring-brand-burgundy"
-                  readonly
-                >
-                <span class="ml-2 font-medium text-gray-900">{{ address.label || 'Adresse' }}</span>
-                <span v-if="address.is_default" class="ml-2 px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
-                  Par défaut
-                </span>
-              </div>
-              <div class="text-sm text-gray-600 ml-6">
-                <p>{{ address.first_name }} {{ address.last_name }}</p>
-                <p>{{ address.street_address }}</p>
-                <p v-if="address.apartment">{{ address.apartment }}</p>
-                <p>{{ address.postal_code }} {{ address.city }}</p>
-                <p v-if="address.country">{{ address.country }}</p>
-                <p v-if="address.phone">{{ address.phone }}</p>
-              </div>
+    <div v-if="addresses.length > 0" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div
+        v-for="address in addresses"
+        :key="address.id"
+        @click="selectAddress(address)"
+        :class="[
+          'relative block cursor-pointer rounded-lg border bg-white px-6 py-4 shadow-sm focus:outline-none sm:flex sm:justify-between',
+          { 'border-primary ring-2 ring-primary': selectedAddressId === address.id, 'border-gray-300': selectedAddressId !== address.id }
+        ]"
+      >
+        <div class="flex items-center">
+          <div class="text-sm">
+            <p class="font-medium text-gray-900">{{ address.first_name }} {{ address.last_name }}</p>
+            <div class="text-gray-500">
+              <p>{{ address.street_line_1 }}</p>
+              <p v-if="address.street_line_2">{{ address.street_line_2 }}</p>
+              <p>{{ address.city }}, {{ address.postal_code }}</p>
+              <p>{{ address.country }}</p>
             </div>
-            <button 
-              @click.stop="editAddress(address)"
-              class="text-gray-400 hover:text-gray-600 p-1"
-              title="Modifier l'adresse"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- Add New Address Button -->
-      <button 
-        @click="showAddressForm = true"
-        class="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-gray-600 hover:border-gray-400 hover:text-gray-700 transition-colors"
-      >
-        <svg class="w-6 h-6 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-        </svg>
-        Ajouter une nouvelle adresse
+    <div class="mt-6">
+      <button @click="showNewAddressForm = !showNewAddressForm" type="button" class="text-sm font-medium text-primary hover:text-primary-dark">
+        {{ showNewAddressForm ? $t('forms.cancel') : $t('address.addNew') }}
       </button>
+    </div>
 
-      <!-- Address Form Modal -->
-      <Modal v-if="showAddressForm" @close="closeAddressForm">
-        <template #header>
-          <h3 class="text-lg font-semibold">
-            {{ editingAddress ? 'Modifier l\'adresse' : 'Nouvelle adresse' }}
-          </h3>
-        </template>
-        
-        <form @submit.prevent="saveAddress" class="space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Prénom *</label>
-              <input 
-                v-model="addressForm.first_name"
-                type="text" 
-                required
-                class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-brand-burgundy focus:border-brand-burgundy"
-              >
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
-              <input 
-                v-model="addressForm.last_name"
-                type="text" 
-                required
-                class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-brand-burgundy focus:border-brand-burgundy"
-              >
-            </div>
-          </div>
-
+    <!-- New Address Form with Validation -->
+    <div v-if="showNewAddressForm" class="mt-6">
+      <VeeForm :validation-schema="addressSchema" @submit="onAddNewAddress" v-slot="{ isSubmitting }">
+        <div class="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Libellé de l'adresse</label>
-            <input 
-              v-model="addressForm.label"
-              type="text" 
-              placeholder="Domicile, Bureau, etc."
-              class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-brand-burgundy focus:border-brand-burgundy"
-            >
+            <label for="first-name" class="block text-sm font-medium text-gray-700">{{ $t('forms.firstName') }}</label>
+            <VeeField type="text" name="first_name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm" />
+            <VeeErrorMessage name="first_name" class="text-sm text-red-600 mt-1" />
           </div>
-
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Adresse *</label>
-            <input 
-              v-model="addressForm.street_address"
-              type="text" 
-              required
-              class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-brand-burgundy focus:border-brand-burgundy"
-            >
+            <label for="last-name" class="block text-sm font-medium text-gray-700">{{ $t('forms.lastName') }}</label>
+            <VeeField type="text" name="last_name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm" />
+            <VeeErrorMessage name="last_name" class="text-sm text-red-600 mt-1" />
           </div>
-
+          <div class="sm:col-span-2">
+            <label for="street-line-1" class="block text-sm font-medium text-gray-700">{{ $t('forms.address') }}</label>
+            <VeeField type="text" name="street_line_1" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm" />
+            <VeeErrorMessage name="street_line_1" class="text-sm text-red-600 mt-1" />
+          </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Complément d'adresse</label>
-            <input 
-              v-model="addressForm.apartment"
-              type="text" 
-              placeholder="Appartement, étage, etc."
-              class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-brand-burgundy focus:border-brand-burgundy"
-            >
+            <label for="city" class="block text-sm font-medium text-gray-700">{{ $t('forms.city') }}</label>
+            <VeeField type="text" name="city" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm" />
+            <VeeErrorMessage name="city" class="text-sm text-red-600 mt-1" />
           </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Code postal *</label>
-              <input 
-                v-model="addressForm.postal_code"
-                type="text" 
-                required
-                class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-brand-burgundy focus:border-brand-burgundy"
-              >
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Ville *</label>
-              <input 
-                v-model="addressForm.city"
-                type="text" 
-                required
-                class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-brand-burgundy focus:border-brand-burgundy"
-              >
-            </div>
-          </div>
-
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Pays</label>
-            <select 
-              v-model="addressForm.country"
-              class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-brand-burgundy focus:border-brand-burgundy"
-            >
-              <option value="France">France</option>
-              <option value="Belgique">Belgique</option>
-              <option value="Suisse">Suisse</option>
-              <option value="Luxembourg">Luxembourg</option>
-            </select>
+            <label for="postal-code" class="block text-sm font-medium text-gray-700">{{ $t('forms.postalCode') }}</label>
+            <VeeField type="text" name="postal_code" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm" />
+            <VeeErrorMessage name="postal_code" class="text-sm text-red-600 mt-1" />
           </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
-            <input 
-              v-model="addressForm.phone"
-              type="tel" 
-              class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-brand-burgundy focus:border-brand-burgundy"
-            >
+          <div class="sm:col-span-2">
+            <label for="country" class="block text-sm font-medium text-gray-700">{{ $t('forms.country') }}</label>
+            <VeeField as="select" name="country" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+              <option value="" disabled>{{ $t('forms.selectCountry', { default: 'Select a country...' }) }}</option>
+              <option v-for="country in availableCountries" :key="country.code" :value="country.name">
+                {{ country.name }}
+              </option>
+            </VeeField>
+            <VeeErrorMessage name="country" class="text-sm text-red-600 mt-1" />
           </div>
-
-          <div class="flex items-center">
-            <input 
-              v-model="addressForm.is_default"
-              type="checkbox" 
-              id="is_default"
-              class="text-brand-burgundy focus:ring-brand-burgundy"
+        </div>
+        <div class="mt-6">
+            <button
+                type="submit"
+                :disabled="isSubmitting"
+                class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-gray-400"
             >
-            <label for="is_default" class="ml-2 text-sm text-gray-700">
-              Définir comme adresse par défaut
-            </label>
-          </div>
-
-          <div class="flex justify-end space-x-3 pt-4">
-            <button 
-              type="button" 
-              @click="closeAddressForm"
-              class="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              Annuler
+                {{ $t('address.save') }}
             </button>
-            <button 
-              type="submit" 
-              :disabled="isSaving"
-              class="px-4 py-2 bg-brand-burgundy text-white rounded-md hover:bg-opacity-90 disabled:opacity-50"
-            >
-              {{ isSaving ? 'Enregistrement...' : 'Enregistrer' }}
-            </button>
-          </div>
-        </form>
-      </Modal>
+        </div>
+      </VeeForm>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { apiClient } from '@/services/api';
-import { useUserStore } from '@/stores/user';
-import Modal from '@/components/ui/Modal.vue';
+import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
+import * as yup from 'yup';
+import api from '@/services/api';
 
-const emit = defineEmits(['address-selected']);
+const { t } = useI18n();
 
-const userStore = useUserStore();
-
-// State
-const addresses = ref([]);
-const selectedAddress = ref(null);
-const isLoading = ref(false);
-const showAddressForm = ref(false);
-const editingAddress = ref(null);
-const isSaving = ref(false);
-
-// Form data
-const addressForm = ref({
-  first_name: '',
-  last_name: '',
-  label: '',
-  street_address: '',
-  apartment: '',
-  postal_code: '',
-  city: '',
-  country: 'France',
-  phone: '',
-  is_default: false
+defineProps({
+  title: { type: String, required: true },
+  addresses: { type: Array, default: () => [] },
+  selectedAddressId: { type: [String, Number], default: null },
 });
 
-// Computed
-const hasAddresses = computed(() => addresses.value.length > 0);
+const emit = defineEmits(['select-address', 'add-address']);
 
-// Methods
-async function fetchAddresses() {
-  if (!userStore.isLoggedIn) return;
-  
-  isLoading.value = true;
+const showNewAddressForm = ref(false);
+const availableCountries = ref([]);
+
+onMounted(async () => {
   try {
-    const response = await apiClient.get('/user/addresses');
-    addresses.value = response.addresses || [];
-    
-    // Auto-select default address if available
-    const defaultAddress = addresses.value.find(addr => addr.is_default);
-    if (defaultAddress && !selectedAddress.value) {
-      selectAddress(defaultAddress);
-    }
+    const response = await api.getDeliveryCountries();
+    availableCountries.value = response.data;
   } catch (error) {
-    console.error('Failed to fetch addresses:', error);
-  } finally {
-    isLoading.value = false;
+    console.error("Failed to fetch delivery countries:", error);
   }
-}
+});
 
-function selectAddress(address) {
-  selectedAddress.value = address;
-  emit('address-selected', address);
-}
+const addressSchema = yup.object({
+  first_name: yup.string().required(t('validation.required')),
+  last_name: yup.string().required(t('validation.required')),
+  street_line_1: yup.string().required(t('validation.required')),
+  street_line_2: yup.string(),
+  city: yup.string().required(t('validation.required')),
+  postal_code: yup.string().required(t('validation.required')),
+  country: yup.string().required(t('validation.required')),
+});
 
-function editAddress(address) {
-  editingAddress.value = address;
-  addressForm.value = { ...address };
-  showAddressForm.value = true;
-}
+const selectAddress = (address) => {
+  emit('select-address', address);
+};
 
-function closeAddressForm() {
-  showAddressForm.value = false;
-  editingAddress.value = null;
+const onAddNewAddress = (values, { resetForm }) => {
+  emit('add-address', values);
   resetForm();
-}
-
-function resetForm() {
-  addressForm.value = {
-    first_name: '',
-    last_name: '',
-    label: '',
-    street_address: '',
-    apartment: '',
-    postal_code: '',
-    city: '',
-    country: 'France',
-    phone: '',
-    is_default: false
-  };
-}
-
-async function saveAddress() {
-  isSaving.value = true;
-  try {
-    let response;
-    if (editingAddress.value) {
-      // Update existing address
-      response = await apiClient.put(`/user/addresses/${editingAddress.value.id}`, addressForm.value);
-    } else {
-      // Create new address
-      response = await apiClient.post('/user/addresses', addressForm.value);
-    }
-
-    // Refresh addresses list
-    await fetchAddresses();
-    
-    // Auto-select the new/updated address
-    const savedAddress = response.address;
-    if (savedAddress) {
-      selectAddress(savedAddress);
-    }
-    
-    closeAddressForm();
-  } catch (error) {
-    console.error('Failed to save address:', error);
-  } finally {
-    isSaving.value = false;
-  }
-}
-
-// Lifecycle
-onMounted(() => {
-  fetchAddresses();
-});
-
-// Expose methods for parent component
-defineExpose({
-  selectedAddress: computed(() => selectedAddress.value),
-  hasValidSelection: computed(() => !!selectedAddress.value)
-});
+  showNewAddressForm.value = false;
+};
 </script>

@@ -2,18 +2,21 @@ from .base import BaseModel, SoftDeleteMixin # Added: Import SoftDeleteMixin
 from .enums import UserStatus, RoleType
 from backend.database import db # Changed: Import db from backend.database
 from flask_login import UserMixin
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from backend.utils.encryption import encrypt_data, decrypt_data # Changed: Use absolute import for utils
 from argon2 import PasswordHasher
 from backend.models.base import BaseModel # No change needed here
 from backend.config import Config
+from sqlalchemy.orm import relationship
+from .enums import UserRole, LanguagePreference
+from sqlalchemy.ext.hybrid import hybrid_property
 
 ph = PasswordHasher()
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     _email = db.Column('email', db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False, comment="Stores the hashed password, not plaintext.")
     password_hash = db.Column(db.String(255), nullable=False)
     _first_name = db.Column('first_name', db.String(50), nullable=False)
     _last_name = db.Column('last_name', db.String(50), nullable=False)
@@ -23,10 +26,12 @@ class User(db.Model, UserMixin):
     is_b2b = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     role = db.Column(db.String(80), default='user', nullable=False)
-    language = db.Column(db.String(10), default='fr', nullable=False)
+    language_preference = db.Column(db.Enum(LanguagePreference), default=LanguagePreference.FR, nullable=False)
+    subscribed_to_newsletter = db.Column(db.Boolean, default=False)
 
     addresses = db.relationship('Address', backref='user', lazy=True, cascade="all, delete-orphan")
     orders = db.relationship('Order', backref='user', lazy=True)
+    cart = relationship('Cart', uselist=False, back_populates='user', cascade="all, delete-orphan")
     reviews = db.relationship('Review', backref='user', lazy=True)
     wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True, cascade="all, delete-orphan")
     loyalty = relationship("UserLoyalty", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -36,6 +41,12 @@ class User(db.Model, UserMixin):
     two_factor_enabled = db.Column(db.Boolean, default=False)
 
     b2b_profile = db.relationship('B2BProfile', back_populates='user', uselist=False, cascade="all, delete-orphan")
+    b2b_account = relationship('B2BAccount', uselist=False, back_populates='user')
+    # Security fields
+    last_login_at = db.Column(db.DateTime, nullable=True)
+    last_login_ip = db.Column(db.String(45), nullable=True)
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    locked_at = db.Column(db.DateTime, nullable=True)
 
 
     @property
@@ -96,6 +107,13 @@ class User(db.Model, UserMixin):
     @phone_number.setter
     def phone_number(self, value):
         self._phone_number = encrypt_data(value)
+
+    @hybrid_property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+    def __repr__(self):
+        return f'<User {self.email}>'
 
     def to_public_dict(self):
         """Serialization for public-facing contexts (e.g., product reviews)."""

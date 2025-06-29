@@ -44,3 +44,29 @@ class BlogPostSchema(Schema):
     published = fields.Bool()
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+class UserRegistrationSchema(Schema):
+    firstName = fields.Str(required=True, data_key="first_name")
+    lastName = fields.Str(required=True, data_key="last_name")
+    email = fields.Email(required=True)
+    password = fields.Str(required=True, validate=validate.Length(min=8))
+
+class LoginSchema(Schema):
+    email = fields.Email(required=True)
+    password = fields.Str(required=True)
+
+class AddressSchema(Schema):
+    first_name = fields.Str(required=True)
+    last_name = fields.Str(required=True)
+    street_line_1 = fields.Str(required=True)
+    street_line_2 = fields.Str(allow_none=True)
+    city = fields.Str(required=True)
+    postal_code = fields.Str(required=True)
+    country = fields.Str(required=True)
+
+class ContactFormSchema(Schema):
+    """Schema for validating contact form submissions."""
+    name = fields.Str(required=True, validate=validate.Length(min=2, error="Name is required."))
+    email = fields.Email(required=True, error="A valid email is required.")
+    subject = fields.Str(required=True, validate=validate.Length(min=5, error="Subject must be at least 5 characters."))
+    message = fields.Str(required=True, validate=validate.Length(min=10, error="Message must be at least 10 characters."))

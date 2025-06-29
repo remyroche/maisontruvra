@@ -242,6 +242,9 @@ def create_app(config_class=config.Config):
     from .admin_api.session_routes import admin_session_bp
     app.register_blueprint(admin_session_bp, url_prefix='/api/admin/sessions')
 
+    from .contact.routes import contact_bp
+    app.register_blueprint(contact_bp)
+
     # Caching
     cache.init_app(app)
     limiter.init_app(app)

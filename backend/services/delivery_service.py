@@ -1,9 +1,9 @@
-from backend.database import db
-from backend.models.delivery_models import DeliveryMethod
-from backend.models.b2b_loyalty_models import LoyaltyTier
-from backend.models.user_models import User
-from backend.utils.sanitization import sanitize_input
-from backend.services.audit_log_service import AuditLogService
+from .. import db
+from ..models.delivery_models import DeliveryMethod
+from ..models.b2b_loyalty_models import LoyaltyTier
+from ..models.user_models import User
+from ..utils.sanitization import sanitize_input
+from .audit_log_service import AuditLogService
 
 class DeliveryService:
     @staticmethod

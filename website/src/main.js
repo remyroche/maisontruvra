@@ -1,62 +1,46 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import { defineRule, configure } from 'vee-validate';
-import { required, email, min, confirmed, max } from '@vee-validate/rules';
-import { localize } from '@vee-validate/i18n';
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
+import { defineRule, configure, Form, Field, ErrorMessage } from 'vee-validate';
+import * as AllRules from '@vee-validate/rules';
+import { localize, setLocale } from '@vee-validate/i18n';
 import fr from '@vee-validate/i18n/dist/locale/fr.json';
+import en from '@vee-validate/i18n/dist/locale/en.json';
+
 
 import App from './App.vue';
 import router from './router';
-import { useNotificationStore } from './stores/notification.js';
+import i18n from './services/i18n'; // Import our custom i18n service
+
 import './style.css';
 
-// --- VeeValidate Global Configuration ---
-defineRule('required', required);
-defineRule('email', email);
-defineRule('min', min);
-defineRule('max', max);
-defineRule('confirmed', confirmed);
-
-configure({
-  generateMessage: localize('fr', {
-    messages: {
-      ...fr.messages,
-      required: 'Ce champ est requis',
-      email: 'Veuillez saisir une adresse email valide',
-      min: 'Ce champ doit contenir au moins 0:{length} caractères',
-      max: 'Ce champ ne peut pas dépasser 0:{length} caractères',
-      confirmed: 'Les mots de passe ne correspondent pas'
-    }
-  }),
-  validateOnBlur: true,
-  validateOnChange: true,
-  validateOnInput: false,
+// --- VeeValidate Configuration ---
+// Define all validation rules globally
+Object.keys(AllRules).forEach(rule => {
+  defineRule(rule, AllRules[rule]);
 });
 
-// Create the Vue application instance
+// Configure VeeValidate to use localization
+configure({
+  generateMessage: localize({ fr, en }),
+  validateOnInput: true, // Validate fields as the user types
+});
+
+// Set default locale for validation messages
+setLocale('fr');
+
 const app = createApp(App);
-
-// Vue Global Error Handler
-app.config.errorHandler = (err, instance, info) => {
-  console.error("Unhandled Vue error:", err);
-  console.error("Occurred in component:", instance ? instance.$.type.name : 'Unknown');
-  console.error("Vue-specific info:", info);
-
-  // Show user-friendly error notification
-  try {
-    const notificationStore = useNotificationStore();
-    notificationStore.showNotification("Une erreur inattendue est survenue.", "error");
-  } catch (e) {
-    console.error("Failed to show error notification:", e);
-  }
-};
-
-// Create the Pinia instance for state management
 const pinia = createPinia();
+pinia.use(piniaPluginPersistedstate); // Add persistence to Pinia stores
 
-// Use Pinia and the Router
 app.use(pinia);
 app.use(router);
+app.use(i18n); // Use our custom i18n service
 
-// Mount the application to the DOM
+// Register VeeValidate components globally
+app.component('VeeForm', Form);
+app.component('VeeField', Field);
+app.component('VeeErrorMessage', ErrorMessage);
+
+
 app.mount('#app');
