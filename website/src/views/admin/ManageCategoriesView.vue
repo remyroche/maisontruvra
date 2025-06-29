@@ -35,7 +35,7 @@
 import { ref, onMounted } from 'vue';
 import { useAdminCategoriesStore } from '@/js/stores/adminCategories';
 import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
-import CategoryForm from '@/js/admin/components/CategoryForm.vue';
+import CategoryForm from '@/components/admin/CategoryForm.vue';
 
 const categoriesStore = useAdminCategoriesStore();
 const isEditing = ref(false);

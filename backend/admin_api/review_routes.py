@@ -1,12 +1,10 @@
 from flask import Blueprint, request, jsonify
 from backend.services.review_service import ReviewService
-from backend.auth.permissions import roles_required, permissions_required
-from ..utils.decorators import log_admin_action
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 
 review_bp = Blueprint('admin_review_routes', __name__, url_prefix='/api/admin/reviews')
 
 @review_bp.route('/', methods=['GET'])
-@log_admin_action
 @permissions_required('MANAGE_REVIEWS')
 def get_reviews():
     page = request.args.get('page', 1, type=int)
@@ -28,7 +26,6 @@ def get_reviews():
     })
 
 @review_bp.route('/<int:review_id>/approve', methods=['PUT'])
-@log_admin_action
 @permissions_required('MANAGE_REVIEWS')
 def approve_review(review_id):
     review = ReviewService.approve_review(review_id)
@@ -37,7 +34,6 @@ def approve_review(review_id):
     return jsonify(review.to_admin_dict())
 
 @review_bp.route('/<int:review_id>', methods=['DELETE'])
-@log_admin_action
 @permissions_required('MANAGE_REVIEWS')
 def delete_review(review_id):
     hard_delete = request.args.get('hard', 'false').lower() == 'true'
@@ -50,7 +46,6 @@ def delete_review(review_id):
     return jsonify({"error": "Review not found"}), 404
 
 @review_bp.route('/<int:review_id>/restore', methods=['PUT'])
-@log_admin_action
 @permissions_required('MANAGE_REVIEWS')
 def restore_review(review_id):
     if ReviewService.restore_review(review_id):

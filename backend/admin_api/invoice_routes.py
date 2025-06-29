@@ -2,13 +2,13 @@ from flask import Blueprint, request, jsonify
 from backend.database import db
 from backend.models.invoice_models import Quote, Invoice
 from backend.services.invoice_service import InvoiceService
-from backend.utils.decorators import admin_required
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 
 admin_invoice_bp = Blueprint('admin_invoice_bp', __name__, url_prefix='/api/admin')
 invoice_service = InvoiceService(db.session)
 
 @admin_invoice_bp.route('/quotes', methods=['GET'])
-@admin_required
+@roles_required ('Admin', 'Manager', 'Support')
 def get_all_quotes():
     quotes = Quote.query.filter_by(status='pending').order_by(Quote.created_at.desc()).all()
     quote_list = [{
@@ -18,7 +18,7 @@ def get_all_quotes():
     return jsonify(quote_list)
 
 @admin_invoice_bp.route('/quotes/<int:quote_id>/convert-to-invoice', methods=['POST'])
-@admin_required
+@roles_required ('Admin', 'Manager', 'Support')
 def convert_to_invoice(quote_id):
     data = request.get_json()
     items = data.get('items')
@@ -36,7 +36,7 @@ def convert_to_invoice(quote_id):
         return jsonify({"error": str(e)}), 400
         
 @admin_invoice_bp.route('/invoices/<int:invoice_id>/status', methods=['PUT'])
-@admin_required
+@roles_required ('Admin', 'Manager', 'Support')
 def update_invoice_status(invoice_id):
     data = request.get_json()
     new_status = data.get('status')

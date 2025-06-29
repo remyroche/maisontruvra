@@ -1,10 +1,9 @@
 from flask import Blueprint, request, jsonify
 from backend.services.product_service import ProductService
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 from backend.models.inventory_models import Inventory
 from backend.extensions import cache, db
-from ..utils.decorators import log_admin_action
 # Assuming the Celery task is defined in a tasks.py file at the backend root
 from backend.tasks import send_back_in_stock_emails_task
 
@@ -13,9 +12,7 @@ product_management_bp = Blueprint('product_management_routes', __name__, url_pre
 # CREATE a new product
 @product_management_bp.route('/products', methods=['POST'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def create_product():
     """
     Create a new product.
@@ -43,9 +40,7 @@ def create_product():
 
 @product_management_bp.route('/inventory/<int:inventory_id>', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Farmer')
-@admin_required
 def update_inventory(inventory_id):
     """
     Updates the quantity of an inventory item and triggers back-in-stock
@@ -88,9 +83,7 @@ def update_inventory(inventory_id):
 # READ all products (with pagination)
 @product_management_bp.route('/products', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Staff')
-@admin_required
 @cache.cached(timeout=21600)
 def get_products():
     """
@@ -123,9 +116,7 @@ def get_products():
 # READ a single product by ID
 @product_management_bp.route('/products/<int:product_id>', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 @cache.cached(timeout=21600)
 def get_product(product_id):
     """
@@ -139,9 +130,7 @@ def get_product(product_id):
 # UPDATE an existing product
 @product_management_bp.route('/products/<int:product_id>', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def update_product(product_id):
     """
     Update an existing product's information.
@@ -169,9 +158,7 @@ def update_product(product_id):
 # DELETE a product
 @product_management_bp.route('/products/<int:product_id>', methods=['DELETE'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def delete_product(product_id):
     """
     Delete a product.
@@ -191,9 +178,7 @@ def delete_product(product_id):
 
 @product_management_bp.route('/products/<int:product_id>/restore', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def restore_product(product_id):
     if ProductService.restore_product(product_id):
         return jsonify(status="success", message="Product restored successfully")
@@ -201,120 +186,122 @@ def restore_product(product_id):
 
 
 
-# Product Category Routes
-@cache.cached(timeout=21600)
-@product_management_bp.route('/product-categories', methods=['GET'])
+# --- Category Management ---
+
+@product_management_bp.route('/categories', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Staff')
-@admin_required
+@cache.cached(timeout=300, key_prefix='view_admin_categories')
 def get_product_categories():
+    """Gets all product categories."""
     categories = ProductService.get_all_categories()
     return jsonify([category.to_dict() for category in categories])
 
-@product_management_bp.route('/product-categories', methods=['POST'])
+@product_management_bp.route('/categories', methods=['POST'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def create_product_category():
+    """Creates a new product category."""
     data = request.get_json()
     category = ProductService.create_category(data)
+    cache.delete('view_admin_categories')
     return jsonify(category.to_dict()), 201
 
-@product_management_bp.route('/product-categories/<int:category_id>', methods=['PUT'])
+@product_management_bp.route('/categories/<int:category_id>', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def update_product_category(category_id):
+    """Updates a product category."""
     data = request.get_json()
     category = ProductService.update_category(category_id, data)
     if not category:
         return jsonify({"error": "Product category not found"}), 404
+    cache.delete('view_admin_categories')
     return jsonify(category.to_dict())
 
-@product_management_bp.route('/product-categories/<int:category_id>', methods=['DELETE'])
+@product_management_bp.route('/categories/<int:category_id>', methods=['DELETE'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def delete_product_category(category_id):
+    """Deletes a product category."""
     hard_delete = request.args.get('hard', 'false').lower() == 'true'
     if hard_delete:
         if ProductService.hard_delete_category(category_id):
+            cache.delete('view_admin_categories')
             return jsonify({"message": "Product category permanently deleted successfully"})
     else:
         if ProductService.delete_category(category_id):
+            cache.delete('view_admin_categories')
             return jsonify({"message": "Product category deleted successfully"})
     return jsonify({"error": "Product category not found"}), 404
 
-@product_management_bp.route('/product-categories/<int:category_id>/restore', methods=['PUT'])
+@product_management_bp.route('/categories/<int:category_id>/restore', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def restore_product_category(category_id):
+    """Restores a soft-deleted product category."""
     if ProductService.restore_category(category_id):
+        cache.delete('view_admin_categories')
         return jsonify(status="success", message="Product category restored successfully")
     return jsonify(status="error", message="Product category not found"), 404
 
 
 
-# Product Collection Routes
-@cache.cached(timeout=21600)
-@product_management_bp.route('/product-collections', methods=['GET'])
+# --- Collection Management ---
+
+@product_management_bp.route('/collections', methods=['GET'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Staff')
-@admin_required
+@cache.cached(timeout=300, key_prefix='view_admin_collections')
 def get_product_collections():
+    """Gets all product collections."""
     collections = ProductService.get_all_collections()
     return jsonify([collection.to_dict() for collection in collections])
 
-@product_management_bp.route('/product-collections', methods=['POST'])
+@product_management_bp.route('/collections', methods=['POST'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def create_product_collection():
+    """Creates a new product collection."""
     data = request.get_json()
     collection = ProductService.create_collection(data)
+    cache.delete('view_admin_collections')
     return jsonify(collection.to_dict()), 201
 
-@product_management_bp.route('/product-collections/<int:collection_id>', methods=['PUT'])
+@product_management_bp.route('/collections/<int:collection_id>', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def update_product_collection(collection_id):
+    """Updates a product collection."""
     data = request.get_json()
     collection = ProductService.update_collection(collection_id, data)
     if not collection:
         return jsonify({"error": "Product collection not found"}), 404
+    cache.delete('view_admin_collections')
     return jsonify(collection.to_dict())
 
-@product_management_bp.route('/product-collections/<int:collection_id>', methods=['DELETE'])
+@product_management_bp.route('/collections/<int:collection_id>', methods=['DELETE'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def delete_product_collection(collection_id):
+    """Deletes a product collection."""
     hard_delete = request.args.get('hard', 'false').lower() == 'true'
     if hard_delete:
         if ProductService.hard_delete_collection(collection_id):
+            cache.delete('view_admin_collections')
             return jsonify({"message": "Product collection permanently deleted successfully"})
     else:
         if ProductService.delete_collection(collection_id):
+            cache.delete('view_admin_collections')
             return jsonify({"message": "Product collection deleted successfully"})
     return jsonify({"error": "Product collection not found"}), 404
 
-@product_management_bp.route('/product-collections/<int:collection_id>/restore', methods=['PUT'])
+@product_management_bp.route('/collections/<int:collection_id>/restore', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def restore_product_collection(collection_id):
+    """Restores a soft-deleted product collection."""
     if ProductService.restore_collection(collection_id):
+        cache.delete('view_admin_collections')
         return jsonify(status="success", message="Product collection restored successfully")
     return jsonify(status="error", message="Product collection not found"), 404

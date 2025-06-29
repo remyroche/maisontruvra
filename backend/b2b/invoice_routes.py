@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, session
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.b2b_service import B2BService
 from backend.services.invoice_service import InvoiceService # Assuming this service exists
-from backend.auth.permissions import b2b_user_required
+from backend.utils.decorators import staff_required, b2b_user_required, roles_required, permissions_required
 import io
 from io import BytesIO
 from backend.utils.sanitization import sanitize_input

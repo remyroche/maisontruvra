@@ -1,14 +1,12 @@
-from flask import Blueprint, jsonify
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from ..utils.decorators import log_admin_action
+from flask import Blueprint, jsonify, request
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 from backend.services.monitoring_service import MonitoringService
+import requests
 
 monitoring_bp = Blueprint('monitoring_bp', __name__, url_prefix='/admin/monitoring')
 
 @monitoring_bp.route('/health', methods=['GET'])
-@log_admin_action
 @roles_required ('Admin', 'Dev', 'Manager')
-@admin_required
 def get_system_health():
     """
     Get the health status of various system components.
@@ -26,9 +24,7 @@ def get_system_health():
         return jsonify(status="error", message="An error occurred while checking system health."), 500
 
 @monitoring_bp.route('/latest-errors', methods=['GET'])
-@log_admin_action
 @roles_required ('Admin', 'Dev', 'Manager')
-@admin_required
 def get_latest_errors():
     """
     Fetches the latest errors from the application's log file via the MonitoringService.
@@ -43,9 +39,7 @@ def get_latest_errors():
         return jsonify(status="error", message="An internal error occurred while fetching error logs."), 500
 
 @monitoring_bp.route('/error-logs', methods=['GET'])
-@log_admin_action
 @roles_required ('Admin', 'Dev', 'Manager')
-@admin_required
 def get_error_logs():
     """
     Retrieve recent error logs from the system.
@@ -69,18 +63,14 @@ def get_error_logs():
         return jsonify(status="error", message="Failed to retrieve error logs."), 500
 
 
-@monitoring_routes.route('/monitoring/celery-status', methods=['GET'])
-@log_admin_action
+@monitoring_bp.route('/monitoring/celery-status', methods=['GET'])
 @roles_required ('Admin', 'Dev', 'Manager')
-@admin_required
 def get_celery_status():
     celery_status = MonitoringService.get_celery_worker_status()
     return jsonify(celery_status)
 
-@monitoring_routes.route('/monitoring/recent-errors', methods=['GET'])
-@log_admin_action
+@monitoring_bp.route('/monitoring/recent-errors', methods=['GET'])
 @roles_required ('Admin', 'Dev', 'Manager')
-@admin_required
 def get_recent_errors():
     # This is a simplified example. A real implementation would involve a proper logging setup (e.g., ELK stack)
     # and this service would query that system.

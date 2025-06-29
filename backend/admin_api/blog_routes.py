@@ -1,7 +1,6 @@
 from flask import Blueprint, jsonify, request
 from backend.services.blog_service import BlogService
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from ..utils.decorators import log_admin_action
+from backend.utils.decorators import jwt_required, staff_required, roles_required, permissions_required
 
 
 blog_bp = Blueprint('admin_blog_routes', __name__, url_prefix='/api/admin/blog')
@@ -9,18 +8,14 @@ blog_bp = Blueprint('admin_blog_routes', __name__, url_prefix='/api/admin/blog')
 # Article Routes
 @blog_bp.route('/articles', methods=['GET'])
 @jwt_required()
-@log_admin_action
 @roles_required ('Admin', 'Editor', 'Manager')
-@admin_required
 def get_articles():
     articles = BlogService.get_all_articles()
     return jsonify([article.to_dict() for article in articles])
 
 @blog_bp.route('/articles', methods=['POST'])
 @jwt_required()
-@log_admin_action
 @roles_required ('Admin', 'Editor', 'Manager')
-@admin_required
 def create_article():
     data = request.get_json()
     article = BlogService.create_article(data)
@@ -28,9 +23,7 @@ def create_article():
 
 @blog_bp.route('/articles/<int:article_id>', methods=['GET'])
 @jwt_required()
-@log_admin_action
 @roles_required ('Admin', 'Editor', 'Manager')
-@admin_required
 def get_article(article_id):
     article = BlogService.get_article_by_id(article_id)
     if not article:
@@ -39,9 +32,7 @@ def get_article(article_id):
 
 @blog_bp.route('/articles/<int:article_id>', methods=['PUT'])
 @jwt_required()
-@log_admin_action
 @roles_required ('Admin', 'Editor', 'Manager')
-@admin_required
 def update_article(article_id):
     data = request.get_json()
     article = BlogService.update_article(article_id, data)
@@ -51,9 +42,7 @@ def update_article(article_id):
 
 @blog_bp.route('/articles/<int:article_id>', methods=['DELETE'])
 @jwt_required()
-@log_admin_action
 @roles_required ('Admin', 'Editor', 'Manager')
-@admin_required
 def delete_article(article_id):
     if BlogService.delete_article(article_id):
         return jsonify({"message": "Article deleted successfully"})
@@ -62,18 +51,14 @@ def delete_article(article_id):
 # Blog Category Routes
 @blog_bp.route('/categories', methods=['GET'])
 @jwt_required()
-@log_admin_action
 @roles_required ('Admin', 'Editor', 'Manager')
-@admin_required
 def get_blog_categories():
     categories = BlogService.get_all_blog_categories()
     return jsonify([category.to_dict() for category in categories])
 
 @blog_bp.route('/categories', methods=['POST'])
 @jwt_required()
-@log_admin_action
 @roles_required ('Admin', 'Editor', 'Manager')
-@admin_required
 def create_blog_category():
     data = request.get_json()
     category = BlogService.create_blog_category(data['name'], data.get('description'))
@@ -81,9 +66,7 @@ def create_blog_category():
 
 @blog_bp.route('/categories/<int:category_id>', methods=['PUT'])
 @jwt_required()
-@log_admin_action
 @roles_required ('Admin', 'Editor', 'Manager')
-@admin_required
 def update_blog_category(category_id):
     data = request.get_json()
     category = BlogService.update_blog_category(category_id, data)
@@ -93,9 +76,7 @@ def update_blog_category(category_id):
 
 @blog_bp.route('/categories/<int:category_id>', methods=['DELETE'])
 @jwt_required()
-@log_admin_action
 @roles_required ('Admin', 'Editor', 'Manager')
-@admin_required
 def delete_blog_category(category_id):
     if BlogService.delete_blog_category(category_id):
         return jsonify({"message": "Blog category deleted successfully"})

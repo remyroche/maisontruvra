@@ -1,16 +1,13 @@
 from flask import Blueprint, request, jsonify
-from backend.services.pos_service import PosService
+from backend.admin_api.pos_routes import PosService
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from ..utils.decorators import log_admin_action
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 
 pos_bp = Blueprint('pos_bp', __name__, url_prefix='/admin/pos')
 
 @pos_bp.route('/transaction', methods=['POST'])
 @permissions_required('USE_POS')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Sales')
-@admin_required
 def create_pos_transaction():
     """
     Create a new Point of Sale transaction.

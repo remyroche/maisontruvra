@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, session
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.b2b_service import B2BService
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import b2b_user_required, b2b_admin_required
+from backend.utils.decorators import staff_required, b2b_user_required, roles_required, permissions_required, b2b_admin_required
 from backend.models.b2b_models import B2BUser
 from backend.database import db
 from backend.tasks import send_email_task

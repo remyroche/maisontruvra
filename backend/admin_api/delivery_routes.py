@@ -1,7 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from ..utils.decorators import log_admin_action
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 from ..utils.input_sanitizer import InputSanitizer
 from backend.services.delivery_service import DeliveryService
 from backend.services.loyalty_service import LoyaltyService
@@ -11,9 +10,7 @@ admin_delivery_bp = Blueprint('admin_delivery_bp', __name__)
 
 @admin_delivery_bp.route('/settings', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def get_settings():
     """Get all delivery countries and options."""
     settings = DeliveryService.get_delivery_settings()
@@ -21,9 +18,7 @@ def get_settings():
 
 @admin_delivery_bp.route('/settings', methods=['POST'])
 @permissions_required('MANAGE_DELIVERY')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def update_settings():
     """Update delivery settings."""
     data = request.get_json()
@@ -36,9 +31,7 @@ def update_settings():
 
 @admin_delivery_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def get_delivery_methods():
     """Admin endpoint to get all delivery methods."""
     methods = DeliveryService.get_all_methods_for_admin()
@@ -46,9 +39,7 @@ def get_delivery_methods():
 
 @admin_delivery_bp.route('/tiers', methods=['GET'])
 @permissions_required('MANAGE_DELIVERY')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def get_all_tiers():
     """Helper endpoint to get all loyalty tiers for the form."""
     tiers = LoyaltyService.get_all_tier_discounts() # Reusing this as it returns names and discounts
@@ -56,9 +47,7 @@ def get_all_tiers():
 
 @admin_delivery_bp.route('/', methods=['POST'])
 @permissions_required('MANAGE_DELIVERY')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def create_delivery_method():
     """Admin endpoint to create a new delivery method."""
     data = InputSanitizer.recursive_sanitize(request.get_json())
@@ -74,9 +63,7 @@ def create_delivery_method():
 
 @admin_delivery_bp.route('/<int:method_id>', methods=['PUT'])
 @permissions_required('MANAGE_DELIVERY')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def update_delivery_method(method_id):
     """Admin endpoint to update a delivery method."""
     data = InputSanitizer.recursive_sanitize(request.get_json())
@@ -88,9 +75,7 @@ def update_delivery_method(method_id):
 
 @admin_delivery_bp.route('/<int:method_id>', methods=['DELETE'])
 @permissions_required('MANAGE_DELIVERY')
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 def delete_delivery_method(method_id):
     """Admin endpoint to delete a delivery method."""
     try:

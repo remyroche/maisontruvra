@@ -2,16 +2,13 @@ from flask import Blueprint, request, jsonify
 from backend.services.quote_service import QuoteService
 from backend.services.order_service import OrderService # To convert quote to order
 from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from ..utils.decorators import log_admin_action
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 
 quote_bp = Blueprint('admin_quote_routes', __name__, url_prefix='/api/admin/quotes')
 
 @quote_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_QUOTES')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def get_quotes():
     """Retrieves all quotes."""
     quotes = QuoteService.get_all_quotes()
@@ -19,9 +16,7 @@ def get_quotes():
 
 @quote_bp.route('/<int:quote_id>', methods=['GET'])
 @permissions_required('MANAGE_QUOTES')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def get_quote_details(quote_id):
     """Retrieves details for a specific quote."""
     quote = QuoteService.get_quote_by_id(quote_id)
@@ -31,9 +26,7 @@ def get_quote_details(quote_id):
 
 @quote_bp.route('/<int:quote_id>/convert', methods=['POST'])
 @permissions_required('MANAGE_QUOTES')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def convert_quote_to_order(quote_id):
     """Converts a quote into a draft order."""
     try:
@@ -46,9 +39,7 @@ def convert_quote_to_order(quote_id):
 
 @quote_bp.route('/<int:quote_id>', methods=['DELETE'])
 @permissions_required('MANAGE_QUOTES')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def delete_quote(quote_id):
     """Deletes a quote."""
     if QuoteService.delete_quote(quote_id):
@@ -57,9 +48,7 @@ def delete_quote(quote_id):
 
 @quote_bp.route('/', methods=['GET'])
 @permissions_required('MANAGE_QUOTES')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def get_quotes():
     """
     Get a paginated list of all B2B quotes.
@@ -84,11 +73,9 @@ def get_quotes():
         return jsonify(status="error", message="An internal error occurred while fetching quotes."), 500
 
 # READ a single quote
-@quote_management_bp.route('/<int:quote_id>', methods=['GET'])
+@quote_bp.route('/<int:quote_id>', methods=['GET'])
 @permissions_required('MANAGE_QUOTES')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def get_quote(quote_id):
     quote = QuoteService.get_quote_by_id(quote_id)
     if not quote:

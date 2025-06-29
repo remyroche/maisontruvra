@@ -6,8 +6,7 @@ from backend.utils.sanitization import sanitize_input
 from backend.services.audit_log_service import AuditLogService
 from backend.utils.csrf_protection import CSRFProtection
 import logging
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from ..utils.decorators import log_admin_action
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
@@ -15,9 +14,7 @@ security_logger = logging.getLogger('security')
 user_management_bp = Blueprint('user_management', __name__)
 
 @user_management_bp.route('/users', methods=['GET'])
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 @sanitize_request_data
 def get_users():
     """Get paginated list of users with proper N+1 optimization."""
@@ -60,9 +57,7 @@ def get_users():
         return jsonify({'error': 'Internal server error'}), 500
 
 @user_management_bp.route('/users', methods=['POST'])
-@log_admin_action
 @roles_required ('Admin', 'Manager')
-@admin_required
 @sanitize_request_data
 def create_user():
     """Create a new user with full audit logging."""
@@ -100,9 +95,7 @@ def create_user():
         return jsonify({'error': 'Internal server error'}), 500
 
 @user_management_bp.route('/users/<int:user_id>', methods=['PUT'])
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 @sanitize_request_data
 def update_user(user_id):
     """Update user with full audit logging."""
@@ -139,9 +132,7 @@ def update_user(user_id):
 
 
 @user_management_bp.route('/<int:user_id>', methods=['DELETE'])
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support', 'Deleter')
-@admin_required
 @sanitize_request_data
 def delete_user(user_id):
     hard_delete = request.args.get('hard', 'false').lower() == 'true'
@@ -164,9 +155,7 @@ def delete_user(user_id):
         return jsonify({"error": "User not found"}), 404
         
 @user_management_bp.route('/<int:user_id>/restore', methods=['PUT'])
-@log_admin_action
 @roles_required('Admin', 'Manager', 'Support')
-@admin_required
 def restore_user(user_id):
     if UserService.restore_user(user_id):
         return jsonify({"message": "User restored successfully"})

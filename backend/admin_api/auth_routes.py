@@ -8,8 +8,7 @@ from backend.services.mfa_service import MfaService
 from backend.services.user_service import UserService
 from backend.services.auth_service import AuthService
 from backend.services.exceptions import ServiceError
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from backend.utils.decorators import log_admin_action
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.loggers import security_logger
 
@@ -70,7 +69,6 @@ def reset_password():
 
 @admin_auth_bp.route('/reauthenticate', methods=['POST'])
 @staff_required
-@admin_required # Ensures a user must exist to even attempt re-auth
 def reauthenticate():
     """
     Re-authenticates an existing session after a timeout.

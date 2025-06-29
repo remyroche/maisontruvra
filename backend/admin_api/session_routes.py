@@ -1,14 +1,12 @@
 from flask import Blueprint, request, jsonify
 from backend.services.user_service import UserService
 from backend.services.auth_service import AuthService
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from ..utils.decorators import log_admin_action
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 
 
 session_routes = Blueprint('session_routes', __name__, url_prefix='/api/admin/sessions')
 
 @session_routes.route('/', methods=['GET'])
-@admin_required
 @roles_required ('Admin', 'Manager')
 def get_all_sessions():
     """
@@ -28,7 +26,6 @@ def get_all_sessions():
     return jsonify(sessions), 200
 
 @session_routes.route('/<session_id>/terminate', methods=['POST'])
-@admin_required
 @roles_required ('Admin', 'Manager')
 def terminate_session(session_id):
     """
@@ -58,7 +55,6 @@ def terminate_session(session_id):
     return jsonify({"error": "Session not found."}), 404
 
 @session_routes.route('/user/<user_id>/freeze', methods=['POST'])
-@admin_required
 @roles_required ('Admin', 'Manager')
 def freeze_user(user_id):
     """
@@ -88,7 +84,6 @@ def freeze_user(user_id):
     return jsonify({"error": "User not found."}), 404
 
 @session_routes.route('/user/<user_id>/unfreeze', methods=['POST'])
-@admin_required
 @roles_required ('Admin', 'Manager')
 def unfreeze_user(user_id):
     """

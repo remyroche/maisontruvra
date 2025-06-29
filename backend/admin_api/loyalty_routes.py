@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify
 from ..services.loyalty_service import LoyaltyService
 from ..utils.sanitization import sanitize_input
-from ..auth.permissions import admin_required, permissions_required, roles_required
-from ..utils.decorators import log_admin_action
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 from ..extensions import cache
 
 loyalty_bp = Blueprint('admin_loyalty_routes', __name__, url_prefix='/api/admin/loyalty')
@@ -10,7 +9,7 @@ loyalty_bp = Blueprint('admin_loyalty_routes', __name__, url_prefix='/api/admin/
 # --- Loyalty Program Tier Management ---
 
 @loyalty_bp.route('/tiers', methods=['GET'])
-@admin_required
+@roles_required('ADMIN', 'MANAGER')
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
 def get_tiers():
     """Gets all loyalty tiers."""
@@ -18,9 +17,8 @@ def get_tiers():
     return jsonify([tier.to_dict() for tier in tiers])
 
 @loyalty_bp.route('/tiers', methods=['POST'])
-@admin_required
+@roles_required('ADMIN', 'MANAGER')
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
-@log_admin_action
 def create_tier():
     """Creates a new loyalty tier."""
     data = request.get_json()
@@ -38,9 +36,8 @@ def create_tier():
         return jsonify({"error": "Failed to create tier.", "details": str(e)}), 400
 
 @loyalty_bp.route('/tiers/<uuid:tier_id>', methods=['PUT'])
-@admin_required
+@roles_required('ADMIN', 'MANAGER')
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
-@log_admin_action
 def update_tier(tier_id):
     """Updates an existing loyalty tier."""
     data = request.get_json()
@@ -51,9 +48,8 @@ def update_tier(tier_id):
     return jsonify(tier.to_dict())
 
 @loyalty_bp.route('/tiers/<uuid:tier_id>', methods=['DELETE'])
-@admin_required
+@roles_required('ADMIN', 'MANAGER')
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
-@log_admin_action
 def delete_tier(tier_id):
     """Deletes a loyalty tier."""
     if LoyaltyService.delete_tier(tier_id):
@@ -64,7 +60,7 @@ def delete_tier(tier_id):
 # --- Referral Reward Tier Management ---
 
 @loyalty_bp.route('/referral-rewards', methods=['GET'])
-@admin_required
+@roles_required('ADMIN', 'MANAGER')
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
 def get_referral_rewards():
     """Gets all referral reward tiers."""
@@ -72,9 +68,8 @@ def get_referral_rewards():
     return jsonify([{'id': str(r.id), 'referral_count': r.referral_count, 'reward_description': r.reward_description} for r in rewards])
 
 @loyalty_bp.route('/referral-rewards', methods=['POST'])
-@admin_required
+@roles_required('ADMIN', 'MANAGER')
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
-@log_admin_action
 def create_referral_reward():
     """Creates a new referral reward tier."""
     data = request.get_json()
@@ -85,7 +80,7 @@ def create_referral_reward():
 # --- General Loyalty Settings ---
 
 @loyalty_bp.route('/settings', methods=['GET'])
-@admin_required
+@roles_required('ADMIN', 'MANAGER')
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
 def get_loyalty_settings():
     """Gets the current settings for the loyalty program."""
@@ -97,9 +92,8 @@ def get_loyalty_settings():
         return jsonify(status="error", message="Failed to retrieve loyalty settings."), 500
 
 @loyalty_bp.route('/settings', methods=['PUT'])
-@admin_required
+@roles_required('ADMIN', 'MANAGER')
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
-@log_admin_action
 def update_loyalty_settings():
     """Updates the settings for the loyalty program."""
     data = request.get_json()
@@ -120,9 +114,8 @@ def update_loyalty_settings():
 # --- Manual Point Adjustments ---
 
 @loyalty_bp.route('/users/<uuid:user_id>/points', methods=['POST'])
-@admin_required
+@roles_required('ADMIN', 'MANAGER')
 @permissions_required('MANAGE_LOYALTY_PROGRAM')
-@log_admin_action
 def adjust_user_points(user_id):
     """Manually adds or removes loyalty points for a specific user."""
     data = request.get_json()

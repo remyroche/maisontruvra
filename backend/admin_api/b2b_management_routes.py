@@ -1,14 +1,11 @@
 from flask import Blueprint, jsonify, request
 from backend.services.b2b_service import B2BService
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from ..utils.decorators import log_admin_action
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 from backend.models.enums import B2BAccountStatus
 
 b2b_management_bp = Blueprint('b2b_management', __name__, url_prefix='/api/admin/b2b')
 
 @b2b_management_bp.route('/accounts', methods=['GET'])
-@admin_required
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
 def get_b2b_accounts():
     """
@@ -33,8 +30,6 @@ def get_b2b_accounts():
     return jsonify([acc.to_dict() for acc in accounts])
 
 @b2b_management_bp.route('/accounts/<int:account_id>/approve', methods=['PUT'])
-@admin_required
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
 def approve_b2b_account(account_id):
     """
@@ -63,8 +58,6 @@ def approve_b2b_account(account_id):
     return jsonify(account.to_dict())
 
 @b2b_management_bp.route('/accounts/<int:account_id>', methods=['PUT'])
-@admin_required
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
 def update_b2b_account(account_id):
     """
@@ -102,8 +95,6 @@ def update_b2b_account(account_id):
     return jsonify(account.to_dict())
 
 @b2b_management_bp.route('/accounts/<int:account_id>', methods=['DELETE'])
-@admin_required
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
 def delete_b2b_account(account_id):
     """
