@@ -1,8 +1,8 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 from backend.services.product_service import ProductService
-from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import b2b_user_required
+from backend.utils.input_sanitizer import InputSanitizer
+from backend.utils.decorators import b2b_user_required
 
 b2b_product_bp = Blueprint('b2b_product_bp', __name__, url_prefix='/api/b2b/products')
 

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from backend.services.quote_service import QuoteService
 from backend.services.order_service import OrderService # To convert quote to order
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import staff_required, roles_required, permissions_required
 
 quote_bp = Blueprint('admin_quote_routes', __name__, url_prefix='/api/admin/quotes')
@@ -56,7 +56,7 @@ def get_quotes():
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
-        status = sanitize_input(request.args.get('status'))
+        status = InputSanitizer.sanitize_input(request.args.get('status'))
         filters = {'status': status} if status else {}
 
         quotes_pagination = QuoteService.get_all_quotes_paginated(page=page, per_page=per_page, filters=filters)

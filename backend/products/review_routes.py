@@ -3,8 +3,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.models.product_models import Product, Review
 from backend.models.user_models import User
 from backend.extensions import db
-from backend.auth.permissions import permission_required, Permission
-from backend.utils.sanitization import sanitize_input
+from backend.utils.decorators import permissions_required
+from backend.utils.input_sanitizer import InputSanitizer
 
 review_bp = Blueprint('review_bp', __name__)
 
@@ -22,7 +22,7 @@ def submit_review(product_id):
         return jsonify({"msg": "Product not found"}), 404
 
     data = request.get_json()
-    sanitized_data = sanitize_input(data)
+    sanitized_data = InputSanitizer.sanitize_input(data)
     
     rating = sanitized_data.get('rating')
     comment = sanitized_data.get('comment')

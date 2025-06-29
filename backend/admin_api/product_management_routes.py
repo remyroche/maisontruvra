@@ -5,7 +5,7 @@ from backend.utils.decorators import staff_required, roles_required, permissions
 from backend.models.inventory_models import Inventory
 from backend.extensions import cache, db
 # Assuming the Celery task is defined in a tasks.py file at the backend root
-from backend.tasks import send_back_in_stock_emails_task
+from backend.tasks import send_back_in_stock_email_task
 
 product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
 
@@ -75,7 +75,7 @@ def update_inventory(inventory_id):
     # If the status changed from out-of-stock to in-stock, trigger the task
     if was_out_of_stock and is_now_in_stock:
         # Use .delay() to run this as a background task via Celery
-        send_back_in_stock_emails_task.delay(inventory_item.product_id)
+        send_back_in_stock_email_task.delay(inventory_item.product_id)
     # --- End Logic ---
 
     return jsonify({"message": f"Inventory for product {inventory_item.product_id} updated to {new_quantity}."}), 200

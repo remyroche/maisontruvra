@@ -240,6 +240,27 @@ class LoyaltyService:
         return ExclusiveReward.query.filter(ExclusiveReward.tier_id <= user_loyalty.tier_id).all()
 
     @staticmethod
+    def check_and_update_tier(user_id: int, current_points: int):
+        """
+        Checks if a user qualifies for a new loyalty tier and notifies them.
+        """
+        # Tiers should be ordered by points_threshold descending
+        applicable_tier = LoyaltyTier.query.filter(
+            LoyaltyTier.points_threshold <= current_points
+        ).order_by(LoyaltyTier.points_threshold.desc()).first()
+
+        user_loyalty = UserLoyalty.query.filter_by(user_id=user_id).first()
+
+        if applicable_tier and (user_loyalty.tier_id != applicable_tier.id):
+            old_tier_id = user_loyalty.tier_id
+            user_loyalty.tier_id = applicable_tier.id
+            db.session.commit()
+            
+            # Send a notification about the tier upgrade
+            user = User.query.get(user_id)
+            NotificationService.send_tier_upgrade_notification(user, applicable_tier.name)
+            
+    @staticmethod
     def redeem_exclusive_reward(user_id, reward_id):
         user_loyalty = LoyaltyService.get_user_loyalty_status(user_id)
         reward = ExclusiveReward.query.get(reward_id)

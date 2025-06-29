@@ -1,64 +1,34 @@
-from backend import create_app, celery
 from celery import Celery
+from celery.schedules import crontab
 import logging
 
 # Set up logger for this module
 logger = logging.getLogger(__name__)
-flask_app = create_app()
-celery = flask_app.celery
 
-def init_celery(app):
-    """
-    Initializes and configures the Celery instance with the Flask app's settings.
-    Also, it wraps tasks to ensure they run within a Flask application context.
-    
-    Args:
-        app: The configured Flask application instance.
-    """
-    # Update the Celery configuration from the Flask app config.
-    # It will automatically look for keys starting with 'CELERY_'.
-    celery.config_from_object(app.config, namespace='CELERY')
-
-    class ContextTask(celery.Task):
-        """
-        A custom Celery Task class that ensures every task is executed
-        within a Flask application context. This is crucial for accessing
-        the database, configuration, and other Flask extensions within tasks.
-        """
-        def __call__(self, *args, **kwargs):
-            with app.app_context():
-                return self.run(*args, **kwargs)
-
-    # Set the custom ContextTask as the default Task class for this Celery instance.
-    celery.Task = ContextTask
-    
-    # This line is important for Celery's auto-discovery of tasks.
-    # It tells Celery to look for task definitions in 'backend/tasks.py'.
-    celery.autodiscover_tasks(['backend.tasks'])
-
-    return celery
-
+# Instantiate Celery.
+# The configuration will be loaded from the Flask app config in create_app.
+celery = Celery(__name__)
 
 @celery.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):
     """
     Sets up the schedule for all periodic background tasks.
+    The task names are strings that celery uses to find the task functions.
+    Make sure they match the actual paths to your tasks.
     """
+    logger.info("Setting up periodic tasks...")
+    
     # Daily B2B Tier Recalculation Task
     sender.add_periodic_task(
         crontab(hour=0, minute=0), # Executes daily at midnight
-        'tasks.update_all_b2b_user_tiers',
+        'tasks.update_all_user_tiers',
         name='Update B2B loyalty tiers daily'
     )
     
-    # --- NEW: Periodic Cache Clear Task (Safety Net) ---
+    # Periodic Cache Clear Task
     sender.add_periodic_task(
         crontab(hour='*/6'), # Executes every 6 hours
         'tasks.clear_application_cache',
         name='Clear application cache every 6 hours'
     )
-
-# The following lines are necessary to run the worker from the command line.
-# It creates a Flask app instance to provide context for Celery.
-app = create_app()
-app.app_context().push()
+    logger.info("Periodic tasks set up.")

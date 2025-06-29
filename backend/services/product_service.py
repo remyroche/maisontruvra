@@ -1,15 +1,16 @@
+# backend/Services/product_service.py
 from sqlalchemy import func
 from backend.database import db
-from backend.models.product_models import Product, ProductVariant, ProductCategory, LoyaltyTier, OrderItem
-from backend.models.inventory_models import ProductItem
+from backend.models.product_models import Product, ProductVariant
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from backend.services.monitoring_service import MonitoringService
 from flask import current_app, request
 from flask_jwt_extended import get_jwt_identity
 from backend.models.user_models import User
-
+from backend.models.order_models import OrderItem
+from backend.models.b2b_loyalty_models import LoyaltyTier
 
 
 class ProductService:
@@ -143,7 +144,7 @@ class ProductService:
                 
                 # Create an inventory record for the new variant
                 initial_stock = int(variant_data.get('stock', 0))
-                inventory = ProductItem(variant=new_variant, quantity=initial_stock, status='in_stock') # Assuming ProductItem is your inventory model
+                inventory = OrderItem(variant=new_variant, quantity=initial_stock, status='in_stock') # Assuming ProductItem is your inventory model
                 db.session.add(inventory)
                 
                 new_product.variants.append(new_variant)
@@ -248,7 +249,7 @@ class ProductService:
             query = query.filter(Product.deleted_at.is_(None))
         
         if filters:
-            filters = sanitize_input(filters)
+            filters = InputSanitizer.sanitize_input(filters)
             if filters.get('category_id'):
                 query = query.filter(Product.category_id == filters['category_id'])
             if filters.get('is_active') is not None:
@@ -269,7 +270,7 @@ class ProductService:
     @staticmethod
     def create_product(product_data: dict):
         """Create a new product with proper validation and logging."""
-        product_data = sanitize_input(product_data)
+        product_data = InputSanitizer.sanitize_input(product_data)
         
         # Validate required fields
         required_fields = ['name', 'description', 'category_id']
@@ -316,7 +317,7 @@ class ProductService:
     @staticmethod
     def update_product(product_id: int, update_data: dict):
         """Update product with proper validation and logging."""
-        update_data = sanitize_input(update_data)
+        update_data = InputSanitizer.sanitize_input(update_data)
         
         product = Product.query.get(product_id)
         if not product:
@@ -412,12 +413,12 @@ class ProductService:
     @staticmethod
     def get_low_stock_products(threshold: int = 10):
         """Get products with low stock levels."""
-        return db.session.query(Product, ProductVariant, db.func.count(ProductItem.id).label('stock_count'))\
+        return db.session.query(Product, ProductVariant, db.func.count(OrderItem.id).label('stock_count'))\
             .join(ProductVariant)\
-            .outerjoin(ProductItem, db.and_(
-                ProductItem.product_variant_id == ProductVariant.id,
-                ProductItem.status == 'in_stock'
+            .outerjoin(OrderItem, db.and_(
+                OrderItem.product_variant_id == ProductVariant.id,
+                OrderItem.status == 'in_stock'
             ))\
             .group_by(Product.id, ProductVariant.id)\
-            .having(db.func.count(ProductItem.id) <= threshold)\
+            .having(db.func.count(OrderItem.id) <= threshold)\
             .all()

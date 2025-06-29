@@ -36,6 +36,7 @@ class Config:
     # Max file size: 25 MB
     MAX_CONTENT_LENGTH = 25 * 1024 * 1024
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf'}
+    UPLOAD_FOLDER = os.path.join(basedir, 'uploads')
 
     # --- IMPLEMENTATION: Password Policy ---
     PASSWORD_MIN_LENGTH = 8
@@ -54,10 +55,6 @@ class Config:
     # Celery uses this to send and receive messages for background tasks.
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL') or 'redis://localhost:6379/0'
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND') or 'redis://localhost:6379/0'
-
-    # --- File Upload Configuration ---
-    UPLOAD_FOLDER = os.path.join(basedir, 'uploads')
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB
 
     # --- Other configurations ---
     LOG_TO_STDOUT = os.environ.get('LOG_TO_STDOUT')

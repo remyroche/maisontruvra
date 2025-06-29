@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from backend.newsletter.routes import NewsletterService
-from backend.utils.sanitization import sanitize_input
+from backend.services.newsletter_service import NewsletterService
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import staff_required, roles_required, permissions_required
 from backend.services.email_service import EmailService
 

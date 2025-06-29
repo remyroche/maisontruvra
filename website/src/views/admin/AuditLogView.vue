@@ -42,8 +42,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useAdminAuditLogStore } from '@/js/stores/adminAuditLog';
-import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
+import BaseDataTable from '@/components/ui/BaseDataTable.vue';
+import api from '@/services/api';
 
 const logStore = useAdminAuditLogStore();
 const selectedDate = ref(null);

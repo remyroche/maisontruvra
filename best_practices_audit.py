@@ -13,11 +13,34 @@ import argparse
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Set
 from dataclasses import dataclass, asdict
+import logging
 
-# --- Configuration ---
+# --- CONFIGURATION ---
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+
+# Détermine la racine du projet en se basant sur l'emplacement de ce script.
+PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
+
+# Répertoires à analyser (chemins absolus).
+SCAN_DIRECTORIES = [
+    os.path.join(PROJECT_ROOT, 'backend'),
+    os.path.join(PROJECT_ROOT, 'website')
+]
+
 BACKEND_DIR = 'backend'
 FRONTEND_DIR = 'website'
 
+
+# Chemins à exclure, convertis en chemins absolus pour une correspondance fiable.
+EXCLUDED_PATHS = [
+    os.path.abspath(os.path.join(PROJECT_ROOT, p)) for p in [
+        'backend/migrations',
+        'backend/tests',
+        'backend/__pycache__',
+        'website/node_modules',
+        'website/dist'
+    ]
+]
 # Best practice finding data structure
 @dataclass
 class BestPracticeFinding:
@@ -1444,27 +1467,82 @@ def run_best_practices_audit(config: BestPracticesConfig):
             print(f"{Colors.YELLOW}📋 Found some best practice improvements. Review the findings above.{Colors.ENDC}")
             return 0
 
+def find_scan_files(directories):
+    """
+    Trouve tous les fichiers pertinents (.py, .js, .vue) dans les répertoires spécifiés,
+    en ignorant les chemins exclus de manière efficace.
+    """
+    allowed_extensions = ('.py', '.js', '.vue')
+    found_files = []
+    
+    for directory in directories:
+        if not os.path.isdir(directory):
+            logging.warning(f"Le répertoire d'analyse '{directory}' n'existe pas, il sera ignoré.")
+            continue
+            
+        for root, dirs, files in os.walk(directory):
+            # CORRIGÉ : Empêche os.walk d'entrer dans les répertoires exclus.
+            # C'est la solution la plus performante.
+            dirs[:] = [
+                d for d in dirs 
+                if not os.path.abspath(os.path.join(root, d)).startswith(tuple(EXCLUDED_PATHS))
+            ]
+            
+            for file in files:
+                if file.endswith(allowed_extensions):
+                    found_files.append(os.path.abspath(os.path.join(root, file)))
+    return found_files
+
+def check_for_var_keyword(file_path):
+    """Vérifie l'utilisation du mot-clé 'var' dans les fichiers JS et Vue."""
+    if not file_path.endswith(('.js', '.vue')):
+        return []
+
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for i, line in enumerate(f, 1):
+                if re.search(r'\bvar\b', line):
+                    findings.append({
+                        "line": i,
+                        "message": "L'utilisation de 'var' est obsolète. Préférez 'let' ou 'const'.",
+                        "severity": "MEDIUM"
+                    })
+    except Exception as e:
+        logging.error(f"Impossible de lire le fichier {file_path}: {e}")
+    return findings
+
+def run_all_checks_on_file(file_path):
+    """Exécute toutes les vérifications définies sur un seul fichier."""
+    all_findings = []
+    all_findings.extend(check_for_var_keyword(file_path))
+    return all_findings
+
+def main():
+    """Fonction principale pour exécuter l'audit des meilleures pratiques."""
+    logging.info("Début de l'audit des meilleures pratiques...")
+    
+    # La fonction find_scan_files retourne maintenant une liste déjà filtrée.
+    files_to_scan = find_scan_files(SCAN_DIRECTORIES)
+    
+    logging.info(f"{len(files_to_scan)} fichier(s) à analyser.")
+    
+    total_findings = 0
+    
+    for file_path in files_to_scan:
+        # Affiche le chemin relatif pour une meilleure lisibilité.
+        relative_path = os.path.relpath(file_path, PROJECT_ROOT)
+        findings = run_all_checks_on_file(file_path)
+        if findings:
+            logging.warning(f"Problèmes trouvés dans : {relative_path}")
+            for finding in findings:
+                total_findings += 1
+                logging.warning(f"  - Ligne {finding['line']}: [{finding['severity']}] {finding['message']}")
+
+    if total_findings == 0:
+        logging.info("Audit des meilleures pratiques terminé. Aucun problème trouvé.")
+    else:
+        logging.error(f"Audit des meilleures pratiques terminé. {total_findings} problème(s) potentiel(s) trouvé(s).")
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Best Practices Audit Tool')
-    parser.add_argument('--format', choices=['console', 'json', 'html'], default='console',
-                       help='Output format (default: console)')
-    parser.add_argument('--output', '-o', help='Output file path')
-    parser.add_argument('--include-low', action='store_true', 
-                       help='Include low severity findings')
-    parser.add_argument('--skip-backend', action='store_true',
-                       help='Skip backend checks')
-    parser.add_argument('--skip-frontend', action='store_true',
-                       help='Skip frontend checks')
-    
-    args = parser.parse_args()
-    
-    config = BestPracticesConfig(
-        include_low_severity=args.include_low,
-        output_format=args.format,
-        output_file=args.output,
-        skip_backend_checks=args.skip_backend,
-        skip_frontend_checks=args.skip_frontend
-    )
-    
-    exit_code = run_best_practices_audit(config)
-    sys.exit(exit_code)
+    main()

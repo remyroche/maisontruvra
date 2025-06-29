@@ -3,7 +3,7 @@ from backend.models.invoice_models import Quote, Invoice
 from backend.models.b2b_models import B2BAccount
 from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from flask import current_app
 from datetime import datetime
@@ -63,7 +63,7 @@ class QuoteService:
     def get_quote_by_id(quote_id):
         """Get a quote by ID"""
         try:
-            quote_id = sanitize_input(quote_id)
+            quote_id = InputSanitizer.InputSanitizer.sanitize_input(quote_id)
             quote = Quote.query.get(quote_id)
             if not quote:
                 raise NotFoundException("Quote not found")
@@ -76,8 +76,8 @@ class QuoteService:
     def create_quote(b2b_account_id, items, notes=None):
         """Create a new quote"""
         try:
-            b2b_account_id = sanitize_input(b2b_account_id)
-            notes = sanitize_input(notes) if notes else None
+            b2b_account_id = InputSanitizer.InputSanitizer.sanitize_input(b2b_account_id)
+            notes = InputSanitizer.InputSanitizer.sanitize_input(notes) if notes else None
             
             # Verify B2B account exists
             account = B2BAccount.query.get(b2b_account_id)
@@ -87,8 +87,8 @@ class QuoteService:
             # Calculate total amount
             total_amount = 0
             for item in items:
-                quantity = int(sanitize_input(item.get('quantity', 0)))
-                unit_price = float(sanitize_input(item.get('unit_price', 0)))
+                quantity = int(InputSanitizer.InputSanitizer.sanitize_input(item.get('quantity', 0)))
+                unit_price = float(InputSanitizer.InputSanitizer.sanitize_input(item.get('unit_price', 0)))
                 total_amount += quantity * unit_price
             
             # Create quote
@@ -127,7 +127,7 @@ class QuoteService:
     def update_quote(quote_id, data):
         """Update a quote"""
         try:
-            quote_id = sanitize_input(quote_id)
+            quote_id = InputSanitizer.InputSanitizer.sanitize_input(quote_id)
             
             quote = Quote.query.get(quote_id)
             if not quote:
@@ -135,11 +135,11 @@ class QuoteService:
             
             # Update fields
             if 'total_amount' in data:
-                quote.total_amount = float(sanitize_input(data['total_amount']))
+                quote.total_amount = float(InputSanitizer.InputSanitizer.sanitize_input(data['total_amount']))
             if 'notes' in data:
-                quote.notes = sanitize_input(data['notes'])
+                quote.notes = InputSanitizer.InputSanitizer.sanitize_input(data['notes'])
             if 'status' in data:
-                quote.status = sanitize_input(data['status'])
+                quote.status = InputSanitizer.InputSanitizer.sanitize_input(data['status'])
             
             quote.updated_at = datetime.utcnow()
             
@@ -169,7 +169,7 @@ class QuoteService:
     def delete_quote(quote_id):
         """Delete a quote"""
         try:
-            quote_id = sanitize_input(quote_id)
+            quote_id = InputSanitizer.InputSanitizer.sanitize_input(quote_id)
             
             quote = Quote.query.get(quote_id)
             if not quote:
@@ -206,7 +206,7 @@ class QuoteService:
     def approve_quote(quote_id):
         """Approve a quote"""
         try:
-            quote_id = sanitize_input(quote_id)
+            quote_id = InputSanitizer.InputSanitizer.sanitize_input(quote_id)
             
             quote = Quote.query.get(quote_id)
             if not quote:
@@ -244,8 +244,8 @@ class QuoteService:
     def reject_quote(quote_id, reason=None):
         """Reject a quote"""
         try:
-            quote_id = sanitize_input(quote_id)
-            reason = sanitize_input(reason) if reason else None
+            quote_id = InputSanitizer.InputSanitizer.sanitize_input(quote_id)
+            reason = InputSanitizer.InputSanitizer.sanitize_input(reason) if reason else None
             
             quote = Quote.query.get(quote_id)
             if not quote:
@@ -285,7 +285,7 @@ class QuoteService:
     def get_quotes_by_account(b2b_account_id):
         """Get all quotes for a B2B account"""
         try:
-            b2b_account_id = sanitize_input(b2b_account_id)
+            b2b_account_id = InputSanitizer.InputSanitizer.sanitize_input(b2b_account_id)
             
             quotes = Quote.query.filter_by(b2b_account_id=b2b_account_id)\
                               .order_by(Quote.created_at.desc()).all()

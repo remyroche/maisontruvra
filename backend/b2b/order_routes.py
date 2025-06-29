@@ -1,16 +1,13 @@
 from flask import Blueprint, request, jsonify
 from backend.services.order_service import OrderService
-from backend.utils.sanitization import sanitize_input
-from backend.auth.permissions import admin_required, staff_required, roles_required, permissions_required
-from ..utils.decorators import log_admin_action
+from backend.utils.input_sanitizer import InputSanitizer
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 
 order_routes = Blueprint('admin_order_routes', __name__, url_prefix='/api/admin/orders')
 
 @order_routes.route('/<int:order_id>', methods=['GET'])
 @permissions_required('MANAGE_ORDERS')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def get_order_details(order_id):
     """
     Retrieves details for a specific order.
@@ -39,9 +36,7 @@ def get_order_details(order_id):
 
 @order_routes.route('/<int:order_id>/status', methods=['PUT'])
 @permissions_required('MANAGE_ORDERS')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def update_order_status(order_id):
     """
     Updates the status of a specific order.
@@ -88,9 +83,7 @@ def update_order_status(order_id):
         
 @order_routes.route('/', methods=['GET'])
 @permissions_required('MANAGE_ORDERS')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def get_orders():
     """
     Retrieves all orders with optional filtering.
@@ -124,9 +117,7 @@ def get_orders():
 # UPDATE an existing order's status
 @order_routes.route('/<int:order_id>/status', methods=['PUT'])
 @permissions_required('MANAGE_ORDERS')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def update_order_status(order_id):
     """
     Update an existing order's status.
@@ -138,7 +129,7 @@ def update_order_status(order_id):
     if not OrderService.get_order_by_id(order_id):
         return jsonify(status="error", message="Order not found"), 404
 
-    sanitized_status = sanitize_input(data['status'])
+    sanitized_status = InputSanitizer.sanitize_input(data['status'])
     
     try:
         # Assuming the service handles the logic of status transition
@@ -153,9 +144,7 @@ def update_order_status(order_id):
 # DELETE an order
 @order_routes.route('/<int:order_id>', methods=['DELETE'])
 @permissions_required('MANAGE_ORDERS')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def delete_order(order_id):
     """
     Delete an order. This should be used with caution.
@@ -171,9 +160,7 @@ def delete_order(order_id):
 
 @order_routes.route('/<int:order_id>/restore', methods=['PUT'])
 @permissions_required('MANAGE_ORDERS')
-@log_admin_action
 @roles_required ('Admin', 'Manager', 'Support')
-@admin_required
 def restore_order(order_id):
     if OrderService.restore_order(order_id):
         return jsonify(status="success", message="Order restored successfully")

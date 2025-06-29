@@ -1,11 +1,10 @@
-from backend.database import db
-from backend.models.product_models import Product
+from backend.extensions import db
+from backend.models.product_models import Product, StockNotificationRequest
 from backend.models.user_models import User
-from backend.models.inventory_models import StockNotification
+from backend.models.utility_models import StockNotification
 from .monitoring_service import MonitoringService
 from .exceptions import ServiceError, NotFoundException, ValidationException
 from flask import current_app
-from ..models import StockNotificationRequest
 from ..tasks import send_back_in_stock_email_task
 
 
@@ -21,6 +20,32 @@ class NotificationService:
         db.session.add(new_request)
         db.session.commit()
         return new_request
+
+    @staticmethod
+    def send_back_in_stock_notification(user: User, product_name: str):
+        """
+        Queues a 'back in stock' email notification.
+        """
+        try:
+            # Import task here to prevent circular imports
+            from ..tasks import send_back_in_stock_email_task
+            send_back_in_stock_email_task.delay(user.id, product_name)
+            MonitoringService.log_info(f"Queued back-in-stock notification for product '{product_name}' to user {user.email}")
+        except Exception as e:
+            MonitoringService.log_info(f"Failed to queue back-in-stock email: {e}", exc_info=True)
+            
+    @staticmethod
+    def send_tier_upgrade_notification(user: User, new_tier_name: str):
+        """
+        Queues a loyalty tier upgrade notification.
+        """
+        try:
+            # Import task here to prevent circular imports
+            from ..tasks import send_tier_upgrade_email_task
+            send_tier_upgrade_email_task.delay(user.id, new_tier_name)
+            MonitoringService.log_info(f"Queued tier upgrade notification for user {user.email} to tier {new_tier_name}")
+        except Exception as e:
+            MonitoringService.log_info(f"Failed to queue tier upgrade email: {e}", exc_info=True)
 
 
     @staticmethod

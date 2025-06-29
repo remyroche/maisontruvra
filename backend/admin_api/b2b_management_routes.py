@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from backend.services.b2b_service import B2BService
 from backend.utils.decorators import staff_required, roles_required, permissions_required
-from backend.models.enums import B2BAccountStatus
+from backend.models.enums import B2BRequestStatus
 
 b2b_management_bp = Blueprint('b2b_management', __name__, url_prefix='/api/admin/b2b')
 
@@ -51,7 +51,7 @@ def approve_b2b_account(account_id):
       404:
         description: Account not found.
     """
-    account = B2BService.update_b2b_account_status(account_id, B2BAccountStatus.APPROVED)
+    account = B2BService.update_b2b_account_status(account_id, B2BRequestStatus.APPROVED)
     if not account:
         return jsonify({"error": "Account not found"}), 404
     # You might want to trigger a confirmation email here

@@ -103,6 +103,19 @@ class InputSanitizer:
             return data
     
     @staticmethod
+    def sanitize_input(data: Any) -> Any:
+        """
+        Alias for recursive_sanitize for backward compatibility.
+        
+        Args:
+            data: The data structure to sanitize (dict, list, or string)
+            
+        Returns:
+            Sanitized data structure of the same type
+        """
+        return InputSanitizer.recursive_sanitize(data)
+    
+    @staticmethod
     def validate_email(email: str) -> str:
         """
         Validate email format.

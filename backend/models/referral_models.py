@@ -1,5 +1,7 @@
 from backend.database import db
 from .base import BaseModel
+from datetime import datetime
+
 
 class Referral(db.Model):
     __tablename__ = 'referral'
@@ -37,6 +39,6 @@ class ReferralReward(db.Model):
     # Optional: Link to the specific order that triggered the reward
     triggering_order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=True)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime)
 
     referral = db.relationship('Referral', backref=db.backref('rewards', lazy=True))

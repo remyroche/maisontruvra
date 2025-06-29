@@ -1,188 +1,27 @@
 import os
+import logging
 from datetime import datetime
 from flask import render_template, current_app
-from playwright.sync_api import sync_playwright
+
 from backend.database import db
 from backend.models.order_models import Order
-from backend.tasks import generate_invoice_pdf_task
-from backend.models.b2b_models import B2BAccount, B2BUser
-from backend.models.invoice_models import Quote, Invoice, InvoiceItem
+from backend.models.invoice_models import Invoice
+from backend.models.b2b_models import B2BUser
 from backend.services.monitoring_service import MonitoringService
-from weasyprint import HTML
 
+logger = logging.getLogger(__name__)
 
 class InvoiceService:
     """
-    A unified service to handle invoice generation for both B2B and B2C orders.
+    Service pour la gestion des factures.
+    Sépare la création de l'enregistrement de la facture de la génération du fichier PDF.
     """
-
-    def __init__(self, session):
-        self.session = session
-
-    def create_quote(self, b2b_account_id, user_request):
-        """Creates a new quote request for a B2B account."""
-        account = self.session.get(B2BAccount, b2b_account_id)
-        if not account:
-            raise ValueError("B2B account not found.")
-
-        quote = Quote(
-            b2b_account_id=b2b_account_id,
-            user_request=user_request,
-            status='pending'
-        )
-        self.session.add(quote)
-        self.session.commit()
-        return quote
-
-    def convert_quote_to_invoice(self, quote_id, items, due_date_str=None):
-        """Converts a quote into a draft invoice."""
-        quote = self.session.get(Quote, quote_id)
-        if not quote or quote.status != 'pending':
-            raise ValueError("Quote not found or has already been processed.")
-
-        total_amount = sum(item['quantity'] * item['unit_price'] for item in items)
-        
-        due_date = datetime.fromisoformat(due_date_str) if due_date_str else None
-
-        invoice = Invoice(
-            b2b_account_id=quote.b2b_account_id,
-            quote_id=quote.id,
-            total_amount=total_amount,
-            status='draft',
-            due_date=due_date
-        )
-        self.session.add(invoice)
-
-        for item_data in items:
-            invoice_item = InvoiceItem(
-                invoice=invoice,
-                description=item_data['description'],
-                quantity=item_data['quantity'],
-                unit_price=item_data['unit_price'],
-                total_price=item_data['quantity'] * item_data['unit_price']
-            )
-            self.session.add(invoice_item)
-            
-        quote.status = 'converted'
-        self.session.commit()
-        return invoice
-
-    def sign_invoice(self, invoice_id, signature_data):
-        """Applies a digital signature to an invoice."""
-        invoice = self.session.get(Invoice, invoice_id)
-        if not invoice or invoice.status != 'pending_signature':
-            raise ValueError("Invoice cannot be signed at this time.")
-            
-        invoice.signature_data = signature_data
-        invoice.status = 'signed'
-        self.session.commit()
-        
-        # TODO: Trigger email to admin and user that invoice is signed and ready for payment
-        
-        return invoice
-        
-    def update_invoice_status(self, invoice_id, new_status):
-        """Updates the status of an invoice (e.g., to 'paid', 'void')."""
-        invoice = self.session.get(Invoice, invoice_id)
-        if not invoice:
-            raise ValueError("Invoice not found.")
-        
-        # Add logic here to validate status transitions if needed
-        invoice.status = new_status
-        self.session.commit()
-        return invoice
-
-class InvoiceService:
-    @staticmethod
-    def generate_pdf(order_id):
-        """
-        Generates a PDF for a given order by passing a full context
-        dictionary to the relevant B2C or B2B template.
-        """
-        MonitoringService.log_info(
-            f"Starting PDF generation for order_id: {order_id}",
-            "InvoiceService"
-        )
-        
-        order = Order.query.options(db.joinedload(Order.user)).get(order_id)
-        if not order:
-            MonitoringService.log_error(
-                f"Could not generate invoice: Order {order_id} not found.",
-                "InvoiceService"
-            )
-            raise ValueError(f"Order {order_id} not found")
-
-        invoice = Invoice.query.filter_by(order_id=order.id).first()
-        if not invoice:
-            MonitoringService.log_error(
-                f"Could not generate invoice: Invoice record for Order {order_id} not found.",
-                "InvoiceService"
-            )
-            raise ValueError(f"Invoice for Order {order_id} not found")
-
-        # --- IMPLEMENTATION: Build a comprehensive context dictionary ---
-        template_name = 'non-email/b2c_invoice.html'
-        context = {
-            'order': order,
-            'invoice': invoice,
-            'customer_name': f"{order.user.first_name} {order.user.last_name}",
-            'billing_address': order.billing_address, # Assuming this relationship exists
-            'shipping_address': order.shipping_address # Assuming this relationship exists
-        }
-
-        context['company'] = {
-            'legal_status': current_app.config.get('COMPANY_LEGAL_STATUS', 'SAS'),
-            'siret': current_app.config.get('COMPANY_SIRET', '123 456 789 00010'),
-            'capital': current_app.config.get('COMPANY_CAPITAL', '10,000'),
-            'address': current_app.config.get('COMPANY_ADDRESS', '123 Rue de la République, 75001 Paris, France'),
-            'vat_number': current_app.config.get('COMPANY_VAT_NUMBER', 'FR00123456789'),
-            'email': current_app.config.get('COMPANY_EMAIL', 'contact@maisontruvra.com')
-        }
-
-        # If the user is B2B, add B2B-specific details to the context
-        if order.user.is_b2b:
-            template_name = 'non-email/b2b_invoice.html'
-            b2b_user = B2BUser.query.filter_by(user_id=order.user.id).first()
-            if b2b_user:
-                context['company_name'] = b2b_user.company_name
-                context['vat_number'] = b2b_user.vat_number
-            try:
-                # Render the correct template with the full context
-                html_string = render_template(template_name, **context)
-                
-                # Use Playwright to convert the HTML to PDF
-                pdf_file = None # Initialize variable
-                with sync_playwright() as p:
-                    browser = p.chromium.launch()
-                    page = browser.new_page()
-                    page.set_content(html_string)
-                    pdf_file = page.pdf(
-                        format='A4',
-                        print_background=True,
-                        margin={'top': '20mm', 'bottom': '20mm', 'left': '15mm', 'right': '15mm'}
-                    )
-                    browser.close()
-    
-                # Save the PDF (e.g., to a cloud storage bucket)
-                filename = f"invoices/invoice-{invoice.company_name.invoice_number}.pdf"
-                # cloud_storage.save(pdf_file, filename) # Real implementation
-                
-                invoice.pdf_url = filename
-                invoice.status = 'generated'
-                db.session.commit()
-    
-                MonitoringService.log_info(f"PDF generation for invoice {invoice.invoice_number} completed. Saved to {filename}")
-                return True
-                    
-            except Exception as e:
-                db.session.rollback()
-                MonitoringService.log_info(f"An error occurred during PDF generation for order {order_id}: {e}", exc_info=True)
-                raise
 
     @staticmethod
     def _generate_invoice_number(prefix: str = "INV") -> str:
-        """Generates a unique invoice number with a given prefix (e.g., INV or RCT)."""
+        """Génère un numéro de facture unique basé sur la date et un compteur."""
         today = datetime.utcnow()
+        # Cherche la dernière facture du mois en cours pour incrémenter le compteur
         last_invoice = Invoice.query.filter(
             db.func.strftime('%Y-%m', Invoice.created_at) == today.strftime('%Y-%m')
         ).order_by(Invoice.id.desc()).first()
@@ -190,83 +29,60 @@ class InvoiceService:
         count = 1
         if last_invoice and last_invoice.invoice_number:
             try:
+                # Extrait le dernier numéro de la séquence
                 count = int(last_invoice.invoice_number.split('-')[-1]) + 1
             except (ValueError, IndexError):
-                pass
+                logger.warning(f"Impossible d'analyser le numéro de facture : {last_invoice.invoice_number}. Réinitialisation du compteur.")
                 
         return f"{prefix}-{today.strftime('%Y%m')}-{count:04d}"
 
     @staticmethod
-    def _render_invoice_html(order: Order) -> str:
-        """Renders the correct HTML template based on the user type."""
-        user = order.user
-        
-        # Prepare the context data for the template
-        context = {
-            "order": order,
-            "totals": order.calculate_totals(), # Assumes method exists on Order model
-            "company": {
-                "legal_status": "SAS", "siret": "123 456 789 00010",
-                "capital": "10,000", "address": "14 rue de la Libération, 93330 Neuilly-sur-Marne",
-                "vat_number": "FRXX123456789", "email": "contact@maisontruvra.com",
-                "bic": "AGRIFRPPXXX", "iban": "FR76 ...",
-            }
-        }
-
-        if user and user.user_type == 'B2B':
-            context["invoice"] = {
-                "number": InvoiceService._generate_invoice_number("INV"),
-                "issue_date": datetime.utcnow().strftime('%d/%m/%Y'),
-                "type_name": "Facture"
-            }
-            context["client"] = user.company_profile # Assumes relationship exists
-            return render_template('invoices/b2b_invoice.html', **context), context["invoice"]["number"]
-        else: # Default to B2C
-            context["receipt"] = {
-                "number": InvoiceService._generate_invoice_number("RECU"),
-                "issue_date": datetime.utcnow().strftime('%d/%m/%Y'),
-                "type_name": "Reçu"
-            }
-            context["client"] = user
-            # You would create a simpler 'b2c_receipt.html' template for this
-            return render_template('invoices/b2c_receipt.html', **context), context["receipt"]["number"]
-
-    @staticmethod
-    def create_invoice_for_order(order: Order):
+    def create_and_dispatch_invoice_for_order(order_id: int):
         """
-        Main function to generate, save, and email an invoice/receipt for an order.
+        Crée un enregistrement de facture pour une commande et lance une tâche Celery
+        pour générer le fichier PDF en arrière-plan.
         """
+        order = db.session.get(Order, order_id)
         if not order:
-            raise ValueError("Une commande est requise pour générer une facture.")
+            logger.error(f"Impossible de créer la facture : commande {order_id} non trouvée.")
+            raise ValueError(f"Commande {order_id} non trouvée.")
 
-        # 1. Render the correct HTML template (B2B Invoice or B2C Receipt)
-        html_out, invoice_number = InvoiceService._render_invoice_html(order)
+        if order.invoice:
+            logger.warning(f"La commande {order_id} a déjà une facture associée (ID: {order.invoice.id}).")
+            return order.invoice
 
-        # 2. Generate the PDF from the HTML
-        pdf_bytes = HTML(string=html_out).write_pdf()
-        pdf_filename = f"{invoice_number}.pdf"
+        try:
+            # Déterminer le préfixe et le type de document
+            prefix = "INV" if order.user.is_b2b else "RECU"
+            invoice_number = InvoiceService._generate_invoice_number(prefix)
 
-        # 3. Save the PDF to a configured storage location
-        storage_path = os.path.join(current_app.config.get("INVOICE_STORAGE_PATH"), pdf_filename)
-        with open(storage_path, 'wb') as f:
-            f.write(pdf_bytes)
+            # Créer l'enregistrement de la facture dans la base de données
+            new_invoice = Invoice(
+                invoice_number=invoice_number,
+                user_id=order.user_id,
+                order_id=order.id,
+                total_amount=order.total_cost, # Assumant que le modèle Order a un 'total_cost'
+                status='pending_generation', # Statut initial
+                pdf_url=None # Le PDF n'est pas encore créé
+            )
+            db.session.add(new_invoice)
+            db.session.commit()
 
-        # 4. Create the Invoice record in the database
-        new_invoice = Invoice(
-            invoice_number=invoice_number,
-            user_id=order.user_id,
-            order_id=order.id,
-            file_path=storage_path,
-            total_amount=order.calculate_totals()['net_total']
-        )
-        db.session.add(new_invoice)
-        
-        # 5. Send the correct confirmation email with the invoice attached
-        MonitoringService.log_info(
-            f"Invoice {new_invoice.id} created. Queuing PDF generation.",
-            "InvoiceService"
-        )
-        generate_invoice_pdf_task.delay(new_invoice.id)
+            # Lancer la tâche Celery pour la génération du PDF
+            from backend.tasks import generate_invoice_pdf_task
+            generate_invoice_pdf_task.delay(new_invoice.id)
 
-        # The calling service is responsible for the final db.session.commit()
-        return new_invoice
+            MonitoringService.log_info(
+                f"Facture {new_invoice.id} créée. Génération du PDF mise en file d'attente.",
+                "InvoiceService"
+            )
+            logger.info(f"Facture {new_invoice.id} pour la commande {order_id} envoyée à la file d'attente de génération.")
+            
+            return new_invoice
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Erreur lors de la création de la facture pour la commande {order_id}: {e}", exc_info=True)
+            MonitoringService.log_error(f"Échec de la création de la facture pour la commande {order_id}", "InvoiceService")
+            raise
+

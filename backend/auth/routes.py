@@ -2,13 +2,17 @@
 import logging
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import (
-    create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+    create_access_token, create_refresh_token, jwt_required, get_jwt_identity, get_jwt
 )
 from ..services.auth_service import AuthService
 from ..services.user_service import UserService
-from ..utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from ..utils.rate_limiter import rate_limiter
 from ..services.exceptions import ValidationException, UnauthorizedException, NotFoundException
+from datetime import datetime, timezone
+from flask import current_app
+
+import redis
 
 auth_bp = Blueprint('auth_bp', __name__, url_prefix='/api/auth')
 security_logger = logging.getLogger('security')
@@ -17,7 +21,7 @@ security_logger = logging.getLogger('security')
 @rate_limiter(limit=5, per=300) # 5 requests per 5 minutes
 def register():
     """Registers a new user and sends a verification email."""
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.sanitize_input(request.get_json())
     
     required_fields = ['email', 'password', 'first_name', 'last_name']
     if not all(field in data for field in required_fields):
@@ -38,7 +42,7 @@ def register():
 @rate_limiter(limit=10, per=60) # 10 requests per minute
 def login():
     """Authenticates a user, handling the first step of MFA if enabled."""
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.sanitize_input(request.get_json())
     email = data.get('email')
     password = data.get('password')
 
@@ -66,7 +70,7 @@ def login():
 @rate_limiter(limit=5, per=60) # 5 requests per minute
 def verify_mfa():
     """Verifies the MFA token and returns JWTs upon success."""
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.sanitize_input(request.get_json())
     user_id = data.get('user_id')
     mfa_token = data.get('mfa_token')
 
@@ -95,16 +99,16 @@ def logout():
     """
     try:
         token_data = get_jwt()
-        jti = token_data["jti"]
+        jti = get_jwt()['jti']
         token_type = token_data["type"]
         
         # Get the expiration timestamp and calculate the remaining time in seconds
-        expires_at = datetime.fromtimestamp(token_data['exp'], tz=timezone.utc)
-        now = datetime.now(timezone.utc)
-        expires_in = (expires_at - now).total_seconds()
+        token_exp = get_jwt()['exp']
+        expires = datetime.fromtimestamp(token_exp, tz=timezone.utc)
 
         # Add the JTI to the Redis blocklist with an expiration
-        redis_client.set(jti, "revoked", ex=int(expires_in))
+        redis_client = redis.from_url(current_app.config['REDIS_URL'])
+        redis_client.set(f"jti_blocklist:{jti}", "", ex=expires - datetime.now(timezone.utc))
         
         security_logger.info(f"User {get_jwt_identity()} logged out. Revoked {token_type} token {jti}.")
         return jsonify(message=f"{token_type.capitalize()} token successfully revoked"), 200
@@ -135,7 +139,7 @@ def refresh():
 @rate_limiter(limit=3, per=300) # 3 requests per 5 minutes
 def request_password_reset():
     """Initiates the password reset process."""
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.sanitize_input(request.get_json())
     email = data.get('email')
     AuthService.send_password_reset_email(email)
     # Always return a generic success message to prevent email enumeration
@@ -145,7 +149,7 @@ def request_password_reset():
 @rate_limiter(limit=5, per=600) # 5 requests per 10 minutes
 def confirm_password_reset():
     """Resets the user's password using a valid token."""
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.sanitize_input(request.get_json())
     token = data.get('token')
     new_password = data.get('new_password')
     

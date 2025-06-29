@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from backend.admin_api.site_management_routes import SiteSettingsService # Assuming this service exists
+from backend.services.site_settings_service import SiteSettingsService # Assuming this service exists
 from backend.utils.decorators import roles_required, permissions_required
 
 site_management_bp = Blueprint('admin_site_management_routes', __name__, url_prefix='/api/admin/site-settings')

@@ -12,7 +12,7 @@ from .b2b_loyalty_models import LoyaltyTier, UserLoyalty, ReferralRewardTier, Po
 from .passport_models import ProductPassport, PassportEntry
 from .blog_models import BlogPost, BlogCategory
 from .newsletter_models import NewsletterSubscriber # Corrected: Import NewsletterSubscriber
-from .inventory_models import Inventory
+from .inventory_models import Inventory, InventoryReservation
 from .auth_models import TokenBlocklist
 
 from .referral_models import Referral

@@ -2,7 +2,7 @@
 import re # Added: For regular expressions
 import os # Added: For os.environ.get
 from backend.models.user_models import User, UserRole
-from backend.database import db, Database
+from backend.database import db
 from backend.services.exceptions import ServiceError, ValidationException, UnauthorizedException, NotFoundException, InvalidPasswordException
 from backend.services.mfa_service import MfaService
 # generate_tokens is defined as a method in this class
@@ -27,7 +27,6 @@ ph = PasswordHasher()
 
 class AuthService:
     def __init__(self):
-        self.db = Database()
         self.sessions = {}  # In production, use Redis or similar
 
     @staticmethod

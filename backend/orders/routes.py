@@ -1,8 +1,13 @@
 from flask import Blueprint, request, jsonify
+from flask_login import current_user 
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.order_service import OrderService
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.cart_service import CartService
+from backend.utils.decorators import login_required
+from backend.services.exceptions import ServiceError
+from backend.services.email_service import EmailService
+from backend.schemas import OrderSchema
 
 orders_bp = Blueprint('orders_bp', __name__, url_prefix='/api/orders')
 
@@ -59,7 +64,7 @@ def checkout():
     if not data:
         return jsonify(status="error", message="Invalid JSON body"), 400
     
-    sanitized_data = sanitize_input(data)
+    sanitized_data = InputSanitizer.sanitize_input(data)
 
     required_fields = ['shipping_address', 'billing_address', 'payment_token']
     if not all(field in sanitized_data for field in required_fields):

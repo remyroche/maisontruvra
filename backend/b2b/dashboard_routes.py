@@ -1,18 +1,19 @@
 from backend.services.b2b_service import B2BService
-from backend.auth.permissions import b2b_user_required
+from backend.utils.decorators import b2b_user_required
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
-from services.dashboard_service import B2BDashboardService
-from utils.auth_helpers import b2b_required
-from utils.sanitization import sanitize_input
+from backend.services.dashboard_service import DashboardService
+from backend.utils.auth_helpers import b2b_required
+from backend.utils.input_sanitizer import InputSanitizer
+from flask_jwt_extended import get_jwt_identity
 
 b2b_dashboard_bp = Blueprint('b2b_dashboard_bp', __name__, url_prefix='/api/b2b/dashboard')
-dashboard_service = B2BDashboardService()
+dashboard_service = DashboardService()
 
 @b2b_dashboard_bp.route('/stats', methods=['GET'])
 @b2b_required
 def get_b2b_dashboard_stats():
-    period = sanitize_input(request.args.get('period', '30d'))
+    period = InputSanitizer.sanitize_input(request.args.get('period', '30d'))
     stats = dashboard_service.get_b2b_stats(current_user.id, period)
     return jsonify(stats)
 

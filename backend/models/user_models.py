@@ -1,6 +1,6 @@
 from .base import BaseModel, SoftDeleteMixin # Added: Import SoftDeleteMixin
 from .enums import UserStatus, RoleType
-from backend.database import db # Changed: Import db from backend.database
+from backend.extensions import db # Use consistent import from extensions
 from flask_login import UserMixin
 from sqlalchemy.orm import relationship
 from backend.utils.encryption import encrypt_data, decrypt_data # Changed: Use absolute import for utils
@@ -16,8 +16,7 @@ ph = PasswordHasher()
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False, comment="Stores the hashed password, not plaintext.")
-    password_hash = db.Column(db.String(255), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False, comment="Stores the hashed password, not plaintext.")
     _first_name = db.Column('first_name', db.String(50), nullable=False)
     _last_name = db.Column('last_name', db.String(50), nullable=False)
     _phone_number = db.Column('phone_number', db.String(20), nullable=True)
@@ -29,13 +28,12 @@ class User(db.Model, UserMixin):
     language_preference = db.Column(db.Enum(LanguagePreference), default=LanguagePreference.FR, nullable=False)
     subscribed_to_newsletter = db.Column(db.Boolean, default=False)
 
-    orders = db.relationship('Order', backref='user', lazy=True, cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="user", cascade="all, delete-orphan")
     addresses = db.relationship('Address', backref='user', lazy=True, cascade="all, delete-orphan")
     cart = relationship('Cart', uselist=False, back_populates='user', cascade="all, delete-orphan")
     reviews = db.relationship('Review', backref='user', lazy=True)
     wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True, cascade="all, delete-orphan")
     loyalty = relationship("UserLoyalty", back_populates="user", uselist=False, cascade="all, delete-orphan")
-    orders = relationship("Order", back_populates="user")
 
     two_factor_secret = db.Column(db.String(255), nullable=True)
     two_factor_enabled = db.Column(db.Boolean, default=False)

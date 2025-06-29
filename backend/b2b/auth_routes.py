@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from backend.utils.auth_helpers import b2b_required # Assumed to handle B2B auth
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.auth_service import AuthService # Corrected import
 from backend.services.email_service import EmailService # Corrected import
 from ..services.exceptions import ServiceError
@@ -68,7 +68,7 @@ def b2b_register():
         return jsonify(status="error", message="Invalid JSON"), 400
 
     # Sanitize all incoming data
-    sanitized_data = {k: sanitize_input(v) for k, v in data.items()}
+    sanitized_data = {k: InputSanitizer.sanitize_input(v) for k, v in data.items()}
 
     required_fields = [
         'email', 'password', 'first_name', 'last_name', 
@@ -106,7 +106,7 @@ def b2b_login():
     if not data or 'email' not in data or 'password' not in data:
         return jsonify(status="error", message="Email and password are required."), 400
 
-    email = sanitize_input(data.get('email'))
+    email = InputSanitizer.sanitize_input(data.get('email'))
     password = data.get('password') # Do not sanitize
 
     try:

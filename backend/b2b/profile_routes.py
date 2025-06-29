@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.b2b_service import B2BService
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import staff_required, b2b_user_required, roles_required, permissions_required, b2b_admin_required
 from backend.models.b2b_models import B2BUser
 from backend.database import db
@@ -123,7 +123,7 @@ def update_b2b_profile():
     if not data:
         return jsonify(status="error", message="Invalid or missing JSON body"), 400
 
-    sanitized_data = sanitize_input(data)
+    sanitized_data = InputSanitizer.sanitize_input(data)
     
     # Remove sensitive fields that should not be changed here
     sanitized_data.pop('vat_number', None)
@@ -145,7 +145,7 @@ def update_b2b_profile():
 @b2b_user_required
 def add_b2b_address():
     user_id = get_jwt_identity()
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.sanitize_input(request.get_json())
     # Assuming B2BService has a method to handle address creation for a user
     address = B2BService.add_address_for_user(user_id, data)
     return jsonify(address.to_dict()), 201
@@ -154,7 +154,7 @@ def add_b2b_address():
 @b2b_user_required
 def update_b2b_address(address_id):
     user_id = get_jwt_identity()
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.sanitize_input(request.get_json())
     # Assuming B2BService can update an address, checking ownership via user_id
     address = B2BService.update_address_for_user(address_id, user_id, data)
     return jsonify(address.to_dict())

@@ -1,25 +1,6 @@
 
-class ServiceException(Exception):
-    """Base exception for service layer errors."""
-    pass
-
-class NotFoundException(ServiceException):
-    """Exception raised when a resource is not found."""
-    pass
-
-class ValidationException(ServiceException):
-    """Exception raised when validation fails."""
-    pass
-
-class UnauthorizedException(ServiceException):
-    """Exception raised when user is not authorized."""
-    pass
-
-class InvalidPasswordException(ValidationException):
-    def __init__(self, message):
-        super().__init__(message)
-
 class ServiceError(Exception):
+    """Base exception for service layer errors."""
     status_code = 500
     message = "An internal service error occurred."
 
@@ -45,3 +26,10 @@ class UnauthorizedException(ServiceError):
 class InvalidPasswordException(ValidationException):
     """Exception for password policy failures."""
     pass
+
+class InvalidUsageException(ServiceError):
+    """Exception for invalid usage of service methods."""
+    status_code = 400
+
+# Legacy aliases for backward compatibility
+ServiceException = ServiceError

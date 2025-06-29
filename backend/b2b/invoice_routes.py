@@ -5,14 +5,14 @@ from backend.services.invoice_service import InvoiceService # Assuming this serv
 from backend.utils.decorators import staff_required, b2b_user_required, roles_required, permissions_required
 import io
 from io import BytesIO
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.database import db
 from backend.models.b2b_models import B2BUser
 from backend.models.invoice_models import Quote, Invoice
 from backend.services.invoice_service import InvoiceService
 
 b2b_invoice_bp = Blueprint('b2b_invoice_bp', __name__, url_prefix='/api/b2b')
-invoice_service = InvoiceService(db.session)
+# InvoiceService uses static methods, no instantiation needed
 invoice_bp = Blueprint('admin_invoice_routes', __name__, url_prefix='/api/admin/invoices')
 
 # GET a list of invoices for the current B2B user
@@ -27,7 +27,7 @@ def get_invoices():
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
-        status = sanitize_input(request.args.get('status'))
+        status = InputSanitizer.InputSanitizer.sanitize_input(request.args.get('status'))
         
         invoices_pagination = B2BService.get_user_invoices_paginated(user_id, page=page, per_page=per_page)
         
@@ -50,7 +50,7 @@ def submit_quote_request():
     current_user = db.session.get(B2BUser, b2b_user_id)
     
     try:
-        quote = invoice_service.create_quote(
+        quote = InvoiceService.create_quote(
             b2b_account_id=current_user.account_id,
             user_request=data['request_details']
         )
@@ -72,7 +72,7 @@ def sign_invoice(invoice_id):
         return jsonify({"error": "Invoice not found."}), 404
         
     try:
-        invoice_service.sign_invoice(invoice_id, signature_data)
+        InvoiceService.sign_invoice(invoice_id, signature_data)
         return jsonify({"message": "Invoice signed successfully."}), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

@@ -3,7 +3,7 @@ from backend.models.user_models import User
 from backend.models.referral_models import Referral
 from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from flask import current_app
 from flask_jwt_extended import get_jwt_identity
@@ -22,7 +22,7 @@ class ReferralService:
     def generate_referral_code(user_id):
         """Generate a unique referral code for a user"""
         try:
-            user_id = sanitize_input(user_id)
+            user_id = InputSanitizer.sanitize_input(user_id)
             
             # Verify user exists
             user = User.query.get(user_id)
@@ -78,8 +78,8 @@ class ReferralService:
     def apply_referral_code(user_id, referral_code):
         """Apply a referral code when a user signs up"""
         try:
-            user_id = sanitize_input(user_id)
-            referral_code = sanitize_input(referral_code)
+            user_id = InputSanitizer.sanitize_input(user_id)
+            referral_code = InputSanitizer.sanitize_input(referral_code)
             
             # Verify user exists
             user = User.query.get(user_id)
@@ -131,7 +131,7 @@ class ReferralService:
     def complete_referral(user_id):
         """Complete a referral when the referred user makes their first purchase"""
         try:
-            user_id = sanitize_input(user_id)
+            user_id = InputSanitizer.sanitize_input(user_id)
             
             # Find the referral record for this user
             referral = Referral.query.filter_by(referred_id=user_id, status='pending').first()
@@ -168,7 +168,7 @@ class ReferralService:
     def get_user_referrals(user_id):
         """Get all referrals made by a user"""
         try:
-            user_id = sanitize_input(user_id)
+            user_id = InputSanitizer.sanitize_input(user_id)
             
             # Verify user exists
             user = User.query.get(user_id)
@@ -203,7 +203,7 @@ class ReferralService:
     def get_referral_stats(user_id):
         """Get referral statistics for a user"""
         try:
-            user_id = sanitize_input(user_id)
+            user_id = InputSanitizer.sanitize_input(user_id)
             
             # Verify user exists
             user = User.query.get(user_id)
@@ -233,7 +233,7 @@ class ReferralService:
     def validate_referral_code(referral_code):
         """Validate if a referral code exists and is valid"""
         try:
-            referral_code = sanitize_input(referral_code)
+            referral_code = InputSanitizer.sanitize_input(referral_code)
             
             referral = Referral.query.filter_by(referral_code=referral_code).first()
             if not referral:

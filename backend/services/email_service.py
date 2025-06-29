@@ -11,7 +11,6 @@ from flask import current_app, render_template, url_for
 from flask_mail import Message
 from threading import Thread
 from backend.extensions import mail
-from backend.tasks import send_email_task
 from backend.services.monitoring_service import MonitoringService
 from flask import render_template, current_app
 
@@ -36,6 +35,8 @@ class EmailService:
                    attachments: Optional[List[str]] = None) -> Dict[str, Any]:
         """Send an email"""
         try:
+            from backend.tasks import send_email_task
+
             if not self.smtp_username or not self.smtp_password:
                 MonitoringService.log_error(
                     "SMTP credentials not configured",

@@ -1,7 +1,7 @@
 import uuid
 from backend import db
 from backend.models.order_models import Order, OrderItem
-from backend.models.product_models import ProductItem, Product
+from backend.models.product_models import Product
 from backend.models.cart_models import Cart
 from backend.models.address_models import Address
 from backend.services.loyalty_service import LoyaltyService
@@ -15,7 +15,6 @@ from backend.services.email_service import EmailService
 from backend.services.pdf_service import PDFService
 from flask import current_app
 from .notification_service import NotificationService
-from .pdf_service import PDFService
 from .monitoring_service import MonitoringService
 from ..extensions import socketio
 from backend.services.invoice_service import InvoiceService
@@ -358,9 +357,9 @@ class OrderService:
         """
         # Find available, 'in_stock' serialized items for the given variant.
         # We use with_for_update() to lock the rows to prevent another process from allocating the same items.
-        items_to_allocate = db.session.query(ProductItem)\
-            .filter(ProductItem.product_variant_id == variant_id)\
-            .filter(ProductItem.status == 'in_stock')\
+        items_to_allocate = db.session.query(OrderItem)\
+            .filter(OrderItem.product_variant_id == variant_id)\
+            .filter(OrderItem.status == 'in_stock')\
             .limit(quantity)\
             .with_for_update()\
             .all()

@@ -107,6 +107,25 @@ echo "-> Checking for necessary tools..."
 check_command python3
 check_command npm
 
+# Check Redis
+echo "-> Checking Redis status..."
+if redis-cli ping > /dev/null 2>&1; then
+    echo "   ✅ Redis is running"
+else
+    echo "   ❌ Redis is not running or not installed"
+    echo "   Please install and start Redis:"
+    echo "   - macOS: brew install redis && brew services start redis"
+    echo "   - Ubuntu: sudo apt-get install redis-server"
+    echo "   - Or run: ./check_redis.sh"
+    echo ""
+    read -p "   Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "   Exiting. Please start Redis first."
+        exit 1
+    fi
+fi
+
 # Install/update dependencies
 echo "-> Installing/updating backend dependencies..."
 echo "   NOTE: Ensure 'playwright' is in backend/requirements.txt and 'weasyprint' is removed."

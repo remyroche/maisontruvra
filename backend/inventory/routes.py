@@ -1,6 +1,7 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from backend.services.inventory_service import InventoryService # Assumed service
-from backend.auth.permissions import permissions_required
+from backend.utils.decorators import permissions_required, admin_required
+from backend.utils.input_sanitizer import InputSanitizer
 
 inventory_bp = Blueprint('inventory_bp', __name__, url_prefix='/api/inventory')
 
@@ -26,7 +27,7 @@ def get_stock_level(product_id):
 @inventory_bp.route('/update', methods=['POST'])
 @admin_required
 def update_inventory_levels():
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.sanitize_input(request.get_json())
     # data format: [{'product_id': 1, 'quantity': 100}, ...]
     try:
         product_service.update_inventory_levels(data)

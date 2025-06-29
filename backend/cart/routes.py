@@ -1,9 +1,9 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from backend.services.cart_service import CartService
-from backend.utils.sanitization import sanitize_input
-from ..services.cart_service import CartService
+from backend.utils.input_sanitizer import InputSanitizer
 from ..services.loyalty_service import LoyaltyService
+from backend.services.exceptions import NotFoundException, ValidationException
 
 cart_bp = Blueprint('cart_bp', __name__, url_prefix='/api/cart')
 
@@ -78,8 +78,8 @@ def add_item_to_cart():
         return jsonify(status="error", message="product_id and quantity are required."), 400
 
     try:
-        product_id = int(sanitize_input(data['product_id']))
-        quantity = int(sanitize_input(data['quantity']))
+        product_id = int(InputSanitizer.sanitize_input(data['product_id']))
+        quantity = int(InputSanitizer.sanitize_input(data['quantity']))
 
         if quantity <= 0:
             return jsonify(status="error", message="Quantity must be a positive number."), 400
@@ -108,7 +108,7 @@ def update_cart_item(product_id):
         return jsonify(status="error", message="Quantity is required."), 400
 
     try:
-        quantity = int(sanitize_input(data['quantity']))
+        quantity = int(InputSanitizer.sanitize_input(data['quantity']))
         if quantity < 0:
              return jsonify(status="error", message="Quantity cannot be negative."), 400
 

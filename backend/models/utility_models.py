@@ -29,17 +29,6 @@ class StockNotification(db.Model):
     def __repr__(self):
         return f'<StockNotification for Product {self.product_id}>'
 
-
-class NewsletterSubscriber(BaseModel):
-    __tablename__ = 'newsletter_subscribers'
-
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    is_b2c = db.Column(db.Boolean, default=True) # To distinguish between B2C and B2B newsletters
-    is_active = db.Column(db.Boolean, default=True)
-
-    def __repr__(self):
-        return f'<NewsletterSubscriber {self.email}>'
-
 class ContactMessage(BaseModel):
     """Model to store messages from the contact form."""
     __tablename__ = 'contact_messages'

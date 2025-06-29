@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from backend.services.order_service import OrderService
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import staff_required, roles_required, permissions_required
 
 order_routes = Blueprint('admin_order_routes', __name__, url_prefix='/api/admin/orders')
@@ -128,7 +128,7 @@ def update_order_status(order_id):
     if not OrderService.get_order_by_id(order_id):
         return jsonify(status="error", message="Order not found"), 404
 
-    sanitized_status = sanitize_input(data['status'])
+    sanitized_status = InputSanitizer.sanitize_input(data['status'])
     
     try:
         # Assuming the service handles the logic of status transition

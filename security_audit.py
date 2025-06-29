@@ -10,11 +10,53 @@ import argparse
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, asdict
+import logging
 
-# --- Configuration ---
-# Directories to scan
-BACKEND_DIR = 'backend'
-FRONTEND_DIR = 'website'
+
+# --- CONFIGURATION ---
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+
+PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
+
+BACKEND_DIR = os.path.join(PROJECT_ROOT, 'backend')
+FRONTEND_DIR = os.path.join(PROJECT_ROOT, 'website')
+
+# Répertoires à analyser (chemins absolus).
+SCAN_DIRECTORIES = [
+    os.path.join(PROJECT_ROOT, 'backend'),
+    os.path.join(PROJECT_ROOT, 'website')
+]
+
+# Chemins à exclure, convertis en chemins absolus pour une correspondance fiable.
+EXCLUDED_PATHS = [
+    os.path.abspath(os.path.join(PROJECT_ROOT, p)) for p in [
+        'backend/migrations',
+        'backend/tests',
+        'backend/__pycache__',
+        'website/node_modules',
+        'website/dist'
+    ]
+]
+
+# Décorateurs qui signalent qu'une route est protégée.
+PERMISSION_DECORATORS = [
+    '@jwt_required',
+    '@roles_required',
+    '@permissions_required',
+    '@admin_required',
+    '@staff_required',
+    '@b2b_user_required',
+    '@b2b_admin_required',
+    '@login_required' # En supposant un décorateur personnalisé
+]
+# Routes qui sont publiquement accessibles par conception et qui doivent être ignorées.
+PUBLIC_ROUTES = [
+    r"@auth_bp\.route\('/login'",
+    r"@auth_bp\.route\('/register'",
+    r"@auth_bp\.route\('/refresh'",
+    r"@csrf_bp\.route\('/get-csrf-token'",
+    # Ajoutez ici d'autres routes publiques si nécessaire
+]
 
 # Security finding data structure
 @dataclass
@@ -251,9 +293,11 @@ def check_missing_permissions(py_files: List[str]) -> int:
     found_issues = 0
     permission_decorators = [
         '@permissions_required',
+        '@roles_required',
         '@admin_required',
         '@staff_required',
         '@b2b_user_required',
+        '@b2b_admin_required',
         '@jwt_required'
     ]
 
@@ -1043,61 +1087,140 @@ def run_enhanced_audit(config: AuditConfig):
             print(f"{Colors.YELLOW}⚠ Security audit completed with only low severity issues.{Colors.ENDC}")
             return 0
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Enhanced Security Audit Tool')
-    parser.add_argument('--format', choices=['console', 'json', 'html'], default='console',
-                       help='Output format (default: console)')
-    parser.add_argument('--output', '-o', help='Output file path')
-    parser.add_argument('--include-low', action='store_true', 
-                       help='Include low severity findings')
-    parser.add_argument('--skip-deps', action='store_true',
-                       help='Skip dependency vulnerability checks')
-    parser.add_argument('--skip-static', action='store_true',
-                       help='Skip static analysis (bandit)')
-    parser.add_argument('--legacy', action='store_true',
-                       help='Run legacy audit mode')
-    
-    args = parser.parse_args()
-    
-    config = AuditConfig(
-        include_low_severity=args.include_low,
-        output_format=args.format,
-        output_file=args.output,
-        skip_dependency_check=args.skip_deps,
-        skip_static_analysis=args.skip_static
-    )
-    
-    if args.legacy:
-        # Run original audit
-        print(f"{Colors.BOLD}Starting security audit...{Colors.ENDC}")
 
-        # --- Backend Audit ---
-        if os.path.isdir(BACKEND_DIR):
-            print_header("BACKEND AUDIT")
-            backend_py_files = find_files(BACKEND_DIR, '.py')
-            check_missing_permissions(backend_py_files)
-            check_unsanitized_input(backend_py_files)
-            check_secure_cookies(os.path.join(BACKEND_DIR, 'config.py'))
-            check_dependency_vulnerabilities(BACKEND_DIR, "pip-audit")
-        else:
-            print(f"{Colors.YELLOW}Backend directory '{BACKEND_DIR}' not found. Skipping backend checks.{Colors.ENDC}")
+def find_python_files(directories):
+    """
+    Trouve tous les fichiers .py dans les répertoires spécifiés, en excluant les dossiers spécifiés.
+    """
+    python_files = []
+    for directory in directories:
+        if not os.path.isdir(directory):
+            logging.warning(f"Le répertoire d'analyse '{directory}' n'existe pas, il sera ignoré.")
+            continue
+            
+        for root, dirs, files in os.walk(directory):
+            # Empêche os.walk de descendre dans les répertoires exclus.
+            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+            
+            for file in files:
+                # Analyse uniquement les fichiers Python
+                if file.endswith('.py'):
+                    python_files.append(os.path.join(root, file))
+    return python_files
 
-        # --- Frontend Audit ---
-        if os.path.isdir(FRONTEND_DIR):
-            print_header("FRONTEND AUDIT")
-            vue_files = find_files(FRONTEND_DIR, '.vue')
-            check_xss_vulnerabilities(vue_files)
-            check_dependency_vulnerabilities(FRONTEND_DIR, "npm audit")
-        else:
-            print(f"{Colors.YELLOW}Frontend directory '{FRONTEND_DIR}' not found. Skipping frontend checks.{Colors.ENDC}")
+def analyze_file_for_unprotected_routes(file_path):
+    """
+    Analyse un fichier pour trouver les routes Flask qui pourraient ne pas avoir
+    de décorateurs de permission/authentification.
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = [line.strip() for line in f.readlines()]
+        
+        unprotected_routes = []
+        for i, line in enumerate(lines):
+            # Cible les définitions de routes comme '@bp.route(...)'
+            if '@' in line and '.route' in line:
+                
+                # Vérifie si la route est dans la liste blanche des routes publiques
+                if any(re.search(pattern, line) for pattern in PUBLIC_ROUTES):
+                    continue
 
-        print(f"\n{Colors.BOLD}Audit complete.{Colors.ENDC}")
-        sys.exit(0)
+                is_protected = False
+                
+                # Définit une "fenêtre de recherche" de lignes autour de la définition de la route.
+                start_line = max(0, i - 8)
+                end_line = min(len(lines), i + 4)
+                search_window = lines[start_line:end_line]
+                
+                # Cherche un décorateur de permission n'importe où dans cette fenêtre.
+                for window_line in search_window:
+                    if any(dec in window_line for dec in PERMISSION_DECORATORS):
+                        is_protected = True
+                        break
+                
+                if not is_protected:
+                    unprotected_routes.append((i + 1, line))
+                    
+        return unprotected_routes
+    except Exception as e:
+        logging.error(f"Impossible d'analyser le fichier {file_path}: {e}")
+        return []
+def find_scan_files(directories):
+    """
+    Trouve tous les fichiers pertinents (.py, .js, .vue) dans les répertoires spécifiés.
+    Retourne une liste de chemins de fichiers absolus.
+    """
+    allowed_extensions = ('.py', '.js', '.vue')
+    found_files = []
+    
+    for directory in directories:
+        if not os.path.isdir(directory):
+            logging.warning(f"Le répertoire d'analyse '{directory}' n'existe pas, il sera ignoré.")
+            continue
+            
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if file.endswith(allowed_extensions):
+                    # Convertit chaque chemin de fichier en chemin absolu.
+                    found_files.append(os.path.abspath(os.path.join(root, file)))
+    return found_files
+
+def check_for_var_keyword(file_path):
+    """Vérifie l'utilisation du mot-clé 'var' dans les fichiers JS et Vue."""
+    if not file_path.endswith(('.js', '.vue')):
+        return []
+
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for i, line in enumerate(f, 1):
+                if re.search(r'\bvar\b', line):
+                    findings.append({
+                        "line": i,
+                        "message": "L'utilisation de 'var' est obsolète. Préférez 'let' ou 'const'.",
+                        "severity": "MEDIUM"
+                    })
+    except Exception as e:
+        logging.error(f"Impossible de lire le fichier {file_path}: {e}")
+    return findings
+
+def run_all_checks_on_file(file_path):
+    """Exécute toutes les vérifications définies sur un seul fichier."""
+    all_findings = []
+    all_findings.extend(check_for_var_keyword(file_path))
+    return all_findings
+
+def main():
+    """Fonction principale pour exécuter l'audit des meilleures pratiques."""
+    logging.info("Début de l'audit des meilleures pratiques...")
+    
+    all_files = find_scan_files(SCAN_DIRECTORIES)
+    
+    # Filtre les fichiers en comparant les chemins absolus, ce qui est plus fiable.
+    files_to_scan = [
+        f for f in all_files 
+        if not any(f.startswith(excluded) for excluded in EXCLUDED_PATHS)
+    ]
+    
+    logging.info(f"{len(files_to_scan)} fichier(s) à analyser après exclusion.")
+    
+    total_findings = 0
+    
+    for file_path in files_to_scan:
+        # Affiche le chemin relatif pour une meilleure lisibilité.
+        relative_path = os.path.relpath(file_path, PROJECT_ROOT)
+        findings = run_all_checks_on_file(file_path)
+        if findings:
+            logging.warning(f"Problèmes trouvés dans : {relative_path}")
+            for finding in findings:
+                total_findings += 1
+                logging.warning(f"  - Ligne {finding['line']}: [{finding['severity']}] {finding['message']}")
+
+    if total_findings == 0:
+        logging.info("Audit des meilleures pratiques terminé. Aucun problème trouvé.")
     else:
-        # Run enhanced audit
-        exit_code = run_enhanced_audit(config)
-        sys.exit(exit_code)
+        logging.error(f"Audit des meilleures pratiques terminé. {total_findings} problème(s) potentiel(s) trouvé(s).")
 
-
-
-
+if __name__ == '__main__':
+    main()

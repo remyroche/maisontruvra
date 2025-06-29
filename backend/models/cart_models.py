@@ -9,7 +9,11 @@ class Cart(BaseModel):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True, nullable=False)
-    
+    session_id = db.Column(db.String(255), unique=True, nullable=True)
+
+    b2b_account_id = db.Column(db.Integer, db.ForeignKey('b2b_accounts.id'), nullable=True)
+    b2b_account = db.relationship('B2BAccount', backref='carts')
+
     items = db.relationship('CartItem', back_populates='cart', cascade="all, delete-orphan")
     user = db.relationship('User', back_populates='cart')
 

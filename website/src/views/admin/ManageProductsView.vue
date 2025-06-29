@@ -73,14 +73,12 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { useDebounce } from '@vueuse/core';
-import { useApiData } from '@/composables/useApiData';
+import { ref, onMounted } from 'vue';
 import { useAdminProductsStore } from '@/stores/adminProducts';
-import { adminApiClient } from '@/services/api';
-import BaseDataTable from '@/components/admin/ui/BaseDataTable.vue';
-import Modal from '@/components/admin/ui/Modal.vue';
-import ProductForm from '@/components/admin/products/ProductForm.vue';
+import BaseDataTable from '@/components/ui/BaseDataTable.vue';
+import Modal from '@/components/ui/Modal.vue';
+import ProductForm from '@/components/admin/ProductForm.vue';
+
 
 const productsStore = useAdminProductsStore();
 

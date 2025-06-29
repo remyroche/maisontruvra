@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from backend.admin_api.pos_routes import PosService
-from backend.utils.sanitization import sanitize_input
+from backend.services.pos_service import PosService
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import staff_required, roles_required, permissions_required
 
 pos_bp = Blueprint('pos_bp', __name__, url_prefix='/admin/pos')
@@ -16,7 +16,7 @@ def create_pos_transaction():
     if not data:
         return jsonify(status="error", message="Invalid JSON body"), 400
 
-    sanitized_data = sanitize_input(data)
+    sanitized_data = InputSanitizer.sanitize_input(data)
     
     required_fields = ['items', 'payment_method', 'terminal_id']
     if not all(field in sanitized_data for field in required_fields):

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.wishlist_service import WishlistService
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 
 wishlist_bp = Blueprint('wishlist_bp', __name__, url_prefix='/api/wishlist')
 
@@ -33,7 +33,7 @@ def add_to_wishlist():
         return jsonify(status="error", message="product_id is required."), 400
 
     try:
-        product_id = int(sanitize_input(data['product_id']))
+        product_id = int(InputSanitizer.sanitize_input(data['product_id']))
         wishlist_item = WishlistService.add_to_wishlist(user_id, product_id)
         if wishlist_item:
             return jsonify(status="success", data=wishlist_item.to_dict()), 201

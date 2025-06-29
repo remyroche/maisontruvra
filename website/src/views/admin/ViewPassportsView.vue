@@ -1,27 +1,42 @@
 <template>
   <div>
     <h1 class="text-2xl font-bold mb-4">Product Passports</h1>
-    <BaseDataTable v-if="!passportsStore.isLoading" :headers="headers" :items="passportsStore.passports">
-      <template #item-actions="{ item }">
-        <button @click="download(item.id)" class="text-indigo-600 hover:text-indigo-900">Download PDF</button>
-      </template>
-    </BaseDataTable>
-    <div v-else>Loading passports...</div>
+    <BaseDataTable :columns="columns" :data="passports" />
   </div>
 </template>
-<script setup>
-import { onMounted } from 'vue';
-import { useAdminPassportsStore } from '@/js/stores/adminPassports';
-import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
 
-const passportsStore = useAdminPassportsStore();
-const headers = [
-    { text: 'Passport ID', value: 'id' },
-    { text: 'Product Name', value: 'product_name' },
-    { text: 'Date Generated', value: 'created_at' },
-    { text: 'Actions', value: 'actions' },
-];
+<script>
+import { ref, onMounted } from 'vue';
+// Corrected the import path for BaseDataTable
+import BaseDataTable from '@/components/ui/BaseDataTable.vue';
+import api from '@/services/api';
 
-onMounted(() => passportsStore.fetchPassports());
-const download = (id) => passportsStore.downloadPassport(id);
+export default {
+  name: 'ViewPassportsView',
+  components: {
+    BaseDataTable,
+  },
+  setup() {
+    const passports = ref([]);
+    const columns = [
+      { key: 'product_name', label: 'Product' },
+      { key: 'passport_id', label: 'Passport ID' },
+      { key: 'creation_date', label: 'Date Created' },
+    ];
+
+    onMounted(async () => {
+      try {
+        const response = await api.get('/admin/passports');
+        passports.value = response.data;
+      } catch (error) {
+        console.error('Failed to fetch passports:', error);
+      }
+    });
+
+    return {
+      passports,
+      columns,
+    };
+  },
+};
 </script>

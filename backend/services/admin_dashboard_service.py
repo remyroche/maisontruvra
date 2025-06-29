@@ -3,8 +3,7 @@ from sqlalchemy import func
 from backend.database import db
 from backend.models.order_models import Order, OrderStatus
 from backend.models.user_models import User
-from backend.models.product_models import Product
-from backend.models.review_models import Review
+from backend.models.product_models import Product, Review
 
 class AdminDashboardService:
     """

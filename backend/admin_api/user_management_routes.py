@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from backend.services.user_service import UserService
 from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
 from backend.middleware import sanitize_request_data
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from backend.utils.csrf_protection import CSRFProtection
 import logging

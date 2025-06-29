@@ -1,5 +1,5 @@
 
-from backend.database import db
+from backend.extensions import db
 from datetime import datetime
 
 class SoftDeleteMixin:

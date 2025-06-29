@@ -10,7 +10,10 @@ class Order(BaseModel, SoftDeleteMixin):
     guest_phone = db.Column(db.String(20), nullable=True)
     status = db.Column(db.String(50), nullable=False, default='pending')
 
-    total_amount = db.Column(db.Numeric(10, 2), nullable=False)
+    b2b_account_id = db.Column(db.Integer, db.ForeignKey('b2b_accounts.id'), nullable=True)
+    b2b_account = db.relationship('B2BAccount', backref='orders')
+
+    total_cost = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
     shipping_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'), nullable=True)
     

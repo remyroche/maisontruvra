@@ -1,15 +1,34 @@
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from .. import db
-from .base import Base
+import enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Numeric, Text
+from sqlalchemy.orm import relationship
+from .base import BaseModel
 
-class LoyaltyTier(Base):
+# Enum for Reward Type
+class RewardType(enum.Enum):
+    DISCOUNT = "discount"
+    VOUCHER = "voucher"
+    EXCLUSIVE_PRODUCT = "exclusive_product"
+    EARLY_ACCESS = "early_access"
+
+# Enum for Log Type
+class LoyaltyLogType(enum.Enum):
+    EARNED = "earned"
+    REDEEMED = "redeemed"
+    ADJUSTED = "adjusted" # For manual admin adjustments
+    EXPIRED = "expired"
+
+class LoyaltyTier(BaseModel):
     __tablename__ = 'loyalty_tiers'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = db.Column(db.String(100), nullable=False, unique=True)
     min_spend = db.Column(db.Float, nullable=False, default=0.0)
     points_per_euro = db.Column(db.Float, nullable=False, default=1.0)
     benefits = db.Column(db.Text, nullable=True)
+    discount_percentage = Column(Numeric(5, 2), nullable=False, default=0.00)
+    exclusive_rewards = relationship("ExclusiveReward", back_populates="tier")
 
     def to_dict(self):
         return {
@@ -20,7 +39,7 @@ class LoyaltyTier(Base):
             'benefits': self.benefits
         }
 
-class UserLoyalty(Base):
+class UserLoyalty(BaseModel):
     __tablename__ = 'user_loyalty'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False, unique=True)
@@ -38,7 +57,7 @@ class UserLoyalty(Base):
             'tier': self.tier.to_dict() if self.tier else None,
         }
 
-class LoyaltyPointLog(Base):
+class LoyaltyPointLog(BaseModel):
     __tablename__ = 'loyalty_point_logs'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
@@ -55,7 +74,7 @@ class LoyaltyPointLog(Base):
             'created_at': self.created_at.isoformat()
         }
 
-class Referral(Base):
+class Referral(BaseModel):
     __tablename__ = 'referrals'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     referrer_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
@@ -75,7 +94,7 @@ class Referral(Base):
             'created_at': self.created_at.isoformat()
         }
 
-class ReferralRewardTier(Base):
+class ReferralRewardTier(BaseModel):
     __tablename__ = 'referral_rewards'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     referral_count = db.Column(db.Integer, unique=True, nullable=False)
@@ -88,7 +107,7 @@ class ReferralRewardTier(Base):
             'reward_description': self.reward_description
         }
 
-class PointVoucher(Base):
+class PointVoucher(BaseModel):
     __tablename__ = 'point_vouchers'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
@@ -107,7 +126,7 @@ class PointVoucher(Base):
             'is_used': self.is_used
         }
 
-class ExclusiveReward(Base):
+class ExclusiveReward(BaseModel):
     __tablename__ = 'exclusive_rewards'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = db.Column(db.String(255), nullable=False)

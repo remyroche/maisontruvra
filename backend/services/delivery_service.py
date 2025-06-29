@@ -2,7 +2,7 @@ from .. import db
 from ..models.delivery_models import DeliveryMethod
 from ..models.b2b_loyalty_models import LoyaltyTier
 from ..models.user_models import User
-from ..utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from .audit_log_service import AuditLogService
 
 class DeliveryService:
@@ -35,7 +35,7 @@ class DeliveryService:
         """
         Creates a new delivery method and logs the action.
         """
-        sanitized_data = sanitize_input(data)
+        sanitized_data = InputSanitizer.sanitize_input(data)
         new_method = DeliveryMethod(
             name=sanitized_data['name'],
             description=sanitized_data.get('description', ''),
@@ -67,7 +67,7 @@ class DeliveryService:
         method = DeliveryMethod.query.get_or_404(method_id)
         old_details = method.to_dict() # Capture state before changes
         
-        sanitized_data = sanitize_input(data)
+        sanitized_data = InputSanitizer.sanitize_input(data)
         method.name = sanitized_data.get('name', method.name)
         method.description = sanitized_data.get('description', method.description)
         method.price = float(sanitized_data.get('price', method.price))

@@ -5,16 +5,16 @@ from backend.utils.input_sanitizer import InputSanitizer
 
 
 class AddressService:
-def create_address(self, user_id, address_data):
-    """
-    Creates a new address for a user after sanitizing the input data.
-    """
-    sanitized_data = {key: InputSanitizer.clean_html(value) if isinstance(value, str) else value for key, value in address_data.items()}
-    
-    address = Address(user_id=user_id, **sanitized_data)
-    db.session.add(address)
-    db.session.commit()
-    return address
+    def create_address(self, user_id, address_data):
+        """
+        Creates a new address for a user after sanitizing the input data.
+        """
+        sanitized_data = {key: InputSanitizer.clean_html(value) if isinstance(value, str) else value for key, value in address_data.items()}
+        
+        address = Address(user_id=user_id, **sanitized_data)
+        db.session.add(address)
+        db.session.commit()
+        return address
 
     
     @staticmethod

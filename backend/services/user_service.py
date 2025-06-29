@@ -2,12 +2,11 @@ from backend.database import db
 from backend.models.user_models import User, UserRole
 from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from flask import current_app, request  # Ensure request is imported
 from flask_jwt_extended import get_jwt_identity
 from backend.models.b2b_models import B2BUser  # Add this import
-
 
 class UserService:
     @staticmethod
@@ -25,7 +24,7 @@ class UserService:
         query = User.query
 
         if filters:
-            filters = sanitize_input(filters)
+            filters = InputSanitizer.sanitize_input(filters)
             if filters.get('role'):
                 query = query.filter(User.role == filters['role'])
             if filters.get('is_active') is not None:
@@ -43,7 +42,7 @@ class UserService:
     @staticmethod
     def create_user(user_data: dict):
         """Create a new user with proper validation and logging."""
-        user_data = sanitize_input(user_data)
+        user_data = InputSanitizer.sanitize_input(user_data)
 
         # Validate required fields
         required_fields = ['email', 'password', 'first_name', 'last_name']
@@ -80,19 +79,12 @@ class UserService:
 
             db.session.commit()
 
-            MonitoringService.log_info(
-                f"User created successfully: {user.email} (ID: {user.id})",
-                "UserService"
-            )
+            MonitoringService.log_info(f"User created successfully: {user.email} (ID: {user.id})", "UserService")
             return user.to_dict(context='admin')
 
         except Exception as e:
             db.session.rollback()
-            MonitoringService.log_error(
-                f"Failed to create user: {str(e)}",
-                "UserService",
-                exc_info=True
-            )
+            MonitoringService.log_error(f"Failed to create user: {str(e)}", "UserService")
             raise ValidationException(f"Failed to create user: {str(e)}")
 
     def update_user_language(self, user_id, language, user_type='b2c'):
@@ -113,7 +105,7 @@ class UserService:
     @staticmethod
     def update_user(user_id: int, update_data: dict):
         """Update user with proper validation and logging."""
-        update_data = sanitize_input(update_data)
+        update_data = InputSanitizer.sanitize_input(update_data)
 
         user = User.query.get(user_id)
         if not user:
@@ -163,19 +155,12 @@ class UserService:
 
             db.session.commit()
 
-            MonitoringService.log_info(
-                f"User updated successfully: {user.email} (ID: {user.id})",
-                "UserService"
-            )
+            MonitoringService.log_info(f"User created successfully: {user.email} (ID: {user.id})", "UserService")
             return user.to_dict(context='admin')
 
         except Exception as e:
             db.session.rollback()
-            MonitoringService.log_error(
-                f"Failed to update user {user_id}: {str(e)}",
-                "UserService",
-                exc_info=True
-            )
+            MonitoringService.log_error(f"Failed to update user {user_id}: {str(e)}", "UserService")
             raise ValidationException(f"Failed to update user: {str(e)}")
 
     @staticmethod
@@ -199,16 +184,9 @@ class UserService:
 
             db.session.commit()
 
-            MonitoringService.log_info(
-                f"User soft deleted: {user.email} (ID: {user.id})",
-                "UserService"
-            )
+            MonitoringService.log_error(f"Failed to update user {user_id}: {str(e)}", "UserService")
 
         except Exception as e:
             db.session.rollback()
-            MonitoringService.log_error(
-                f"Failed to delete user {user_id}: {str(e)}",
-                "UserService",
-                exc_info=True
-            )
+            MonitoringService.log_info(f"User created successfully: {user.email} (ID: {user.id})", "UserService")
             raise ValidationException(f"Failed to delete user: {str(e)}")

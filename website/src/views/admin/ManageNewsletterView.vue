@@ -101,11 +101,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, reactive } from 'vue';
-import apiClient from '../../common/adminApiClient'; 
-import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
-import Modal from '@/js/admin/components/Modal.vue';
-import { useNotificationStore } from '../../../js/stores/notification';
+import { ref, onMounted } from 'vue';
+import BaseDataTable from '@/components/ui/BaseDataTable.vue';
+import Modal from '@/components/ui/Modal.vue';
+import api from '@/services/api';
 
 const notificationStore = useNotificationStore();
 

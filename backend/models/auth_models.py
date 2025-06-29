@@ -1,5 +1,8 @@
 from backend.database import db
 from .base import BaseModel
+from werkzeug.security import check_password_hash, generate_password_hash
+from sqlalchemy import JSON, Column, Integer, String, Boolean, DateTime, ForeignKey, Table
+from sqlalchemy.orm import relationship
 
 # Association table for AdminUser and Role
 admin_user_roles = db.Table('admin_user_roles',
@@ -43,7 +46,7 @@ class Role(db.Model):
     description = db.Column(db.String(255))
     
     # Store permissions as a JSON array
-    permissions = db.Column(JSONB, nullable=False, default=[])
+    permissions = db.Column(JSON, nullable=False, default=[])
     
     users = db.relationship('AdminUser', secondary=admin_user_roles, back_populates='roles')
 

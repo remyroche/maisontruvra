@@ -24,7 +24,7 @@
 import { ref, onMounted } from 'vue';
 import { useAdminCollectionsStore } from '@/js/stores/adminCollections';
 import BaseDataTable from '@/js/admin/components/ui/BaseDataTable.vue';
-import CollectionForm from '@/js/admin/components/CollectionForm.vue';
+import CollectionForm from '@/components/admin/CollectionForm.vue';
 
 const collectionsStore = useAdminCollectionsStore();
 const isEditing = ref(false);

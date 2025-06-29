@@ -5,7 +5,9 @@
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity
-from backend.auth.permissions import b2b_user_required
+from backend.utils.decorators import b2b_user_required
+from backend.utils.input_sanitizer import InputSanitizer
+from backend.services.monitoring_service import MonitoringService
 
 # Assume 'db', 'logger', and a background task 'queue' are available and configured.
 
@@ -19,7 +21,7 @@ def create_b2b_quick_order():
     This performs full SKU validation and inventory checks within a transaction.
     """
     user_id = get_jwt_identity()
-    data = sanitize_input(request.get_json())
+    data = InputSanitizer.sanitize_input(request.get_json())
     items = data.get('items')
 
     if not items or not isinstance(items, list):
@@ -105,7 +107,7 @@ def create_b2b_quick_order():
         # Ensure rollback on any failure
         if 'conn' in locals() and conn.is_connected():
             conn.rollback()
-        logger.error(f"B2B Quick Order failed for user {user_id}: {e}")
+        MonitoringService.log_error(f"B2B Quick Order failed for user {user_id}: {e}")
         return jsonify({"error": "An internal error occurred during order creation."}), 500
     finally:
         if 'conn' in locals() and conn.is_connected():

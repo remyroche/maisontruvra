@@ -3,6 +3,8 @@ from celery import Celery
 from flask_talisman import Talisman
 from datetime import datetime
 import os
+from .extensions import db, migrate, cors, jwt
+from .celery_worker import celery # Import the celery instance
 
 # Import extension instances from the central extensions file
 from .extensions import (
@@ -70,17 +72,8 @@ def create_app(config_class=config.Config):
     csrf.init_app(app)
     cors.init_app(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}})
     mail.init_app(app)
-    celery.conf.update(app.config)
+    celery.config_from_object(app.config, namespace='CELERY')
     jwt.init_app(app)
-
-    # Function to initialize Celery with Flask app context
-    def init_celery(app):
-        celery.conf.update(app.config)
-        class ContextTask(celery.Task):
-            def __call__(self, *args, **kwargs):
-                with app.app_context():
-                    return self.run(*args, **kwargs)
-        celery.Task = ContextTask
 
     # Setup database security options and logging
     setup_database_security(app)
@@ -94,8 +87,14 @@ def create_app(config_class=config.Config):
     from backend.auth.csrf_routes import csrf_bp
     app.register_blueprint(csrf_bp, url_prefix='/api/auth')
 
-    # Initialize Celery after the app is configured
-    init_celery(app)
+    # Create a custom Celery Task class that ensures every task
+    # runs within the Flask application context.
+    class ContextTask(celery.Task):
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return self.run(*args, **kwargs)
+
+    celery.Task = ContextTask
     
     # --- Signal Handlers for Login Events ---    
     @user_logged_in.connect_via(app)

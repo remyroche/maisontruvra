@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from backend.services.newsletter_service import NewsletterService
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 
 newsletter_bp = Blueprint('newsletter_bp', __name__, url_prefix='/api/newsletter')
 
@@ -13,9 +13,9 @@ def subscribe_to_newsletter():
     if not data or 'email' not in data:
         return jsonify(status="error", message="Email is required."), 400
 
-    email = sanitize_input(data['email'])
+    email = InputSanitizer.sanitize_input(data['email'])
     # Default to 'b2c' if not provided. The frontend for the B2B page should send 'b2b'.
-    list_type = sanitize_input(data.get('list_type', 'b2c'))
+    list_type = InputSanitizer.sanitize_input(data.get('list_type', 'b2c'))
 
     try:
         # Service handles validation and adding the email to the correct list
@@ -30,7 +30,7 @@ def subscribe_to_newsletter():
 
 @newsletter_bp.route('/unsubscribe/<string:token>', methods=['GET'])
 def unsubscribe(token):
-    sanitized_token = sanitize_input(token)
+    sanitized_token = InputSanitizer.sanitize_input(token)
     if newsletter_service.unsubscribe(sanitized_token):
         return jsonify({'message': 'You have been unsubscribed.'})
     return jsonify({'error': 'Invalid unsubscribe link.'}), 400

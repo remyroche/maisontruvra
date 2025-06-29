@@ -1,8 +1,8 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ...services.loyalty_service import LoyaltyService
-from ...auth.permissions import b2b_user_required
-from ...extensions import cache, db
+from backend.services.loyalty_service import LoyaltyService
+from backend.utils.decorators import b2b_user_required
+from backend.extensions import cache, db
 
 b2b_loyalty_bp = Blueprint('b2b_loyalty_bp', __name__, url_prefix='/api/b2b/loyalty')
 

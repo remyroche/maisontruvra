@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify
 from backend.services.product_service import ProductService
-from backend.utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.exceptions import NotFoundException, ValidationException
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.extensions import cache
 import logging
+from backend.services.review_service import ReviewService
 
 products_bp = Blueprint('products_bp', __name__, url_prefix='/api/products')
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ def get_recommendations(product_id):
 @products_bp.route('/search', methods=['GET'])
 def search_products():
     """Endpoint for product search/autocomplete."""
-    query = sanitize_input(request.args.get('q', ''))
+    query = InputSanitizer.InputSanitizer.sanitize_input(request.args.get('q', ''))
     if len(query) < 2:
         return jsonify([])
     
@@ -47,8 +48,8 @@ def get_products():
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 24, type=int)
-        category = sanitize_input(request.args.get('category'))
-        search_query = sanitize_input(request.args.get('q', ''))
+        category = InputSanitizer.InputSanitizer.sanitize_input(request.args.get('category'))
+        search_query = InputSanitizer.InputSanitizer.sanitize_input(request.args.get('q', ''))
 
         filters = {'category': category, 'search': search_query}
         
@@ -72,7 +73,7 @@ def get_product_by_slug(slug):
     """
     Get detailed information for a single product by its slug.
     """
-    clean_slug = sanitize_input(slug)
+    clean_slug = InputSanitizer.InputSanitizer.sanitize_input(slug)
     product = ProductService.get_product_by_slug(clean_slug)
     if not product:
         return jsonify(status="error", message="Product not found"), 404
@@ -120,7 +121,7 @@ def create_product_review(product_id):
         return jsonify(status="error", message="Rating and comment are required."), 400
 
     try:
-        sanitized_data = sanitize_input(data)
+        sanitized_data = InputSanitizer.InputSanitizer.sanitize_input(data)
         rating = int(sanitized_data['rating'])
         comment = sanitized_data['comment']
 

@@ -5,11 +5,12 @@
 import pyotp
 import qrcode
 import io
-import db   
+from backend.database import db
 from flask import Blueprint, jsonify, request, g, Response
 from flask_jwt_extended import get_jwt_identity
 from backend.extensions import cache # Import the cache instance
-from backend.auth.permissions import permission_required
+from backend.utils.decorators import permission_required
+from backend.services.monitoring_service import MonitoringService
 from backend.services.email_service import EmailService
 # Assume 'db' is a database connection manager and 'encryption_service' is configured
 
@@ -97,11 +98,11 @@ def verify_mfa_setup():
         # Clean up the temporary secret from the cache
         cache.delete(f"mfa_setup_{user_id}")
         # You should also generate and show the user their one-time recovery codes here.
-        EmailService.send_security_alert(user, "L'authentification à deux facteurs (2FA) a été activée")
+        EmailService.send_security_alert(user_id, "L'authentification à deux facteurs (2FA) a été activée")
         return jsonify({"message": "MFA has been successfully enabled."}), 200
     except Exception as e:
         conn.rollback()
-        logger.error(f"Failed to enable MFA for user {user_id}: {e}")
+        MonitoringService.log_error(f"Failed to enable MFA for user {user_id}: {e}")
         return jsonify({"error": "Could not enable MFA due to a server error."}), 500
     finally:
         cursor.close()

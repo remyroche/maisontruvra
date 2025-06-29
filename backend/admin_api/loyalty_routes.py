@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from ..services.loyalty_service import LoyaltyService
-from ..utils.sanitization import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import staff_required, roles_required, permissions_required
 from ..extensions import cache
 
@@ -100,7 +100,7 @@ def update_loyalty_settings():
     if not data:
         return jsonify(status="error", message="Invalid JSON body"), 400
 
-    sanitized_data = sanitize_input(data)
+    sanitized_data = InputSanitizer.sanitize_input(data)
 
     try:
         updated_settings = LoyaltyService.update_settings(sanitized_data)
@@ -123,8 +123,8 @@ def adjust_user_points(user_id):
         return jsonify(status="error", message="'points' (integer) and 'reason' (string) are required."), 400
 
     try:
-        points = int(sanitize_input(data['points']))
-        reason = sanitize_input(data['reason'])
+        points = int(InputSanitizer.sanitize_input(data['points']))
+        reason = InputSanitizer.sanitize_input(data['reason'])
 
         updated_balance = LoyaltyService.adjust_points(user_id, points, reason)
         return jsonify(status="success", data={'new_balance': updated_balance}), 200
