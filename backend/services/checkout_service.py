@@ -3,6 +3,23 @@ from backend.models.user_models import User, Address
 from backend.models.order_models import DeliveryMethod
 from backend.services.exceptions import NotFoundException, ValidationException
 
+# backend/services/checkout_service.py
+from flask import current_app
+from backend.services.cart_service import get_cart_by_id, clear_cart
+from backend.services.order_service import create_order, create_b2b_order, get_order_by_id
+from backend.services.inventory_service import update_stock_from_order
+from backend.services.loyalty_service import add_loyalty_points_for_purchase
+# Assuming a payment service exists
+# from backend.services.payment.stripe_service import create_stripe_checkout_session 
+from backend.models.order_models import OrderStatus
+from backend.tasks import (
+    generate_invoice_for_order_task, 
+    generate_invoice_for_b2b_order_task,
+    send_order_confirmation_email_task,
+    send_b2b_order_confirmation_email_task,
+    notify_user_of_loyalty_points_task
+)
+
 class CheckoutService:
     """
     Handles business logic related to the checkout process.
@@ -57,3 +74,61 @@ class CheckoutService:
         """
         # For now, return all active delivery methods.
         return DeliveryMethod.query.filter_by(is_active=True).order_by(DeliveryMethod.price).all()
+
+    @staticmethod
+    def process_user_checkout(user, cart, payment_token):
+        """Processes checkout for a logged-in user."""
+        # This function would likely handle payment processing first
+        # For this example, we assume payment is successful and an order is created.
+        order = create_order(user.id, cart, "stripe_payment_intent_id") # Example
+        
+        if order:
+            db.session.commit()
+            update_stock_from_order(order.id, is_b2b=False)
+            clear_cart(cart.id)
+            
+            # Schedule background tasks
+            send_order_confirmation_email_task.delay(order.id)
+            generate_invoice_for_order_task.delay(order.id)
+            
+            points_earned = add_loyalty_points_for_purchase(user.id, order.total)
+            if points_earned > 0:
+                notify_user_of_loyalty_points_task.delay(user.id, points_earned)
+                
+            return order
+        return None
+    
+    @staticmethod
+    def process_guest_checkout(guest_data, cart, payment_token):
+        """Processes checkout for a guest user."""
+        # Logic to create a temporary user or handle guest orders
+        order = create_order(None, cart, "stripe_payment_intent_id", guest_data=guest_data)
+    
+        if order:
+            db.session.commit()
+            update_stock_from_order(order.id, is_b2b=False)
+            clear_cart(cart.id)
+    
+            # Schedule background tasks
+            send_order_confirmation_email_task.delay(order.id)
+            generate_invoice_for_order_task.delay(order.id)
+            
+            return order
+        return None
+    
+    @staticmethod
+    def process_b2b_checkout(user, cart, payment_details):
+        """Processes checkout for a B2B user."""
+        b2b_order = create_b2b_order(user.id, cart, payment_details)
+    
+        if b2b_order:
+            db.session.commit()
+            update_stock_from_order(b2b_order.id, is_b2b=True)
+            clear_cart(cart.id)
+            
+            # Schedule background tasks for B2B
+            send_b2b_order_confirmation_email_task.delay(b2b_order.id)
+            generate_invoice_for_b2b_order_task.delay(b2b_order.id)
+    
+            return b2b_order
+        return None
