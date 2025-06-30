@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from backend.services.inventory_service import InventoryService # Assumed service
 from backend.utils.decorators import permissions_required, admin_required
 from backend.utils.input_sanitizer import InputSanitizer
+from backend.services import product_service
 
 inventory_bp = Blueprint('inventory_bp', __name__, url_prefix='/api/inventory')
 
