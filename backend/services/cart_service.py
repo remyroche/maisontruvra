@@ -13,16 +13,40 @@ from ..models import ExclusiveReward, Product
 
 class CartService:
     @staticmethod
-    def get_cart_for_user(user_id):
-        """Finds or creates a cart for a given user."""
+    def get_cart(user_id: int) -> dict:
+        """
+        Retrieves the user's cart. If the user is B2B, it applies tiered pricing.
+        """
+        user = db.session.get(User, user_id)
+        if not user:
+            raise NotFoundException("User not found")
+
+        if user.user_type == UserType.B2B:
+            return B2BService.get_cart_with_b2b_pricing(user_id)
+
+        # B2C cart logic
         cart = Cart.query.filter_by(user_id=user_id).first()
         if not cart:
+            # Optionally create a cart if it doesn't exist
             cart = Cart(user_id=user_id)
             db.session.add(cart)
-            # We commit here to get a cart ID for new carts.
-            # Subsequent operations in the same request will be part of a new transaction.
             db.session.commit()
-        return cart
+
+        subtotal = sum(item.product.price * item.quantity for item in cart.items)
+        
+        return {
+            'cart': cart,
+            'items_details': [{
+                'item': item,
+                'original_price': item.product.price,
+                'discounted_price': item.product.price, # No discount for B2C from tier
+                'line_total': item.product.price * item.quantity
+            } for item in cart.items],
+            'subtotal': subtotal,
+            'discount_applied': Decimal('0.00'),
+            'total': subtotal,
+            'tier_name': None
+        }
 
     @staticmethod
     def add_reward_to_cart(user_id, reward_id):
@@ -111,9 +135,34 @@ class CartService:
             raise ServiceError(f"Failed to add item to cart: {str(e)}")
 
     @staticmethod
+
+    def add_to_cart(user_id: int, product_id: int, quantity: int) -> Cart:
+        if quantity <= 0:
+            raise ValueError("Quantity must be positive.")
+
+        cart = Cart.query.filter_by(user_id=user_id).first()
+        if not cart:
+            cart = Cart(user_id=user_id)
+            db.session.add(cart)
+        
+        product = Product.query.get_or_404(product_id)
+        
+        cart_item = CartItem.query.filter_by(cart_id=cart.id, product_id=product_id).first()
+        
+        if cart_item:
+            cart_item.quantity += quantity
+        else:
+            # For B2B, price is calculated on retrieval, for B2C it is the product price
+            price = product.price 
+            cart_item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity, price=price)
+            db.session.add(cart_item)
+            
+        db.session.commit()
+        
     def update_cart_item(item_id: int, update_data: dict):
         """Update cart item quantity with inventory reservation adjustments."""
         update_data = InputSanitizer.sanitize_json(update_data)
+        try:
         if not current_user.is_authenticated:
             raise ServiceError("User must be authenticated", 401)
         user_id = current_user.id
@@ -171,33 +220,24 @@ class CartService:
             )
             raise ServiceError(f"Failed to update cart item: {str(e)}")
 
+    
     @staticmethod
-    def remove_from_cart(item_id: int):
-        """Remove item from cart and release its inventory reservation."""
-        if not current_user.is_authenticated:
-            raise ServiceError("User must be authenticated", 401)
-        user_id = current_user.id
-        
-        cart_item = CartItem.query.join(Cart).filter(Cart.user_id == user_id, CartItem.id == item_id).first()
-        if not cart_item:
-            raise NotFoundException("Cart item not found")
-
+    def remove_from_cart(user_id: int, product_id: int) -> Cart:
         try:
-            quantity_to_release = cart_item.quantity
-            product_id = cart_item.product_id
-            cart = cart_item.cart
-
-            db.session.delete(cart_item)
-            db.session.commit()
-            
-            # Release the inventory reservation after successful removal from cart
-            InventoryService.release_stock(product_id, quantity_to_release, user_id=user_id)
-            
-            MonitoringService.log_info(
-                f"Cart item removed: Item {item_id}",
-                "CartService"
-            )
-            return cart.to_dict()
+            cart = Cart.query.filter_by(user_id=user_id).first()
+            if cart:
+                cart_item = CartItem.query.filter_by(cart_id=cart.id, product_id=product_id).first()
+                if cart_item:
+                    db.session.delete(cart_item)
+                    db.session.commit()
+                    # Release the inventory reservation after successful removal from cart
+                    InventoryService.release_stock(product_id, quantity_to_release, user_id=user_id)
+                    
+                    MonitoringService.log_info(
+                        f"Cart item removed: Item {item_id}",
+                        "CartService"
+                    )
+            return cart
         except Exception as e:
             db.session.rollback()
             MonitoringService.log_error(
