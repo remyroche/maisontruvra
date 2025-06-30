@@ -142,6 +142,7 @@ def check_auth_status():
 # Setup MFA for an admin user
 @admin_auth_bp.route('/mfa/setup', methods=['POST'])
 @jwt_required()
+@staff_required
 def setup_mfa():
     """
     Initiates the MFA setup process for the currently logged-in admin user.
@@ -164,9 +165,34 @@ def setup_mfa():
         # Log the error e
         return jsonify(status="error", message=f"Failed to initiate MFA setup: {e}"), 500
 
+@admin_auth_bp.route('/auth/disable-mfa', methods=['POST'])
+@staff_required
+@limiter.limit("5 per hour")
+def disable_mfa():
+    """
+    Disables MFA for the current user after password verification.
+    """
+    data = request.get_json()
+    password = data.get('password') # Password is not sanitized to allow all characters
+
+    if not password:
+        return jsonify({"error": "Password is required to disable MFA."}), 400
+
+    if AuthService.verify_password(current_user, password):
+        MFAService.disable_mfa(current_user)
+        AuditLogService.log_action(
+            user_id=current_user.id,
+            action='mfa_disabled',
+            details="MFA has been disabled."
+        )
+        return jsonify({"message": "MFA disabled successfully."})
+    
+    return jsonify({"error": "Invalid password."}), 401
+    
 # Verify and enable MFA
 @admin_auth_bp.route('/mfa/verify', methods=['POST'])
 @jwt_required()
+@limiter.limit("5 per minute")
 def verify_mfa():
     """
     Verifies the MFA token provided by the user and enables MFA if correct.
