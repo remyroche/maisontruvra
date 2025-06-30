@@ -31,5 +31,34 @@ class InvalidUsageException(ServiceError):
     """Exception for invalid usage of service methods."""
     status_code = 400
 
-# Legacy aliases for backward compatibility
-ServiceException = ServiceError
+class ServiceException(Exception):
+    """Base exception for services."""
+    def __init__(self, message="An internal error occurred."):
+        self.message = message
+        super().__init__(self.message)
+
+class ResourceNotFound(ServiceException):
+    """Raised when a resource is not found."""
+    def __init__(self, resource_name="Resource", resource_id=None):
+        message = f"{resource_name} not found."
+        if resource_id:
+            message = f"{resource_name} with ID '{resource_id}' not found."
+        super().__init__(message)
+
+class AuthorizationError(ServiceException):
+    """Raised when an action is not authorized."""
+    def __init__(self, message="You are not authorized to perform this action."):
+        super().__init__(message)
+
+class ValidationError(ServiceException):
+    """Raised on data validation errors."""
+    pass
+
+class CheckoutValidationError(ServiceException):
+    """Raised when checkout validation fails (e.g., stock or price change)."""
+    def __init__(self, message="Checkout validation failed."):
+        self.message = message
+        super().__init__(self.message)
+
+
+
