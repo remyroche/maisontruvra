@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from backend.services.product_service import ProductService
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.utils.decorators import staff_required, roles_required, permissions_required
+from backend.utils.decorators import staff_required, roles_required, permissions_required, get_object_or_404
 from backend.models.inventory_models import Inventory
 from backend.extensions import cache, db
 from backend.services.background_task_service import BackgroundTaskService
@@ -131,43 +131,33 @@ def get_products():
 @permissions_required('MANAGE_PRODUCTS')
 @roles_required ('Admin', 'Manager', 'Support')
 @cache.cached(timeout=21600)
+@get_object_or_404(Product)
 def get_product(product_id):
     """
     Get a single product by their ID.
     """
-    product = ProductService.get_product_by_id(product_id)
-    if product:
-        return jsonify(status="success", data=product.to_dict()), 200
-    return jsonify(status="error", message="Product not found"), 404
+    product = g.product
+    return jsonify(product.to_dict_detailed())
+
 
 # UPDATE an existing product
 @product_management_bp.route('/products/<int:product_id>', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
 @roles_required ('Admin', 'Manager')
+@get_object_or_404(Product)
 def update_product(product_id):
     """
     Update an existing product's information.
     """
+    product_to_update = g.product
     data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid or missing JSON body"), 400
     
-    if not ProductService.get_product_by_id(product_id):
-        return jsonify(status="error", message="Product not found"), 404
-
-    sanitized_data = InputSanitizer.recursive_sanitize(data)
-
-    try:
-        updated_product = ProductService.update_product(product_id, sanitized_data)
-        cache.delete('view//api/products')
-        cache.delete(f'view//api/products/{product_id}')
-        return jsonify(status="success", data=updated_product.to_dict()), 200
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An internal error occurred while updating the product."), 500
-
+    updated_product = product_service.update_product(product_to_update.id, data)
+    
+    if updated_product:
+        return jsonify(updated_product.to_dict_detailed())
+    return jsonify({"error": "Failed to update product"}), 400
+    
 # DELETE a product
 @product_management_bp.route('/products/<int:product_id>', methods=['DELETE'])
 @permissions_required('MANAGE_PRODUCTS')
