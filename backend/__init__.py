@@ -87,6 +87,27 @@ def create_app(config_class=config.Config):
     @app.context_processor
     def inject_vite_asset():
         return dict(vite_asset=vite_asset)
+        
+    # --- Initialize Talisman for security headers ---
+    # A restrictive Content-Security-Policy (CSP) is essential for preventing XSS.
+    # The default is very strict. The policy below is a starting point.
+    # For production, you must carefully craft a policy that fits your application's needs,
+    # especially regarding script sources for Vue.js.
+    csp = {
+        'default-src': '\'self\'',
+        'img-src': '*', # Allow images from any source for now
+        'script-src': [
+            '\'self\'',
+            # In production, you would remove 'unsafe-eval' and use a nonce-based approach.
+            '\'unsafe-eval\'', 
+        ],
+        'style-src': [
+            '\'self\'',
+            # In production, this should be removed.
+            '\'unsafe-inline\'',
+        ]
+    }
+    Talisman(app, content_security_policy=csp)
 
     # Register CSRF routes
     from backend.auth.csrf_routes import csrf_bp
