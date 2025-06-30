@@ -32,3 +32,4 @@ const handleContinue = () => {
   emit('continue', { ...guestDetails.value });
 };
 </script>
+
