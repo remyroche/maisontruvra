@@ -42,21 +42,59 @@ def get_account_details():
 @account_bp.route('/dashboard-data')
 @login_required
 def get_dashboard_data():
-    if current_user.is_b2b:
-        return jsonify(dashboard_service.get_b2b_dashboard_data(current_user.id))
-    return jsonify(dashboard_service.get_b2c_dashboard_data(current_user.id))
+    """
+    Provides dashboard data for the logged-in user.
+    Differentiates between B2B and B2C users.
+    """
+    dashboard_service = current_app.service_provider.dashboard
+    if hasattr(current_user, 'is_b2b') and current_user.is_b2b:
+        data = dashboard_service.get_b2b_dashboard_data(current_user.id)
+    else:
+        data = dashboard_service.get_b2c_dashboard_data(current_user.id)
+    return jsonify(data)
 
 @account_bp.route('/b2b-specific-data')
 @b2b_user_required
 def b2b_data():
-    # some b2b specific logic
-    return jsonify({"message": "B2B specific data"})
+    """
+    Provides specific, detailed data for a B2B user.
+    This could include company details, team members, and contract information.
+    """
+    b2b_service = current_app.service_provider.b2b
+    
+    # The b2b_user_required decorator ensures current_user.b2b_user is not None
+    b2b_account = b2b_service.get_b2b_account_details(current_user.b2b_user.id)
+    
+    if not b2b_account:
+        return jsonify({"error": "B2B account not found"}), 404
+        
+    # Example data structure
+    data = {
+        "company_name": b2b_account.company_name,
+        "vat_number": b2b_account.vat_number,
+        "status": b2b_account.status.value,
+        "users_count": b2b_service.get_b2b_user_count(b2b_account.id),
+        "recent_orders_summary": current_app.service_provider.order.get_recent_orders_summary_for_b2b(b2b_account.id)
+    }
+    return jsonify(data)
 
 @account_bp.route('/admin-only-data')
 @admin_required
 def admin_data():
-    # some admin specific logic
-    return jsonify({"message": "Admin only data"})
+    """
+    Provides summary data intended for an admin user,
+    often as a quick overview from a user-centric perspective.
+    """
+    admin_dashboard_service = current_app.service_provider.admin_dashboard
+    
+    # Example data using the admin dashboard service
+    data = {
+        "pending_b2b_applications": admin_dashboard_service.get_pending_b2b_applications_count(),
+        "recent_user_registrations": admin_dashboard_service.get_recent_user_registrations_count(days=7),
+        "total_active_users": admin_dashboard_service.get_total_active_users_count()
+    }
+    return jsonify(data)
+
 
 @account_bp.route('/api/account/language', methods=['PUT'])
 @login_required
