@@ -4,9 +4,61 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.checkout_service import CheckoutService
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.exceptions import NotFoundException, ValidationException
+from flask_login import current_user
+from backend.services.checkout_service import process_user_checkout, process_guest_checkout, process_b2b_checkout
+from backend.services.cart_service import get_cart_by_id_or_session
+from backend.models.enums import UserType
 
 checkout_bp = Blueprint('checkout_bp', __name__, url_prefix='/api')
 
+@checkout_bp.route('/', methods=['POST'])
+def checkout():
+    """
+    Handles the checkout process.
+    It differentiates between guest, authenticated B2C, and B2B users.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON data provided."}), 400
+
+    cart_id = data.get('cart_id')
+    payment_token = data.get('payment_token') # e.g., from Stripe.js
+
+    # A cart ID is essential for any checkout process
+    if not cart_id:
+        return jsonify({"error": "Cart ID is missing."}), 400
+
+    cart = get_cart_by_id_or_session(cart_id)
+    if not cart or not cart.items:
+        return jsonify({"error": "Your cart is empty or could not be found."}), 400
+
+    order = None
+    try:
+        if current_user.is_authenticated:
+            if hasattr(current_user, 'user_type') and current_user.user_type == UserType.B2B:
+                # B2B checkout process
+                payment_details = data.get('payment_details') # Could be PO number, etc.
+                order = process_b2b_checkout(current_user, cart, payment_details)
+            else:
+                # Regular B2C user checkout
+                order = process_user_checkout(current_user, cart, payment_token)
+        else:
+            # Guest checkout
+            guest_data = data.get('guest_info')
+            if not guest_data or not guest_data.get('email'):
+                return jsonify({"error": "Guest information and email are required."}), 400
+            order = process_guest_checkout(guest_data, cart, payment_token)
+
+        if order:
+            return jsonify({"status": "success", "order_id": order.id}), 200
+        else:
+            # This case handles scenarios where order creation fails in the service layer
+            return jsonify({"error": "Checkout failed. Please review your order details and try again."}), 400
+
+    except Exception as e:
+        current_app.logger.error(f"Checkout process failed: {e}", exc_info=True)
+        return jsonify({"error": "An unexpected error occurred during checkout. Please try again later."}), 500
+        
 @checkout_bp.route('/user/addresses', methods=['GET'])
 @jwt_required()
 def get_user_addresses():
