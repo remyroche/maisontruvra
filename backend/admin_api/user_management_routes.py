@@ -7,6 +7,7 @@ from backend.services.audit_log_service import AuditLogService
 from backend.utils.csrf_protection import CSRFProtection
 import logging
 from backend.utils.decorators import staff_required, roles_required, permissions_required
+from backend.services.discount_service import DiscountService
 
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
@@ -55,6 +56,52 @@ def get_users():
     except Exception as e:
         logger.error(f"Error fetching users: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
+
+@user_management_bp.route('/<int:user_id>/assign-tier', methods=['POST'])
+@roles_required ('Admin', 'Manager')
+@sanitize_request_data
+def assign_tier_to_user(user_id):
+    """
+    Manually assigns a tier to any user. This action overrides automated tier assignments.
+    """
+    data = request.get_json()
+    if not data or 'tier_id' not in data:
+        return jsonify({'message': 'tier_id is required'}), 400
+    
+    try:
+        user = DiscountService.assign_tier_to_user(user_id, data['tier_id'])
+        return jsonify({'message': f'Tier manually assigned to {user.email} successfully'}), 200
+    except NotFoundException as e:
+        return jsonify({'message': str(e)}), 404
+    except Exception as e:
+        return jsonify({'message': f'An error occurred: {str(e)}'}), 500
+
+@user_management_bp.route('/<int:user_id>/custom-discount', methods=['POST'])
+@roles_required ('Admin', 'Manager')
+@sanitize_request_data
+def set_custom_discount(user_id):
+    """
+    Sets a custom discount percentage and monthly spend limit for any user.
+    This overrides any tier-based discounts.
+    """
+    data = request.get_json()
+    discount = data.get('discount_percentage')
+    limit = data.get('monthly_spend_limit')
+
+    if discount is None or limit is None:
+        return jsonify({'message': 'discount_percentage and monthly_spend_limit are required'}), 400
+
+    try:
+        DiscountService.set_custom_discount_for_user(
+            user_id,
+            Decimal(discount),
+            Decimal(limit)
+        )
+        return jsonify({'message': 'Custom discount set successfully for user'}), 200
+    except NotFoundException as e:
+        return jsonify({'message': str(e)}), 404
+    except Exception as e:
+        return jsonify({'message': f'An error occurred: {str(e)}'}), 500
 
 @user_management_bp.route('/users', methods=['POST'])
 @roles_required ('Admin', 'Manager')
