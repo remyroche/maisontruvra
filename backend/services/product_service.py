@@ -91,6 +91,18 @@ class ProductService:
             page=page, per_page=per_page, error_out=False
         )
 
+
+    @staticmethod
+    def get_all_products():
+        """
+        Fetches all products.
+        """
+        # Using options to eagerly load relationships to avoid N+1 query problems.
+        return Product.query.options(
+            db.joinedload(Product.variants).joinedload(ProductVariant.stock),
+            db.joinedload(Product.category)
+        ).all()
+            
     def get_product_by_id(self, product_id: int, user=None):
         """
         Get a single product by ID, handling serialization, visibility, and B2B pricing.
@@ -312,6 +324,22 @@ class ProductService:
         
         db.session.commit()
         return new_product    
+
+
+
+    @staticmethod
+    def get_product_by_id(product_id):
+        """
+        Fetches a product by its ID.
+        
+        Raises:
+            ProductNotFoundError: If no product with the given ID is found.
+        """
+        product = Product.query.get(product_id)
+        if not product:
+            raise ProductNotFoundError(f"Product with id {product_id} not found.")
+        return product
+
     @staticmethod
     def update_product(product_id: int, update_data: dict):
         """Update product with proper validation and logging."""
