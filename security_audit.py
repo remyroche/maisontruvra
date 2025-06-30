@@ -78,6 +78,26 @@ class SecurityFinding:
     def to_dict(self):
         return asdict(self)
 
+
+# More comprehensive list of keywords that might indicate a secret
+SECRET_KEYWORDS = {
+    'password', 'secret', 'token', 'api_key', 'private_key', 
+    'client_secret', 'access_key', 'secret_key'
+}
+# Regex to find common secret formats (e.g., base64, hex)
+SECRET_REGEX = re.compile(r'([\'"])[a-zA-Z0-9\-_=+/]{20,}\1')
+
+class Issue:
+    def __init__(self, file_path, line_number, code, message, severity):
+        self.file_path = file_path
+        self.line_number = line_number
+        self.code = code.strip()
+        self.message = message
+        self.severity = severity
+
+    def __str__(self):
+        return f"[{self.severity}] {self.file_path}:{self.line_number}\n\tMessage: {self.message}\n\tCode: `{self.code}`"
+
 # Audit configuration
 @dataclass
 class AuditConfig:
@@ -438,32 +458,6 @@ def check_xss_vulnerabilities(vue_files: List[str]):
         print(f"{Colors.GREEN}✔ No unsanitized v-html uses found.{Colors.ENDC}")
 
 
-def check_dependency_vulnerabilities(directory: str, command: str):
-    """
-    Runs a dependency vulnerability scanner (like npm audit or pip-audit).
-    """
-    print_header(f"Checking for Dependency Vulnerabilities in '{directory}'")
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            cwd=directory
-        )
-        
-        if "found 0 vulnerabilities" in result.stdout or "found 0 vulnerabilities" in result.stderr:
-            print(f"{Colors.GREEN}✔ No vulnerabilities found.{Colors.ENDC}")
-        elif "vulnerabilities found" in result.stdout or "vulnerabilities found" in result.stderr:
-             print(f"{Colors.RED}Vulnerabilities found! Run '{command}' in '{directory}' for details.{Colors.ENDC}")
-             print(result.stdout)
-        else:
-            print(f"{Colors.YELLOW}Could not determine vulnerability status. Please run '{command}' manually.{Colors.ENDC}")
-
-    except FileNotFoundError:
-        print(f"{Colors.YELLOW}Command for '{command}' not found. Skipping dependency check.{Colors.ENDC}")
-    except Exception as e:
-        print(f"{Colors.RED}An error occurred while running dependency audit: {e}{Colors.ENDC}")
 
 # --- Enhanced Security Checks ---
 
@@ -925,193 +919,50 @@ def check_network_security_headers(py_files: List[str]) -> int:
         print(f"{Colors.GREEN}✔ Security headers configuration looks good.{Colors.ENDC}")
     return found_issues
 
-def generate_report(config: AuditConfig):
-    """Generate security audit report in specified format."""
-    if config.output_format == "json":
-        report = {
-            "timestamp": datetime.datetime.now().isoformat(),
-            "total_findings": len(findings),
-            "severity_breakdown": {
-                "HIGH": len([f for f in findings if f.severity == "HIGH"]),
-                "MEDIUM": len([f for f in findings if f.severity == "MEDIUM"]),
-                "LOW": len([f for f in findings if f.severity == "LOW"]),
-                "INFO": len([f for f in findings if f.severity == "INFO"]),
-            },
-            "findings": [f.to_dict() for f in findings]
-        }
-        
-        output_file = config.output_file or f"security_audit_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(output_file, 'w') as f:
-            json.dump(report, f, indent=2)
-        print(f"{Colors.GREEN}Report saved to: {output_file}{Colors.ENDC}")
-    
-    elif config.output_format == "html":
-        html_content = generate_html_report()
-        output_file = config.output_file or f"security_audit_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-        with open(output_file, 'w') as f:
-            f.write(html_content)
-        print(f"{Colors.GREEN}HTML report saved to: {output_file}{Colors.ENDC}")
 
-def generate_html_report() -> str:
-    """Generate HTML security audit report."""
-    severity_colors = {
-        "HIGH": "#dc3545",
-        "MEDIUM": "#fd7e14", 
-        "LOW": "#0dcaf0",
-        "INFO": "#6c757d"
-    }
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Security Audit Report</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 20px; }}
-            .header {{ background: #f8f9fa; padding: 20px; border-radius: 5px; }}
-            .finding {{ margin: 15px 0; padding: 15px; border-left: 4px solid; }}
-            .HIGH {{ border-color: {severity_colors['HIGH']}; background: #f8d7da; }}
-            .MEDIUM {{ border-color: {severity_colors['MEDIUM']}; background: #fff3cd; }}
-            .LOW {{ border-color: {severity_colors['LOW']}; background: #d1ecf1; }}
-            .INFO {{ border-color: {severity_colors['INFO']}; background: #e2e3e5; }}
-            .code {{ background: #f8f9fa; padding: 10px; font-family: monospace; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>Security Audit Report</h1>
-            <p>Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            <p>Total Findings: {len(findings)}</p>
-        </div>
-    """
-    
-    for finding in findings:
-        html += f"""
-        <div class="finding {finding.severity}">
-            <h3>{finding.title} ({finding.severity})</h3>
-            <p><strong>Category:</strong> {finding.category}</p>
-            <p><strong>File:</strong> {finding.file_path}:{finding.line_number}</p>
-            <p><strong>Description:</strong> {finding.description}</p>
-            {f'<div class="code">{finding.code_snippet}</div>' if finding.code_snippet else ''}
-            {f'<p><strong>Recommendation:</strong> {finding.recommendation}</p>' if finding.recommendation else ''}
-            {f'<p><strong>CWE ID:</strong> {finding.cwe_id}</p>' if finding.cwe_id else ''}
-        </div>
-        """
-    
-    html += "</body></html>"
-    return html
+def find_python_files(directory):
+    for root, dirs, files in os.walk(directory):
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
+        for file in files:
+            if file.endswith('.py'):
+                yield os.path.join(root, file)
 
-def run_enhanced_audit(config: AuditConfig):
-    """Run the enhanced security audit with all checks."""
-    print(f"{Colors.BOLD}Starting Enhanced Security Audit...{Colors.ENDC}")
-    
-    all_files = []
-    backend_py_files = []
-    frontend_files = []
-    
-    # Collect files
-    if os.path.isdir(BACKEND_DIR):
-        backend_py_files = find_files(BACKEND_DIR, '.py')
-        all_files.extend(backend_py_files)
-        all_files.extend(find_files(BACKEND_DIR, '.env'))
-        all_files.extend(find_files(BACKEND_DIR, '.yml'))
-        all_files.extend(find_files(BACKEND_DIR, '.yaml'))
-    
-    if os.path.isdir(FRONTEND_DIR):
-        frontend_files = find_files(FRONTEND_DIR, '.vue')
-        frontend_files.extend(find_files(FRONTEND_DIR, '.js'))
-        frontend_files.extend(find_files(FRONTEND_DIR, '.ts'))
-        all_files.extend(frontend_files)
-    
-    # Add root level files
-    all_files.extend([f for f in os.listdir('.') if f.endswith(('.py', '.env', '.yml', '.yaml'))])
-    
-    # Run enhanced security checks
-    total_issues = 0
-    
-    # Core security checks
-    total_issues += check_hardcoded_secrets(all_files)
-    total_issues += check_sql_injection_patterns(backend_py_files)
-    total_issues += check_weak_crypto_patterns(all_files)
-    total_issues += check_file_permissions()
-    total_issues += check_debug_information(all_files)
-    total_issues += check_https_enforcement(all_files)
-    total_issues += check_network_security_headers(backend_py_files)
-    
-    # Original checks
-    if backend_py_files:
-        total_issues += check_missing_permissions(backend_py_files)
-        total_issues += check_unsanitized_input(backend_py_files)
-        check_secure_cookies(os.path.join(BACKEND_DIR, 'config.py'))
-    
-    if frontend_files:
-        vue_files = [f for f in frontend_files if f.endswith('.vue')]
-        check_xss_vulnerabilities(vue_files)
-    
-    # Dependency checks (if not skipped)
-    if not config.skip_dependency_check:
-        if os.path.isdir(BACKEND_DIR):
-            total_issues += run_pip_audit()
-        if os.path.isdir(FRONTEND_DIR):
-            total_issues += run_npm_audit()
-    
-    # Static analysis (if not skipped)
-    if not config.skip_static_analysis:
-        if os.path.isdir(BACKEND_DIR):
-            total_issues += run_bandit_scan()
-    
-    # Generate report
-    if config.output_format != "console":
-        generate_report(config)
-    
-    # Summary
-    print_header("Enhanced Audit Summary")
-    severity_counts = {
-        "HIGH": len([f for f in findings if f.severity == "HIGH"]),
-        "MEDIUM": len([f for f in findings if f.severity == "MEDIUM"]),
-        "LOW": len([f for f in findings if f.severity == "LOW"]),
-        "INFO": len([f for f in findings if f.severity == "INFO"]),
-    }
-    
-    print(f"Total findings: {len(findings)}")
-    for severity, count in severity_counts.items():
-        if count > 0:
-            color = {"HIGH": Colors.RED, "MEDIUM": Colors.YELLOW, "LOW": Colors.BLUE, "INFO": Colors.ENDC}[severity]
-            print(f"  {color}{severity}: {count}{Colors.ENDC}")
-    
-    if len(findings) == 0:
-        print(f"{Colors.GREEN}{Colors.BOLD}✔ Congratulations! No security issues found.{Colors.ENDC}")
-        return 0
-    else:
-        high_medium = severity_counts["HIGH"] + severity_counts["MEDIUM"]
-        if high_medium > 0:
-            print(f"{Colors.RED}{Colors.BOLD}✖ Security audit failed with {high_medium} high/medium severity issues.{Colors.ENDC}")
-            return 1
-        else:
-            print(f"{Colors.YELLOW}⚠ Security audit completed with only low severity issues.{Colors.ENDC}")
-            return 0
-
-
-def find_python_files(directories):
-    """
-    Trouve tous les fichiers .py dans les répertoires spécifiés, en excluant les dossiers spécifiés.
-    """
-    python_files = []
-    for directory in directories:
-        if not os.path.isdir(directory):
-            logging.warning(f"Le répertoire d'analyse '{directory}' n'existe pas, il sera ignoré.")
-            continue
+def audit_security_issues(file_path, lines):
+    issues = []
+    try:
+        tree = ast.parse("".join(lines), filename=file_path)
+        for node in ast.walk(tree):
+            # Check for use of 'exec'
+            if isinstance(node, ast.Call) and hasattr(node.func, 'id') and node.func.id == 'exec':
+                issues.append(Issue(file_path, node.lineno, lines[node.lineno-1], "Use of 'exec' is a security risk.", "HIGH"))
             
-        for root, dirs, files in os.walk(directory):
-            # Empêche os.walk de descendre dans les répertoires exclus.
-            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
-            
-            for file in files:
-                # Analyse uniquement les fichiers Python
-                if file.endswith('.py'):
-                    python_files.append(os.path.join(root, file))
-    return python_files
+            # Check for use of insecure libraries
+            if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
+                module_name = ""
+                if isinstance(node, ast.ImportFrom):
+                    module_name = node.module
+                else:
+                    module_name = node.names[0].name
+                if module_name in ['pickle', 'shelve']:
+                     issues.append(Issue(file_path, node.lineno, lines[node.lineno-1], f"Use of insecure module '{module_name}'.", "MEDIUM"))
 
+            # Check for hardcoded passwords/secrets by variable name
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    var_name = getattr(target, 'id', '').lower()
+                    if any(keyword in var_name for keyword in SECRET_KEYWORDS):
+                        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                            issues.append(Issue(file_path, node.lineno, lines[node.lineno-1], f"Potential hardcoded secret in variable '{var_name}'.", "HIGH"))
+
+            # Check for debug=True in app.run
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'run':
+                 for kw in node.keywords:
+                     if kw.arg == 'debug' and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                         issues.append(Issue(file_path, node.lineno, lines[node.lineno-1], "Flask app running with debug=True. Should not be used in production.", "HIGH"))
+
+    except SyntaxError as e:
+        print(f"Could not parse {file_path}: {e}")
+    
 def analyze_file_for_unprotected_routes(file_path):
     """
     Analyse un fichier pour trouver les routes Flask qui pourraient ne pas avoir
@@ -1150,6 +1001,7 @@ def analyze_file_for_unprotected_routes(file_path):
     except Exception as e:
         logging.error(f"Impossible d'analyser le fichier {file_path}: {e}")
         return []
+        
 def find_scan_files(directories):
     """
     Trouve tous les fichiers pertinents (.py, .js, .vue) dans les répertoires spécifiés.
@@ -1226,5 +1078,129 @@ def main():
     else:
         logging.error(f"Audit des meilleures pratiques terminé. {total_findings} problème(s) potentiel(s) trouvé(s).")
 
-if __name__ == '__main__':
-    main()
+def find_python_files(directory):
+    for root, dirs, files in os.walk(directory):
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
+        for file in files:
+            if file.endswith('.py'):
+                yield os.path.join(root, file)
+
+def audit_file_content(file_path, lines):
+    issues = []
+    for i, line in enumerate(lines):
+        # Check for hardcoded secrets using regex
+        if SECRET_REGEX.search(line):
+            issues.append(Issue(file_path, i + 1, line, "Potential hardcoded secret found (regex match).", "HIGH"))
+            
+        # Check for insecure SQL execution
+        if re.search(r'db\.session\.execute\s*\(\s*f["\']', line) or re.search(r'\+\s*["\']', line):
+            if "SELECT" in line.upper() or "UPDATE" in line.upper() or "DELETE" in line.upper():
+                 issues.append(Issue(file_path, i + 1, line, "Potential SQL Injection via string formatting in execute(). Use query parameters instead.", "HIGH"))
+    return issues
+
+def audit_ast(file_path, lines):
+    issues = []
+    try:
+        tree = ast.parse("".join(lines), filename=file_path)
+        for node in ast.walk(tree):
+            # Check for use of 'exec'
+            if isinstance(node, ast.Call) and hasattr(node.func, 'id') and node.func.id == 'exec':
+                issues.append(Issue(file_path, node.lineno, lines[node.lineno-1], "Use of 'exec' is a security risk.", "HIGH"))
+            
+            # Check for use of insecure libraries
+            if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
+                module_name = ""
+                if isinstance(node, ast.ImportFrom):
+                    module_name = node.module
+                else:
+                    module_name = node.names[0].name
+                if module_name in ['pickle', 'shelve']:
+                     issues.append(Issue(file_path, node.lineno, lines[node.lineno-1], f"Use of insecure module '{module_name}'.", "MEDIUM"))
+
+            # Check for hardcoded passwords/secrets by variable name
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    var_name = getattr(target, 'id', '').lower()
+                    if any(keyword in var_name for keyword in SECRET_KEYWORDS):
+                        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                            issues.append(Issue(file_path, node.lineno, lines[node.lineno-1], f"Potential hardcoded secret in variable '{var_name}'.", "HIGH"))
+
+            # Check for debug=True in app.run
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'run':
+                 for kw in node.keywords:
+                     if kw.arg == 'debug' and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                         issues.append(Issue(file_path, node.lineno, lines[node.lineno-1], "Flask app running with debug=True. Should not be used in production.", "HIGH"))
+
+    except SyntaxError as e:
+        print(f"Could not parse {file_path}: {e}")
+    
+    return issues
+
+def check_dependency_vulnerabilities(directory: str, command: str):
+    """Runs a command-line tool to check for dependency vulnerabilities."""
+    print(f"\n--- Checking for dependency vulnerabilities in {directory} ---")
+    print(f"Running command: `{command}`\n")
+    try:
+        result = subprocess.run(
+            command.split(),
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=directory
+        )
+        if result.stdout:
+            print("--- Dependency Scan Output ---")
+            print(result.stdout)
+        if result.stderr:
+            print("--- Dependency Scan Errors ---")
+            print(result.stderr)
+        if result.returncode != 0:
+            print(f"\n[WARNING] Dependency check exited with status code {result.returncode}.")
+        else:
+            print("\nDependency check completed successfully.")
+
+    except FileNotFoundError:
+        print(f"[ERROR] Command not found: '{command.split()[0]}'. Is pip-audit installed?")
+    except Exception as e:
+        print(f"[ERROR] An error occurred while checking dependencies: {e}")
+    print("-" * 40)
+
+def run_enhanced_audit(directory: str):
+    """The central point for running all audit checks."""
+    print(f"--- Starting Enhanced Security Audit in: {directory} ---")
+
+    # 1. Check for dependency vulnerabilities
+    backend_dir = os.path.join(directory, 'backend')
+    if os.path.exists(os.path.join(backend_dir, 'requirements.txt')):
+        check_dependency_vulnerabilities(backend_dir, "pip-audit -r requirements.txt")
+    else:
+        print("\n[INFO] Skipping dependency check: `backend/requirements.txt` not found.")
+
+    # 2. Perform static code analysis
+    print("\n--- Starting static code analysis ---")
+    all_issues = []
+    for file_path in find_python_files(directory):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # Run both content and AST checks
+            all_issues.extend(audit_file_content(file_path, lines))
+            all_issues.extend(audit_ast(file_path, lines))
+
+        except Exception as e:
+            print(f"[ERROR] Could not process file {file_path}: {e}")
+
+    if all_issues:
+        print(f"\nFound {len(all_issues)} potential static code issues:\n")
+        all_issues.sort(key=lambda x: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}[x.severity])
+        for issue in all_issues:
+            print(f"{issue}\n" + "-"*40)
+    else:
+        print("\nNo static code analysis issues found.")
+        
+    print("\n--- Enhanced security audit finished. ---")
+
+if __name__ == "__main__":
+    project_directory = os.path.dirname(os.path.abspath(__file__))
+    run_enhanced_audit(project_directory)
