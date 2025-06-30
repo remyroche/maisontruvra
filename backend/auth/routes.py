@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import (
     create_access_token, create_refresh_token, jwt_required, get_jwt_identity, get_jwt
 )
+from marshmallow import ValidationError
 from ..services.auth_service import AuthService
 from ..services.user_service import UserService
 from backend.utils.input_sanitizer import InputSanitizer
@@ -14,30 +15,45 @@ from flask import current_app
 
 import redis
 
+
+auth_service = AuthService()
+user_schema = UserSchema()
+user_registration_schema = UserRegistrationSchema()
+
 auth_bp = Blueprint('auth_bp', __name__, url_prefix='/api/auth')
 security_logger = logging.getLogger('security')
 
 @auth_bp.route('/register', methods=['POST'])
 @rate_limiter(limit=5, per=300) # 5 requests per 5 minutes
 def register():
-    """Registers a new user and sends a verification email."""
-    data = InputSanitizer.sanitize_input(request.get_json())
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(error="Invalid input. JSON body required."), 400
     
-    required_fields = ['email', 'password', 'first_name', 'last_name']
-    if not all(field in data for field in required_fields):
-        return jsonify(error="Missing required fields"), 400
-        
     try:
-        user = AuthService.register_user(data)
-        AuthService.send_verification_email(user.email)
-        security_logger.info(f"New user registered: {user.email} (ID: {user.id}) from IP: {request.remote_addr}")
-        return jsonify(message="Registration successful. Please check your email to verify your account."), 201
-    except ValidationException as e:
-        return jsonify(error=str(e)), 400
-    except Exception as e:
-        security_logger.error(f"Registration error: {str(e)}")
-        return jsonify(error="An internal server error occurred."), 500
+        validated_data = user_registration_schema.load(json_data)
 
+    except ValidationError as err:
+        # Return a structured error message from the validator.
+        return jsonify(errors=err.messages), 400
+
+    try:
+        # Pass the clean, validated data to the service layer.
+        user = auth_service.register_user(validated_data)
+        auth_service.send_verification_email(user.email)
+        
+        security_logger.info(f"New user registered: {user.email} (ID: {user.id}) from IP: {request.remote_addr}")
+        
+        return jsonify(message="Registration successful. Please check your email to verify your account."), 201
+
+    except ValidationException as e:
+        # Catches specific service-level validation errors (e.g., email already exists)
+        return jsonify(error=str(e)), 409 # 409 Conflict is often better for "already exists" errors
+        
+    except Exception as e:
+        # Catches unexpected errors during the registration process.
+        security_logger.error(f"Registration error for email {validated_data.get('email')}: {str(e)}")
+        return jsonify(error="An internal server error occurred."), 500
 @auth_bp.route('/login', methods=['POST'])
 @rate_limiter(limit=10, per=60) # 10 requests per minute
 def login():
