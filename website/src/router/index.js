@@ -16,7 +16,9 @@ const routes = [
   { path: '/le-journal/:slug', name: 'Article', component: () => import('@/views/public/ArticleView.vue'), props: true },
   { path: '/checkout', name: 'Checkout', component: () => import('@/views/public/CheckoutView.vue') },
   { path: '/order-confirmation/:id?', name: 'OrderConfirmation', component: () => import('@/views/public/OrderConfirmationView.vue'), props: true },
-  
+  { path: '/cart', name: 'ShoppingCart', component: () => import('../views/public/ShoppingCartView.vue'),
+  },
+
   // --- Informational Pages ---
   { path: '/notre-maison', name: 'NotreMaison', component: () => import('@/views/public/NotreMaisonView.vue') },
   { path: '/charte-qualite', name: 'CharteQualite', component: () => import('@/views/public/CharteQualiteView.vue') },
