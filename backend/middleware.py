@@ -24,6 +24,14 @@ from backend.models.user_models import User
 # Assuming RBACService is defined elsewhere and imported, or defined below for self-containment
 # from backend.services.rbac_service import RBACService
 
+import time
+from prometheus_client import Counter, Histogram
+from backend.extensions import-non-routable-path-
+
+# Prometheus metrics
+REQUEST_LATENCY = Histogram('request_latency_seconds', 'Request latency', ['method', 'endpoint'])
+REQUEST_COUNT = Counter('request_count', 'Request count', ['method', 'endpoint', 'http_status'])
+
 
 # Import centralized loggers
 from backend.loggers import security_logger, app_logger as logger
@@ -187,6 +195,47 @@ def setup_middleware(app: Flask) -> None:
     11. Centralized Error Handling
     12. Response Compression
     """
+
+    @app.before_request
+    def before_request():
+        """
+        Executed before each request.
+
+        This function records the start time of the request and assigns a unique
+        request ID. This ID is essential for tracing a request's entire
+        lifecycle through logs and various services.
+        """
+        # Store the start time in Flask's global 'g' object to calculate latency later
+        g.start_time = time.time()
+        # Generate a unique ID for each request to correlate logs
+        g.request_id = str(uuid.uuid4())
+
+    @app.after_request
+    def after_request(response):
+        """
+        Executed after each request.
+
+        This function calculates the request latency, and increments Prometheus
+        metrics for request count and latency. It also adds the unique request ID
+        to the response headers for easier client-side debugging.
+        """
+        # Ensure start_time was set to avoid errors
+        if hasattr(g, 'start_time'):
+            # Calculate latency
+            latency = time.time() - g.start_time
+            # Observe latency in Prometheus histogram
+            REQUEST_LATENCY.labels(request.method, request.path).observe(latency)
+
+        # Increment request count in Prometheus counter
+        REQUEST_COUNT.labels(request.method, request.path, response.status_code).inc()
+
+        # Add the unique request ID to the response header
+        # This is useful for clients to report issues with a specific request
+        if hasattr(g, 'request_id'):
+            response.headers['X-Request-ID'] = g.request_id
+
+        return response
+
 
     # 1. Initialize Flask Extensions
     limiter.init_app(app)
