@@ -1,9 +1,7 @@
-from functools import wraps
 import logging
 from typing import Callable, Any
-from flask import jsonify, request, g, Response
+from flask import jsonify, request, g, Response, abort, jsonify
 from flask_jwt_extended import get_jwt_identity, get_jwt, jwt_required
-
 from backend.models.user_models import User
 from backend.services.audit_log_service import AuditLogService
 from backend.utils.csrf_protection import CSRFProtection
@@ -59,6 +57,49 @@ class Permissions:
         MANAGE_INVOICES, VIEW_AUDIT_LOGS
     ]
 
+
+def get_object_or_404(model):
+    """
+    A decorator to fetch a model instance by its ID from the route's URL variables.
+    If the object is not found, it aborts the request with a 404 error.
+    
+    The fetched object is added to Flask's request context `g` for easy access
+    in the decorated route function.
+    
+    Example:
+        @get_object_or_404(Product)
+        def get_product(product_id):
+            product = g.product  # Access the fetched product
+            ...
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Derives the keyword argument name from the model's name (e.g., 'Product' -> 'product_id')
+            object_id_key = f"{model.__name__.lower()}_id"
+            
+            # Fallback for generic 'id' if specific key isn't in kwargs
+            if object_id_key not in kwargs and 'id' in kwargs:
+                object_id_key = 'id'
+
+            if object_id_key not in kwargs:
+                # This indicates a configuration mismatch between the route URL and the decorator.
+                abort(500, description=f"Could not find ID key ('{object_id_key}' or 'id') for model {model.__name__} in route.")
+
+            obj_id = kwargs.get(object_id_key)
+            obj = model.query.get(obj_id)
+            
+            if obj is None:
+                abort(404, description=f"{model.__name__} with ID {obj_id} not found.")
+            
+            # Attach the fetched object to the request context `g`.
+            # The attribute name is the lowercase model name (e.g., g.product).
+            setattr(g, model.__name__.lower(), obj)
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+    
 def _execute_and_log_action(func: Callable, *args: Any, **kwargs: Any) -> Any:
     """
     Private helper to execute the decorated staff/admin route function and log the action.
