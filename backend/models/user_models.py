@@ -1,51 +1,60 @@
-from .base import BaseModel, SoftDeleteMixin # Added: Import SoftDeleteMixin
-from .enums import UserStatus, RoleType
-from backend.extensions import db # Use consistent import from extensions
-from flask_login import UserMixin
+from .base import Base
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLAlchemyEnum
 from sqlalchemy.orm import relationship
-from backend.utils.encryption import encrypt_data, decrypt_data # Changed: Use absolute import for utils
-from argon2 import PasswordHasher
-from backend.models.base import BaseModel # No change needed here
-from backend.config import Config
-from sqlalchemy.orm import relationship
-from .enums import UserRole, LanguagePreference
-from sqlalchemy.ext.hybrid import hybrid_property
+from werkzeug.security import generate_password_hash, check_password_hash
+from .enums import UserType, UserStatus, NotificationFrequency
+import datetime
 
-ph = PasswordHasher()
+class User(Base):
+    """
+    Represents a user of the application.
+    This model stores authentication details and personal information for both B2C and B2B customers.
+    """
+    __tablename__ = 'users'
 
-class User(db.Model, UserMixin):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False, comment="Stores the hashed password, not plaintext.")
-    _first_name = db.Column('first_name', db.String(50), nullable=False)
-    _last_name = db.Column('last_name', db.String(50), nullable=False)
-    _phone_number = db.Column('phone_number', db.String(20), nullable=True)
-    is_active = db.Column(db.Boolean, default=True)
-    is_admin = db.Column(db.Boolean, default=False)
-    is_b2b = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-    role = db.Column(db.String(80), default='user', nullable=False)
-    language_preference = db.Column(db.Enum(LanguagePreference), default=LanguagePreference.FR, nullable=False)
-    subscribed_to_newsletter = db.Column(db.Boolean, default=False)
+    id = Column(Integer, primary_key=True)
+    first_name = Column(String(50), nullable=False)
+    last_name = Column(String(50), nullable=False)
+    email = Column(String(120), unique=True, nullable=False)
+    password_hash = Column(String(256), nullable=False)
+    
+    # User Type and Status
+    user_type = Column(SQLAlchemyEnum(UserType), default=UserType.B2C)
+    status = Column(SQLAlchemyEnum(UserStatus), default=UserStatus.PENDING_VERIFICATION)
 
-    orders = relationship("Order", back_populates="user", cascade="all, delete-orphan")
-    addresses = db.relationship('Address', backref='user', lazy=True, cascade="all, delete-orphan")
-    cart = relationship('Cart', uselist=False, back_populates='user', cascade="all, delete-orphan")
-    reviews = db.relationship('Review', backref='user', lazy=True)
-    wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True, cascade="all, delete-orphan")
-    loyalty = relationship("UserLoyalty", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    # Timestamps and Tracking
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    last_login_at = Column(DateTime)
+    
+    # Preferences
+    notification_frequency = Column(SQLAlchemyEnum(NotificationFrequency), default=NotificationFrequency.INSTANT)
+    
+    # Security Features
+    is_2fa_enabled = Column(Boolean, default=False)
+    mfa_secret = Column(String(100))
+    
+    # Relationships
+    addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="user")
+    carts = relationship("Cart", back_populates="user", cascade="all, delete-orphan")
+    wishlists = relationship("Wishlist", back_populates="user", cascade="all, delete-orphan")
+    reviews = relationship("Review", back_populates="user")
+    
+    # B2B specific relationship - one-to-one
+    b2b_user = relationship("B2BUser", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    
+    # Passport relationship
+    passport = relationship("ProductPassport", back_populates="owner", uselist=False)
 
-    two_factor_secret = db.Column(db.String(255), nullable=True)
-    two_factor_enabled = db.Column(db.Boolean, default=False)
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
 
-    b2b_profile = db.relationship('B2BProfile', back_populates='user', uselist=False, cascade="all, delete-orphan")
-    b2b_account = relationship('B2BAccount', uselist=False, back_populates='user')
-    # Security fields
-    last_login_at = db.Column(db.DateTime, nullable=True)
-    last_login_ip = db.Column(db.String(45), nullable=True)
-    failed_login_attempts = db.Column(db.Integer, default=0)
-    locked_at = db.Column(db.DateTime, nullable=True)
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
+    def __repr__(self):
+        return f'<User {self.email}>'
 
     @property
     def is_staff(self):
@@ -65,14 +74,6 @@ class User(db.Model, UserMixin):
                 perms.add(permission.name)
         return perms
         
-    def set_password(self, password):
-        self.password_hash = ph.hash(password)
-
-    def check_password(self, password):
-        try:
-            return ph.verify(self.password_hash, password)
-        except Exception:
-            return False
 
     @hybrid_property
     def email(self):
@@ -109,9 +110,6 @@ class User(db.Model, UserMixin):
     @hybrid_property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
-
-    def __repr__(self):
-        return f'<User {self.email}>'
 
     def to_public_dict(self):
         """Serialization for public-facing contexts (e.g., product reviews)."""
