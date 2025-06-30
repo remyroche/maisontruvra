@@ -40,105 +40,85 @@ def get_session_id():
     # For demonstration, we'll use a header, but a session cookie is better.
     return request.headers.get('X-Session-ID')
 
+
+
+
 @cart_bp.route('/', methods=['GET'])
-@jwt_required(optional=True)
+@login_required
 def get_cart_contents():
     """
-    Get the contents of the user's cart.
-    Works for both authenticated users (via JWT) and anonymous users (via session).
+    Gets the contents of the user's cart, with B2B pricing applied if applicable.
     """
-    user_id = get_jwt_identity()
     try:
-        if user_id:
-            cart = CartService.get_cart_by_user_id(user_id)
-        else:
-            session_id = get_session_id()
-            if not session_id:
-                return jsonify(status="success", data={"items": [], "total": 0}), 200 # Return empty cart
-            cart = CartService.get_cart_by_session_id(session_id)
-        
-        return jsonify(status="success", data=cart.to_dict() if cart else {"items": [], "total": 0}), 200
-    except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An error occurred while fetching the cart."), 500
+        cart_data = CartService.get_cart(current_user.id)
+        if not cart_data:
+            return jsonify({'message': 'Cart is empty', 'items': [], 'total': 0}), 200
 
-@cart_bp.route('/item', methods=['POST'])
-@jwt_required(optional=True)
-def add_item_to_cart():
-    """
-    Add an item to the cart.
-    """
-    user_id = get_jwt_identity()
-    session_id = get_session_id() if not user_id else None
-    if not user_id and not session_id:
-        return jsonify(status="error", message="Authentication or session ID is required."), 401
+        return jsonify({
+            'items': [{
+                'product_id': detail['item'].product.id,
+                'name': detail['item'].product.name,
+                'quantity': detail['item'].quantity,
+                'original_price': str(detail['original_price']),
+                'discounted_price': str(detail['discounted_price']),
+                'line_total': str(detail['line_total']),
+            } for detail in cart_data['items_details']],
+            'subtotal': str(cart_data['subtotal']),
+            'discount_applied': str(cart_data['discount_applied']),
+            'total': str(cart_data['total']),
+            'tier_name': cart_data['tier_name']
+        }), 200
+    except NotFoundException as e:
+        return jsonify({'message': str(e)}), 404
 
+@cart_bp.route('/add', methods=['POST'])
+@login_required
+def add_to_cart():
     data = request.get_json()
-    if not data or 'product_id' not in data or 'quantity' not in data:
-        return jsonify(status="error", message="product_id and quantity are required."), 400
-
-    try:
-        product_id = int(InputSanitizer.sanitize_input(data['product_id']))
-        quantity = int(InputSanitizer.sanitize_input(data['quantity']))
-
-        if quantity <= 0:
-            return jsonify(status="error", message="Quantity must be a positive number."), 400
-            
-        updated_cart = CartService.add_item(user_id=user_id, session_id=session_id, product_id=product_id, quantity=quantity)
-        return jsonify(status="success", data=updated_cart.to_dict()), 200
-    except ValueError:
-        return jsonify(status="error", message="Invalid product_id or quantity format."), 400
-    except Exception as e:
-        # Log error e
-        return jsonify(status="error", message=str(e)), 500
-
-@cart_bp.route('/item/<int:product_id>', methods=['PUT'])
-@jwt_required(optional=True)
-def update_cart_item(product_id):
-    """
-    Update the quantity of an item in the cart.
-    """
-    user_id = get_jwt_identity()
-    session_id = get_session_id() if not user_id else None
-    if not user_id and not session_id:
-        return jsonify(status="error", message="Authentication or session ID is required."), 401
+    product_id = data.get('product_id')
+    quantity = data.get('quantity', 1)
     
+    if not product_id:
+        return jsonify({'message': 'Product ID is required'}), 400
+        
+    try:
+        CartService.add_to_cart(current_user.id, product_id, quantity)
+        return jsonify({'message': 'Item added to cart'}), 200
+    except NotFoundException:
+        return jsonify({'message': 'Product not found'}), 404
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
+
+@cart_bp.route('/remove', methods=['POST'])
+@login_required
+def remove_from_cart():
     data = request.get_json()
-    if not data or 'quantity' not in data:
-        return jsonify(status="error", message="Quantity is required."), 400
+    product_id = data.get('product_id')
+
+    if not product_id:
+        return jsonify({'message': 'Product ID is required'}), 400
+
+    CartService.remove_from_cart(current_user.id, product_id)
+    return jsonify({'message': 'Item removed from cart'}), 200
+
+@cart_bp.route('/update', methods=['POST'])
+@login_required
+def update_cart_item():
+    data = request.get_json()
+    product_id = data.get('product_id')
+    quantity = data.get('quantity')
+
+    if not product_id or quantity is None:
+        return jsonify({'message': 'Product ID and quantity are required'}), 400
 
     try:
-        quantity = int(InputSanitizer.sanitize_input(data['quantity']))
-        if quantity < 0:
-             return jsonify(status="error", message="Quantity cannot be negative."), 400
-
-        updated_cart = CartService.update_item_quantity(user_id=user_id, session_id=session_id, product_id=product_id, quantity=quantity)
-        return jsonify(status="success", data=updated_cart.to_dict()), 200
+        CartService.update_cart_item_quantity(current_user.id, product_id, quantity)
+        return jsonify({'message': 'Cart updated'}), 200
     except ValueError as e:
-        return jsonify(status="error", message=str(e)), 404 # e.g. "Item not in cart"
-    except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An error occurred while updating the cart."), 500
+        return jsonify({'message': str(e)}), 400
 
-@cart_bp.route('/item/<int:product_id>', methods=['DELETE'])
-@jwt_required(optional=True)
-def remove_cart_item(product_id):
-    """
-    Remove an item from the cart.
-    """
-    user_id = get_jwt_identity()
-    session_id = get_session_id() if not user_id else None
-    if not user_id and not session_id:
-        return jsonify(status="error", message="Authentication or session ID is required."), 401
 
-    try:
-        updated_cart = CartService.remove_item(user_id=user_id, session_id=session_id, product_id=product_id)
-        return jsonify(status="success", data=updated_cart.to_dict()), 200
-    except ValueError as e:
-         return jsonify(status="error", message=str(e)), 404
-    except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An error occurred while removing the item from the cart."), 500
+
 
 @cart_bp.route('/', methods=['DELETE'])
 @jwt_required(optional=True)
