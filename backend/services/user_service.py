@@ -7,17 +7,30 @@ from backend.services.audit_log_service import AuditLogService
 from flask import current_app, request  # Ensure request is imported
 from flask_jwt_extended import get_jwt_identity
 from backend.models.b2b_models import B2BUser  # Add this import
+from backend.services.audit_log_service import AuditLogService
 
 class UserService:
+
+    def __init__(self, audit_log_service: AuditLogService):
+        self.audit_log_service = audit_log_service
+
     @staticmethod
     def get_user_by_id(user_id: int, context: str = 'basic'):
         """Get user by ID with different serialization contexts."""
         user = User.query.get(user_id)
-        if not user:
-            raise NotFoundException(f"User with ID {user_id} not found")
 
-        return user.to_dict(context=context)
-
+        # Recommendation Implemented: Log read-access to sensitive user data.
+        if user:
+            actor_id = g.user.id if g.user else 'system'
+            self.audit_log_service.log_admin_action(
+                user_id=actor_id,
+                action=f"Viewed user profile",
+                target_id=user.id,
+                target_type="User"
+            )
+        
+        return user
+        
     @staticmethod
     def get_all_users_paginated(page: int, per_page: int, filters: dict = None):
         """Get paginated users with N+1 optimization."""
@@ -146,14 +159,17 @@ class UserService:
                 if original_value != current_value:
                     changes[key] = {'from': original_value, 'to': current_value}
 
-            if changes:
-                AuditLogService.log_action(
-                    'USER_UPDATED',
-                    target_id=user.id,
-                    details={'changes': changes}
-                )
-
             db.session.commit()
+
+            # Log the update action
+            actor_id = g.user.id if g.user else 'system'
+            self.audit_log_service.log_admin_action(
+                user_id=actor_id,
+                action=f"Updated user profile",
+                target_id=user.id,
+                target_type="User",
+                details=data 
+            )
 
             MonitoringService.log_info(f"User created successfully: {user.email} (ID: {user.id})", "UserService")
             return user.to_dict(context='admin')
