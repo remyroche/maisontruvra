@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from backend.services.newsletter_service import NewsletterService
 from backend.utils.input_sanitizer import InputSanitizer
+from backend.services import newsletter_service
 
 newsletter_bp = Blueprint('newsletter_bp', __name__, url_prefix='/api/newsletter')
 
@@ -19,7 +19,7 @@ def subscribe_to_newsletter():
 
     try:
         # Service handles validation and adding the email to the correct list
-        subscriber = NewsletterService.subscribe_email(email, list_type)
+        subscriber = newsletter_service.subscribe_email(email, list_type)
         return jsonify(status="success", message="Thank you for subscribing!", data=subscriber.to_dict()), 201
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400
