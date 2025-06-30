@@ -8,8 +8,14 @@ from flask_jwt_extended import get_jwt_identity
 from backend.utils.decorators import b2b_user_required
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.monitoring_service import MonitoringService
+from flask import current_app
+from backend.database import db
+from redis import Redis
+from rq import Queue
 
-# Assume 'db', 'logger', and a background task 'queue' are available and configured.
+# Initialize the Redis queue
+redis_conn = Redis.from_url(current_app.config.get('REDIS_URL', 'redis://'))
+q = Queue(connection=redis_conn)
 
 b2b_quick_order_bp = Blueprint('b2b_quick_order', __name__)
 
