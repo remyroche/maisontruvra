@@ -14,6 +14,11 @@ from backend.extensions import mail
 from backend.services.monitoring_service import MonitoringService
 from flask import render_template, current_app
 
+from backend.models.b2b_models import B2BOrder, B2BUser
+from backend.models.order_models import Order
+from backend.models.user_models import User
+from backend.services.user_service import get_user_by_id
+
 class EmailService:
     def __init__(self):
         # Email configuration from environment variables
@@ -28,74 +33,33 @@ class EmailService:
                 "SMTP credentials not configured",
                 "EmailService"
             )
-   
 
-    def send_email(self, to_email: str, subject: str, body: str, 
-                   html_body: Optional[str] = None, 
-                   attachments: Optional[List[str]] = None) -> Dict[str, Any]:
-        """Send an email"""
-        try:
-            from backend.tasks import send_email_task
+    
+    @staticmethod
+    def send_email(to, subject, template, **kwargs):
+        """Generic email sending function."""
+        msg = Message(
+            subject,
+            recipients=[to],
+            html=render_template(template, **kwargs),
+            sender=current_app.config["MAIL_DEFAULT_SENDER"],
+        )
+        mail.send(msg)
+    
+    @staticmethod
+    def send_order_confirmation_email(order_id):
+        order = Order.query.get(order_id)
+        if order:
+            send_email(to=order.user.email, subject="Confirmation de votre commande", template="b2c_order_confirmation.html", order=order)
+    
+    @staticmethod
+    def send_b2b_order_confirmation_email(order_id):
+        order = B2BOrder.query.get(order_id)
+        if order:
+            send_email(to=order.user.email, subject="Confirmation de votre commande B2B", template="b2b_order_confirmation.html", order=order)
+    
 
-            if not self.smtp_username or not self.smtp_password:
-                MonitoringService.log_error(
-                    "SMTP credentials not configured",
-                    "EmailService"
-                )
-                return {"success": False, "message": "Email service not configured"}
-            
-            # Create message
-            msg = MIMEMultipart('alternative')
-            msg['From'] = self.from_email
-            msg['To'] = to_email
-            msg['Subject'] = subject
-            
-            # Add text body
-            text_part = MIMEText(body, 'plain')
-            msg.attach(text_part)
-            
-            # Add HTML body if provided
-            if html_body:
-                html_part = MIMEText(html_body, 'html')
-                msg.attach(html_part)
-            
-            # Add attachments if provided
-            if attachments:
-                for file_path in attachments:
-                    if os.path.isfile(file_path):
-                        with open(file_path, "rb") as attachment:
-                            part = MIMEBase('application', 'octet-stream')
-                            part.set_payload(attachment.read())
-                        
-                        encoders.encode_base64(part)
-                        part.add_header(
-                            'Content-Disposition',
-                            f'attachment; filename= {os.path.basename(file_path)}'
-                        )
-                        msg.attach(part)
-            
-            # Send email
-            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-            server.starttls()
-            server.login(self.smtp_username, self.smtp_password)
-            
-            text = msg.as_string()
-            server.sendmail(self.from_email, to_email, text)
-            server.quit()
-            
-            MonitoringService.log_info(
-                f"Email sent successfully to {to_email}",
-                "EmailService"
-            )
-            return {"success": True, "message": "Email sent successfully"}
-            
-        except Exception as e:
-            MonitoringService.log_error(
-                f"Failed to send email to {to_email}: {str(e)}",
-                "EmailService",
-                exc_info=True
-            )
-            return {"success": False, "message": f"Failed to send email: {str(e)}"}
+
     
     @staticmethod
     def send_email_immediately(recipient, subject, template_name, context):
