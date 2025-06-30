@@ -11,13 +11,19 @@ import secrets
 import string
 from datetime import datetime
 
+from ..models import db, User, Referral
+from ..services.loyalty_service import LoyaltyService
+from ..services.notification_service import NotificationService
+from ..services.exceptions import ReferralException
 
 class ReferralService:
     """Service for managing user referrals and referral rewards"""
     
     def __init__(self, session=None):
         self.session = session or db.session
-    
+        self.loyalty_service = LoyaltyService()
+        self.notification_service = NotificationService()
+
     @staticmethod
     def generate_referral_code(user_id):
         """Generate a unique referral code for a user"""
@@ -228,7 +234,62 @@ class ReferralService:
         except Exception as e:
             MonitoringService.log_error(f"Error getting referral stats for user {user_id}: {str(e)}")
             raise ServiceError(f"Failed to get referral stats: {str(e)}")
-    
+
+    def process_referral(self, new_user_id, referral_code):
+        """
+        Processes a referral code for a new user.
+        - Validates the code
+        - Awards points/credit to referrer and new user
+        - Sends notifications
+        """
+        # Find the user who owns the referral code.
+        referrer = User.query.filter_by(referral_code=referral_code).first()
+        if not referrer:
+            raise ReferralException("Invalid referral code.")
+            
+        new_user = User.query.get(new_user_id)
+        if not new_user:
+            raise ReferralException("New user not found.")
+            
+        if new_user.id == referrer.id:
+            raise ReferralException("Cannot refer yourself.")
+
+        # Check if this new user has already been referred by someone.
+        existing_referral = Referral.query.filter_by(referred_user_id=new_user.id).first()
+        if existing_referral:
+            raise ReferralException("This user has already been referred.")
+
+        # These values should ideally be configurable.
+        REFERRER_REWARD_POINTS = 100
+        REFERRED_USER_REWARD_POINTS = 50
+
+        # Use LoyaltyService to award points to both parties.
+        self.loyalty_service.add_points(
+            referrer.id, 
+            REFERRER_REWARD_POINTS, 
+            f"Referred new user: {new_user.email}"
+        )
+        self.loyalty_service.add_points(
+            new_user.id,
+            REFERRED_USER_REWARD_POINTS,
+            f"Signed up with referral from: {referrer.email}"
+        )
+
+        # Create a record of the successful referral.
+        referral_record = Referral(
+            referrer_id=referrer.id,
+            referred_user_id=new_user.id
+        )
+        db.session.add(referral_record)
+        
+        # Use NotificationService to inform users of their new points.
+        self.notification_service.send_referral_credit_notification(referrer, new_user, REFERRER_REWARD_POINTS)
+        self.notification_service.send_welcome_credit_notification(new_user, REFERRED_USER_REWARD_POINTS)
+        
+        db.session.commit()
+
+        return {"success": True, "message": "Referral processed successfully."}
+        
     @staticmethod
     def validate_referral_code(referral_code):
         """Validate if a referral code exists and is valid"""
