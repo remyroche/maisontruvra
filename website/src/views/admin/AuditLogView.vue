@@ -44,8 +44,9 @@
 import { ref, onMounted } from 'vue';
 import BaseDataTable from '@/components/ui/BaseDataTable.vue';
 import api from '@/services/api';
-
-const logStore = useAdminAuditLogStore();
+import { useAdminAuditLogStore } from '@/stores/adminAudit'
+  
+const auditLogStore = useAdminAuditLogStore();
 const selectedDate = ref(null);
 
 const headers = [
@@ -56,8 +57,9 @@ const headers = [
 ];
 
 onMounted(() => {
-    logStore.fetchLogs();
+  auditLogStore.fetchLogs();
 });
+  
 
 const changePage = (page) => {
     logStore.fetchLogs(page, selectedDate.value);
