@@ -28,28 +28,28 @@
       :headers="headers"
       :items="productsData.data"
     >
-        <template #row="{ item }">
-            <tr :class="{ 'bg-red-50 text-gray-500 italic': item.is_deleted }">
-                <td class="px-6 py-4 whitespace-nowrap text-sm">{{ item.name }}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">{{ item.sku }}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">€{{ item.price.toFixed(2) }}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">{{ item.category?.name || 'N/A' }}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                    <span :class="item.is_published ? 'text-green-500' : 'text-gray-500'">
-                        {{ item.is_published ? 'Published' : 'Draft' }}
-                    </span>
-                    <span v-if="item.is_deleted" class="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-red-200 text-red-800">Deleted</span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                    <div class="flex items-center space-x-2">
-                        <button v-if="!item.is_deleted" @click="openEditModal(item)" class="text-indigo-600 hover:text-indigo-900">Edit</button>
-                        <button v-if="!item.is_deleted" @click="confirmDelete(item, 'soft')" class="text-yellow-600 hover:text-yellow-900">Soft Delete</button>
-                        <button v-if="item.is_deleted" @click="restoreProduct(item.id)" class="text-green-600 hover:text-green-900">Restore</button>
-                        <button @click="confirmDelete(item, 'hard')" class="text-red-600 hover:text-red-900">Hard Delete</button>
-                    </div>
-                </td>
-            </tr>
-        </template>
+      <template #row="{ item }">
+          <tr :class="{ 'bg-red-50 text-gray-500 italic': item.is_deleted }">
+              <td class="px-6 py-4 whitespace-nowrap text-sm">{{ item.name }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm">{{ item.sku }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm">€{{ item.price.toFixed(2) }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm">{{ item.category?.name || 'N/A' }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm">
+                  <span :class="item.is_published ? 'text-green-500' : 'text-gray-500'">
+                      {{ item.is_published ? 'Published' : 'Draft' }}
+                  </span>
+                  <span v-if="item.is_deleted" class="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-red-200 text-red-800">Deleted</span>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm">
+                  <div class="flex items-center space-x-2">
+                      <button v-if="!item.is_deleted" @click="openEditModal(item)" class="text-indigo-600 hover:text-indigo-900">Edit</button>
+                      <button v-if="!item.is_deleted" @click="confirmDelete(item, 'soft')" class="text-yellow-600 hover:text-yellow-900">Soft Delete</button>
+                      <button v-if="item.is_deleted" @click="restoreProduct(item.id)" class="text-green-600 hover:text-green-900">Restore</button>
+                      <button @click="confirmDelete(item, 'hard')" class="text-red-600 hover:text-red-900">Hard Delete</button>
+                  </div>
+              </td>
+          </tr>
+      </template>
     </BaseDataTable>
     <div v-else class="text-center text-gray-500 mt-8">
         No products found.
@@ -58,23 +58,26 @@
     <!-- Add pagination controls here -->
 
     <Modal :show="isModalOpen" @close="closeModal">
-        <template #header>
-            <h2 class="text-xl font-bold">{{ isEditing ? 'Edit Product' : 'Create New Product' }}</h2>
-        </template>
-        <template #body>
-            <ProductForm 
-                :product="selectedProduct" 
-                @save="handleSaveProduct"
-                @cancel="closeModal"
-            />
-        </template>
+      <template #header>
+        <h2 class="text-xl font-bold">{{ isEditing ? 'Edit Product' : 'Create New Product' }}</h2>
+      </template>
+      <template #body>
+        <ProductForm 
+            :product="selectedProduct" 
+            @save="handleSaveProduct"
+            @cancel="closeModal"
+        />
+      </template>
     </Modal>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { useDebounce } from '@vueuse/core';
 import { useAdminProductsStore } from '@/stores/adminProducts';
+import useApiData from '@/composables/useApiData';
+import adminApiClient from '@/services/adminApiClient'; // Assuming you have this
 import BaseDataTable from '@/components/ui/BaseDataTable.vue';
 import Modal from '@/components/ui/Modal.vue';
 import ProductForm from '@/components/admin/ProductForm.vue';
@@ -110,12 +113,19 @@ const apiUrl = computed(() => {
     if (includeDeleted.value) {
         params.append('include_deleted', 'true');
     }
-    return `/products?${params.toString()}`;
+    return `/api/admin/products?${params.toString()}`;
 });
 
-const { data: productsData, isLoading, error, fetchData } = useApiData(
+const { 
+    data: productsData, 
+    isLoading, 
+    error, 
+    fetchData 
+} = useApiData(
     () => adminApiClient.get(apiUrl.value),
-    apiUrl // Watch the computed URL to refetch automatically
+    {
+        watch: [apiUrl] // Watch the computed URL to refetch automatically
+    }
 );
 
 const openCreateModal = () => {
@@ -165,4 +175,7 @@ const restoreProduct = async (productId) => {
         }
     }
 };
+
+// Initial fetch
+watch(apiUrl, fetchData, { immediate: true });
 </script>
