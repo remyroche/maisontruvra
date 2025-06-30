@@ -4,9 +4,10 @@ from datetime import datetime
 from flask import render_template, current_app
 
 from backend.database import db
-from backend.models.order_models import Order
+from backend.models.b2b_models import B2BOrder
 from backend.models.invoice_models import Invoice
-from backend.models.b2b_models import B2BUser
+from backend.models.order_models import Order, OrderStatus
+from backend.services.pdf_service import create_invoice_pdf
 from backend.services.monitoring_service import MonitoringService
 
 logger = logging.getLogger(__name__)
