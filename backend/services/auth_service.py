@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHash
+from ..services.exceptions import ValidationError
 
 
 # Instantiate the PasswordHasher. It's thread-safe and can be shared.
