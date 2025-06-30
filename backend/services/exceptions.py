@@ -22,7 +22,63 @@ class ValidationException(ServiceError):
 class UnauthorizedException(ServiceError):
     """Exception raised when user is not authorized."""
     status_code = 401
+# backend/services/exceptions.py
+"""
+This module defines custom exception classes for the service layer.
+Using specific exceptions allows for more granular error handling and clearer
+API responses.
+"""
 
+class ApiServiceError(Exception):
+    """Base class for service layer exceptions."""
+    status_code = 500
+    message = "An unexpected error occurred."
+
+    def __init__(self, message=None, status_code=None, payload=None):
+        """
+        Initializes the ApiServiceError.
+        Args:
+            message (str, optional): The error message. Defaults to None.
+            status_code (int, optional): The HTTP status code. Defaults to None.
+            payload (dict, optional): Additional data to include in the error response. Defaults to None.
+        """
+        super().__init__(message)
+        if message is not None:
+            self.message = message
+        if status_code is not None:
+            self.status_code = status_code
+        self.payload = payload
+
+    def to_dict(self):
+        """Converts the exception to a dictionary for JSON serialization."""
+        rv = dict(self.payload or ())
+        rv['message'] = self.message
+        return rv
+
+class InvalidAPIRequestError(ApiServiceError):
+    """Raised when an API request is invalid or missing required data."""
+    status_code = 400
+
+class ProductNotFoundError(ApiServiceError):
+    """Raised when a requested product or variant is not found."""
+    status_code = 404
+
+class DuplicateProductError(ApiServiceError):
+    """Raised when a product with the same name or SKU already exists."""
+    status_code = 409 # 409 Conflict
+
+class InsufficientStockError(ApiServiceError):
+    """Raised when there is not enough stock for an operation."""
+    status_code = 400
+
+class DuplicateEmailError(ApiServiceError):
+    """Raised when a user with the given email already exists during registration."""
+    status_code = 409 # 409 Conflict
+
+class AuthenticationError(ApiServiceError):
+    """Raised for authentication failures, such as invalid credentials."""
+    status_code = 401
+    
 class InvalidPasswordException(ValidationException):
     """Exception for password policy failures."""
     pass
