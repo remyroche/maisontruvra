@@ -1,44 +1,73 @@
-import traceback
-from flask import jsonify, request
-
-# Import centralized loggers
-from backend.loggers import security_logger, setup_logging
-
+# backend/logger_and_error_handler.py
+"""
+This module sets up application-wide logging and global error handlers.
+Centralizing error handling ensures consistent error responses across the API.
+"""
+import logging
+from flask import jsonify
+from werkzeug.exceptions import HTTPException
+from backend.services.exceptions import ApiServiceError
+from marshmallow import ValidationError
 
 def register_error_handlers(app):
     """
-    Registers centralized error handlers for the Flask application.
+    Registers global error handlers for the Flask application.
+
+    Args:
+        app (Flask): The Flask application instance.
     """
-    @app.errorhandler(404)
-    def not_found_error(error):
-        app.logger.warning(f"404 Not Found: {request.path}")
-        return jsonify({"error": "Not Found", "message": "The requested URL was not found on the server."}), 404
 
-    @app.errorhandler(403)
-    def forbidden_error(error):
-        app.logger.warning(f"403 Forbidden: Access denied to {request.path} for user.")
-        return jsonify({"error": "Forbidden", "message": "You don't have the permission to access the requested resource."}), 403
+    # Configure logging (assuming basic setup is sufficient)
+    logging.basicConfig(level=logging.INFO)
+    
+    @app.errorhandler(ApiServiceError)
+    def handle_api_service_error(error):
+        """
+        Handles all custom service layer exceptions derived from ApiServiceError.
+        """
+        app.logger.warning(f"API Service Error: {error.message} (Status: {error.status_code})")
+        response = jsonify(error.to_dict())
+        response.status_code = error.status_code
+        return response
 
-    @app.errorhandler(401)
-    def unauthorized_error(error):
-        app.logger.warning(f"401 Unauthorized: Unauthorized access attempt to {request.path}.")
-        return jsonify({"error": "Unauthorized", "message": "Authentication is required to access this resource."}), 401
+    @app.errorhandler(ValidationError)
+    def handle_validation_error(error):
+        """
+        Handles Marshmallow validation errors, returning a 400 Bad Request
+        with a structured list of errors.
+        """
+        app.logger.warning(f"Input validation failed: {error.messages}")
+        response = jsonify({"message": "Input validation failed", "errors": error.messages})
+        response.status_code = 400
+        return response
+
+    @app.errorhandler(HTTPException)
+    def handle_http_exception(e):
+        """
+        Handles standard HTTP exceptions (e.g., 404 Not Found, 405 Method Not Allowed).
+        """
+        app.logger.error(f"HTTP Exception: {e.code} {e.name} - {e.description}")
+        response = e.get_response()
+        # Ensure the response is JSON
+        response.data = jsonify({
+            "code": e.code,
+            "name": e.name,
+            "description": e.description,
+        }).data
+        response.content_type = "application/json"
+        return response
 
     @app.errorhandler(Exception)
-    def generic_error_handler(error):
+    def handle_generic_exception(e):
         """
-        Handles all unhandled exceptions, logs them in detail, and returns a
-        generic 500 error to the client.
+        A catch-all handler for any other unhandled exceptions.
+        This prevents stack traces from being leaked to the client.
         """
-        error_traceback = traceback.format_exc()
-        app.logger.error(
-            f"Unhandled Exception: {error}\n"
-            f"Path: {request.path}\n"
-            f"Method: {request.method}\n"
-            f"IP: {request.remote_addr}\n"
-            f"Traceback:\n{error_traceback}"
-        )
-        return jsonify({
-            "error": "Internal Server Error",
-            "message": "An unexpected error occurred. The administrators have been notified."
-        }), 500
+        app.logger.critical(f"Unhandled Exception: {str(e)}", exc_info=True)
+        response = jsonify({
+            "message": "An internal server error occurred.",
+            # Avoid leaking internal error details in production
+            "error": str(e) if app.debug else "Internal Server Error"
+        })
+        response.status_code = 500
+        return response
