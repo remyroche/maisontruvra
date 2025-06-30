@@ -24,22 +24,6 @@ class B2BService:
     """
     This service handles business logic for B2B users, including account management,
     teams, and B2B-specific commerce features like tiered pricing.
-
-    --- Model Explanations ---
-
-    Cart & Order Model (B2B/B2C Distinction):
-    There are single Cart (`models.cart_models.Cart`) and Order (`models.order_models.Order`) models.
-    The distinction between B2B and B2C is made based on the `user_type` of the user who owns the cart or order.
-    - A Cart/Order is linked to a User (`user_id`).
-    - The User model (`models.user_models.User`) has a `user_type` enum (`UserType.B2B` or `UserType.B2C`).
-    - If `cart.user.user_type == UserType.B2B`, the cart is treated as a B2B cart, and B2B-specific
-      logic (like tier discounts) can be applied.
-
-    Tier Model:
-    A new `Tier` model has been implemented in `models.b2b_models.py`.
-    - It has a `name`, `discount_percentage`, and an optional `minimum_spend`.
-    - The `B2BUser` model is linked to a `Tier` via a `tier_id`.
-    This allows for different pricing structures for different B2B customers.
     """
 
     # --- B2B Account Management ---
@@ -61,9 +45,8 @@ class B2BService:
         db.session.add(user)
         db.session.commit()
 
-        # Notify admin and user
         NotificationService.create_notification(
-            user_id=None,  # For admin
+            user_id=None,
             message=f"New B2B account application from {company_name}.",
             notification_type=NotificationType.ADMIN_ALERT
         )
@@ -72,18 +55,32 @@ class B2BService:
         return new_b2b_user
 
     @staticmethod
-    def approve_b2b_account(b2b_user_id: int) -> B2BUser:
-        """Approves a pending B2B account."""
+    def get_all_b2b_users_with_details():
+        """Retrieves all B2B users with their associated user and tier details."""
+        return db.session.query(B2BUser).options(
+            joinedload(B2BUser.user),
+            joinedload(B2BUser.tier)
+        ).all()
+
+    @staticmethod
+    def update_b2b_status(b2b_user_id: int, status: B2BStatus) -> B2BUser:
+        """Updates the status of a B2B account."""
         b2b_user = db.session.query(B2BUser).options(joinedload(B2BUser.user)).get(b2b_user_id)
-        if b2b_user:
-            b2b_user.status = B2BStatus.APPROVED
-            db.session.commit()
+        if not b2b_user:
+            raise NotFoundException("B2B account not found.")
+        
+        b2b_user.status = status
+        db.session.commit()
+        
+        if status == B2BStatus.APPROVED:
             EmailService.send_b2b_account_approved_email(b2b_user.user.email, b2b_user.user.first_name)
             NotificationService.create_notification(
                 user_id=b2b_user.user_id,
                 message="Congratulations! Your B2B account has been approved.",
                 notification_type=NotificationType.B2B_ACCOUNT_APPROVED
             )
+        # Add other notifications for rejected, suspended, etc. if needed
+
         return b2b_user
 
     @staticmethod
@@ -154,7 +151,7 @@ class B2BService:
         return None
 
     # --- B2B Commerce (Cart, Pricing, Order) ---
-
+    
     @staticmethod
     def get_b2b_price(user: User, product: Product) -> Decimal:
         """
@@ -203,7 +200,6 @@ class B2BService:
     def get_cart_with_b2b_pricing(user_id: int) -> dict:
         """
         Retrieves a user's cart and calculates prices, including B2B tier discounts.
-        Returns a dictionary with cart details and calculated totals.
         """
         user = db.session.query(User).options(
             joinedload(User.b2b_user).joinedload(B2BUser.tier),
@@ -211,11 +207,10 @@ class B2BService:
         ).get(user_id)
 
         if not user or not user.carts:
-            return None  # No user or no cart
+            return None
 
-        cart = user.carts[0]  # Assuming one cart per user for simplicity
+        cart = user.carts[0]
 
-        # Apply B2B tier discount if applicable
         if user.user_type == UserType.B2B and user.b2b_user and user.b2b_user.tier:
             tier = user.b2b_user.tier
             discount_multiplier = Decimal('1') - (tier.discount_percentage / Decimal('100'))
@@ -241,7 +236,6 @@ class B2BService:
                 'discount_applied': discount_applied, 'total': total, 'tier_name': tier.name
             }
 
-        # Standard pricing for B2C users or B2B users without a tier
         subtotal = sum(item.price * item.quantity for item in cart.items)
         return {
             'cart': cart,
@@ -286,7 +280,6 @@ class B2BService:
         )
 
         db.session.add(new_order)
-        # Empty the cart
         for item in cart.items:
             db.session.delete(item)
 
@@ -298,5 +291,5 @@ class B2BService:
     def get_b2b_invoices_paginated(user_id: int, page: int, per_page: int):
         """Retrieves a paginated list of invoices for a B2B account."""
         account = B2BService.get_b2b_user(user_id)
-        invoices_pagination = Invoice.query.filter_by(b2b_account_id=account.id).order_by(Invoice.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-        return invoices_pagination
+        return Invoice.query.filter_by(b2b_account_id=account.id).order_by(Invoice.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
