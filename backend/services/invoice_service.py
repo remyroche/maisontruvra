@@ -1,89 +1,60 @@
+# backend/services/invoice_service.py
 import os
-import logging
-from datetime import datetime
-from flask import render_template, current_app
-
+from flask import current_app, render_template
 from backend.database import db
 from backend.models.b2b_models import B2BOrder
 from backend.models.invoice_models import Invoice
 from backend.models.order_models import Order, OrderStatus
 from backend.services.pdf_service import create_invoice_pdf
-from backend.services.monitoring_service import MonitoringService
 
-logger = logging.getLogger(__name__)
+def get_invoice_by_order_id(order_id):
+    return Invoice.query.filter_by(order_id=order_id).first()
 
-class InvoiceService:
-    """
-    Service pour la gestion des factures.
-    Sépare la création de l'enregistrement de la facture de la génération du fichier PDF.
-    """
+def get_invoice_by_b2b_order_id(b2b_order_id):
+    return Invoice.query.filter_by(b2b_order_id=b2b_order_id).first()
 
-    @staticmethod
-    def _generate_invoice_number(prefix: str = "INV") -> str:
-        """Génère un numéro de facture unique basé sur la date et un compteur."""
-        today = datetime.utcnow()
-        # Cherche la dernière facture du mois en cours pour incrémenter le compteur
-        last_invoice = Invoice.query.filter(
-            db.func.strftime('%Y-%m', Invoice.created_at) == today.strftime('%Y-%m')
-        ).order_by(Invoice.id.desc()).first()
-        
-        count = 1
-        if last_invoice and last_invoice.invoice_number:
-            try:
-                # Extrait le dernier numéro de la séquence
-                count = int(last_invoice.invoice_number.split('-')[-1]) + 1
-            except (ValueError, IndexError):
-                logger.warning(f"Impossible d'analyser le numéro de facture : {last_invoice.invoice_number}. Réinitialisation du compteur.")
-                
-        return f"{prefix}-{today.strftime('%Y%m')}-{count:04d}"
+def generate_invoice_pdf_for_order(order_id):
+    """Generates a PDF invoice for a given order."""
+    order = Order.query.get(order_id)
+    if not order or order.status != OrderStatus.COMPLETED:
+        current_app.logger.warning(
+            f"Could not generate invoice for order {order_id}. Order not found or not completed."
+        )
+        return
 
-    @staticmethod
-    def create_and_dispatch_invoice_for_order(order_id: int):
-        """
-        Crée un enregistrement de facture pour une commande et lance une tâche Celery
-        pour générer le fichier PDF en arrière-plan.
-        """
-        order = db.session.get(Order, order_id)
-        if not order:
-            logger.error(f"Impossible de créer la facture : commande {order_id} non trouvée.")
-            raise ValueError(f"Commande {order_id} non trouvée.")
+    template_path = "non-email/b2c_invoice.html"
+    invoice_html = render_template(template_path, order=order)
+    invoice_pdf = create_invoice_pdf(invoice_html)
 
-        if order.invoice:
-            logger.warning(f"La commande {order_id} a déjà une facture associée (ID: {order.invoice.id}).")
-            return order.invoice
+    invoice = Invoice(
+        order_id=order_id,
+        user_id=order.user_id,
+        invoice_data=invoice_pdf,
+    )
+    db.session.add(invoice)
+    db.session.commit()
+    current_app.logger.info(f"Successfully generated invoice for order {order_id}")
+    return invoice
 
-        try:
-            # Déterminer le préfixe et le type de document
-            prefix = "INV" if order.user.is_b2b else "RECU"
-            invoice_number = InvoiceService._generate_invoice_number(prefix)
+def generate_invoice_pdf_for_b2b_order(order_id):
+    """Generates a PDF invoice for a given B2B order."""
+    order = B2BOrder.query.get(order_id)
+    if not order:
+        current_app.logger.warning(
+            f"Could not generate invoice for B2B order {order_id}. Order not found."
+        )
+        return
 
-            # Créer l'enregistrement de la facture dans la base de données
-            new_invoice = Invoice(
-                invoice_number=invoice_number,
-                user_id=order.user_id,
-                order_id=order.id,
-                total_amount=order.total_cost, # Assumant que le modèle Order a un 'total_cost'
-                status='pending_generation', # Statut initial
-                pdf_url=None # Le PDF n'est pas encore créé
-            )
-            db.session.add(new_invoice)
-            db.session.commit()
+    template_path = "non-email/b2b_invoice.html"
+    invoice_html = render_template(template_path, order=order)
+    invoice_pdf = create_invoice_pdf(invoice_html)
 
-            # Lancer la tâche Celery pour la génération du PDF
-            from backend.tasks import generate_invoice_pdf_task
-            generate_invoice_pdf_task.delay(new_invoice.id)
-
-            MonitoringService.log_info(
-                f"Facture {new_invoice.id} créée. Génération du PDF mise en file d'attente.",
-                "InvoiceService"
-            )
-            logger.info(f"Facture {new_invoice.id} pour la commande {order_id} envoyée à la file d'attente de génération.")
-            
-            return new_invoice
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Erreur lors de la création de la facture pour la commande {order_id}: {e}", exc_info=True)
-            MonitoringService.log_error(f"Échec de la création de la facture pour la commande {order_id}", "InvoiceService")
-            raise
-
+    invoice = Invoice(
+        b2b_order_id=order_id,
+        user_id=order.user_id,
+        invoice_data=invoice_pdf,
+    )
+    db.session.add(invoice)
+    db.session.commit()
+    current_app.logger.info(f"Successfully generated invoice for B2B order {order_id}")
+    return invoice
