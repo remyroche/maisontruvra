@@ -3,14 +3,20 @@
 # This script runs a series of audits on the Maison Truvra codebase.
 # It checks for best practices, security vulnerabilities, and code quality.
 
-# Define colors for output
+# Define colors for output (these will still be in the file, but won't render as colors in a plain text editor)
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Define the log file name
+LOG_FILE="audit_log_$(date +%Y%m%d_%H%M%S).txt"
+
+# Redirect all stdout and stderr to the log file
+exec > >(tee -a "$LOG_FILE") 2>&1
+
 echo -e "${YELLOW}==========================================${NC}"
-echo -e "${YELLOW}  Starting Maison Truvra Code Audits        ${NC}"
+echo -e "${YELLOW}   Starting Maison Truvra Code Audits     ${NC}"
 echo -e "${YELLOW}==========================================${NC}"
 
 # --- 1. Best Practices & Static Analysis Audit (Backend) ---
@@ -56,6 +62,8 @@ echo -e "${GREEN}--- Dependency & Component Security Audit Complete ---\n${NC}"
 
 
 echo -e "${YELLOW}==========================================${NC}"
-echo -e "${YELLOW}  All Audits Complete                     ${NC}"
+echo -e "${YELLOW}   All Audits Complete                    ${NC}"
 echo -e "${YELLOW}==========================================${NC}"
 
+# Restore stdout and stderr (optional, but good practice if the script continues after logging)
+exec 1>&3 2>&4

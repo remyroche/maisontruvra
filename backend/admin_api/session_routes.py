@@ -1,12 +1,14 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_user
 from backend.services.user_service import UserService
 from backend.services.auth_service import AuthService
 from backend.utils.decorators import staff_required, roles_required, permissions_required
-
+from backend.services.audit_log_service import AuditLogService
+from backend.services.session_service import SessionService
+from backend.extensions import limiter
 
 session_routes = Blueprint('session_routes', __name__, url_prefix='/api/admin/sessions')
 
-@admin_session_routes_bp.route('/sessions', methods=['GET'])
+@session_routes.route('/sessions', methods=['GET'])
 @roles_required ('Admin', 'Manager')
 def list_active_sessions():
     """
@@ -28,7 +30,7 @@ def list_active_sessions():
         "pages": sessions_page.pages
     })
 
-@admin_session_routes_bp.route('/sessions/<string:session_id>', methods=['DELETE'])
+@session_routes.route('/sessions/<string:session_id>', methods=['DELETE'])
 @roles_required ('Admin', 'Manager')
 @limiter.limit("30 per minute") # Rate limit to prevent abuse
 def terminate_session(session_id):

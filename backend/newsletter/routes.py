@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
+from marshmallow import ValidationError
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services import newsletter_service
+from backend.schemas import NewsletterSubscriptionSchema
 
 newsletter_bp = Blueprint('newsletter_bp', __name__, url_prefix='/api/newsletter')
 
@@ -9,17 +11,23 @@ def subscribe_to_newsletter():
     """
     Subscribe an email address to a specific newsletter list (B2C or B2B).
     """
-    data = request.get_json()
-    if not data or 'email' not in data:
-        return jsonify(status="error", message="Email is required."), 400
-
-    email = InputSanitizer.sanitize_input(data['email'])
-    # Default to 'b2c' if not provided. The frontend for the B2B page should send 'b2b'.
-    list_type = InputSanitizer.sanitize_input(data.get('list_type', 'b2c'))
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(status="error", message="Invalid JSON data provided."), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = NewsletterSubscriptionSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(status="error", message="Validation failed.", errors=err.messages), 400
 
     try:
         # Service handles validation and adding the email to the correct list
-        subscriber = newsletter_service.subscribe_email(email, list_type)
+        subscriber = newsletter_service.subscribe_email(
+            validated_data['email'], 
+            validated_data['list_type']
+        )
         return jsonify(status="success", message="Thank you for subscribing!", data=subscriber.to_dict()), 201
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400

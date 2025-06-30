@@ -1,13 +1,18 @@
-from flask import current_app
-from flask_login import current_user
+from flask import current_app, Blueprint, request, jsonify
+from flask_login import current_user, login_required
+from marshmallow import ValidationError
 from backend.models import db, Cart, CartItem, Product, User
 from backend.services.exceptions import NotFoundException, ServiceError, ValidationException
 from backend.services.b2b_service import B2BService
 from backend.services.inventory_service import InventoryService
 from backend.services.monitoring_service import MonitoringService
+from backend.services.cart_service import CartService
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.models.enums import UserType
+from backend.schemas import AddToCartSchema, UpdateCartItemSchema
 from decimal import Decimal
+
+cart_bp = Blueprint('cart_bp', __name__, url_prefix='/api/cart')
 
 @cart_bp.route('/', methods=['GET'])
 @login_required
@@ -42,15 +47,19 @@ def get_cart_contents():
 @login_required
 def add_to_cart():
     """Adds an item to the cart."""
-    data = request.get_json()
-    product_id = data.get('product_id')
-    quantity = data.get('quantity', 1)
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({'message': 'Invalid JSON data provided'}), 400
     
-    if not product_id:
-        return jsonify({'message': 'Product ID is required'}), 400
+    # Validate input using marshmallow schema
+    try:
+        schema = AddToCartSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({'message': 'Validation failed', 'errors': err.messages}), 400
         
     try:
-        CartService.add_to_cart(current_user.id, product_id, quantity)
+        CartService.add_to_cart(current_user.id, validated_data['product_id'], validated_data['quantity'])
         return jsonify({'message': 'Item added to cart'}), 201
     except NotFoundException:
         return jsonify({'message': 'Product not found'}), 404
@@ -61,12 +70,19 @@ def add_to_cart():
 @login_required
 def update_cart_item_route(item_id):
     """Updates quantity of a specific item in the cart."""
-    data = request.get_json()
-    if not data or 'quantity' not in data:
-        return jsonify({'message': 'Request body with quantity is missing'}), 400
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({'message': 'Invalid JSON data provided'}), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = UpdateCartItemSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({'message': 'Validation failed', 'errors': err.messages}), 400
 
     try:
-        CartService.update_cart_item(current_user.id, item_id, data)
+        CartService.update_cart_item(current_user.id, item_id, validated_data)
         return jsonify({'message': 'Cart item updated successfully'}), 200
     except NotFoundException as e:
         return jsonify({'message': str(e)}), 404

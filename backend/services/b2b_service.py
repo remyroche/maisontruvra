@@ -7,11 +7,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from backend.models.enums import UserType, NotificationType
 from .exceptions import B2BAccountExistsError
+from sqlalchemy import func
 
 from ..extensions import redis_client
 from ..models import (db, B2BUser, User, Team, TeamMember, B2BInvitation, Tier,
                     Cart, Order, Product, OrderItem, Invoice, Company)
-from ..models.enums import B2BStatus, NotificationType, UserType
+from ..models.b2b_models import B2BPartnershipRequest
+from ..models.enums import B2BStatus, B2BRequestStatus, NotificationType, UserType
 from ..services.email_service import EmailService
 from ..services.exceptions import (UserNotFoundError, NotFoundException, ServiceError)
 from ..services.notification_service import NotificationService
@@ -20,6 +22,7 @@ from .monitoring_service import MonitoringService
 from ..services.order_service import OrderService
 from ..services.invoice_service import InvoiceService
 from ..services.loyalty_service import LoyaltyService
+from backend.models import Referral, LoyaltyTransaction
 
 
 logger = logging.getLogger(__name__)
@@ -132,7 +135,7 @@ class B2BService:
             message=f"New B2B account application from {company_name}.",
             notification_type=NotificationType.ADMIN_ALERT
         )
-        EmailService.send_b2b_pending_approval_email(user.email, user.first_name)
+        EmailService.send_b2b_account_pending_email(user)
 
         return new_b2b_user
 
@@ -374,4 +377,81 @@ class B2BService:
         """Retrieves a paginated list of invoices for a B2B account."""
         account = B2BService.get_b2b_user(user_id)
         return Invoice.query.filter_by(b2b_account_id=account.id).order_by(Invoice.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
+    # --- B2B Application Management ---
+
+    @staticmethod
+    def approve_b2b_application(application: B2BPartnershipRequest) -> User:
+        """
+        Approves a B2B partnership request and creates/converts a user to B2B account.
+        """
+        # Check if user already exists with this email
+        user = User.query.filter_by(email=application.contact_email).first()
+        
+        if not user:
+            # Create a new user account
+            user = User(
+                email=application.contact_email,
+                first_name=application.contact_name.split()[0] if application.contact_name else "Unknown",
+                last_name=" ".join(application.contact_name.split()[1:]) if len(application.contact_name.split()) > 1 else "",
+                user_type=UserType.B2B,
+                is_verified=True  # Auto-verify B2B users
+            )
+            # Set a temporary password - user will need to reset it
+            user.set_password("TempPassword123!")
+            db.session.add(user)
+            db.session.flush()  # Get the user ID
+        else:
+            # Convert existing user to B2B
+            user.user_type = UserType.B2B
+
+        # Create B2B account
+        b2b_user = B2BUser(
+            user_id=user.id,
+            company_name=application.company_name,
+            vat_number=application.vat_number,
+            status=B2BStatus.APPROVED
+        )
+        db.session.add(b2b_user)
+        
+        # Update application status
+        application.status = B2BRequestStatus.APPROVED
+        
+        db.session.commit()
+        
+        # Send notification emails
+        EmailService.send_b2b_account_approved_email(user.email, user.first_name)
+        NotificationService.create_notification(
+            user_id=user.id,
+            message="Congratulations! Your B2B partnership request has been approved.",
+            notification_type=NotificationType.B2B_ACCOUNT_APPROVED
+        )
+        
+        logger.info(f"B2B application approved for {application.contact_email}")
+        return user
+
+    @staticmethod
+    def reject_b2b_application(application: B2BPartnershipRequest, reason: str = None):
+        """
+        Rejects a B2B partnership request.
+        """
+        application.status = B2BRequestStatus.REJECTED
+        db.session.commit()
+        
+        # Send rejection email
+        EmailService.send_b2b_application_rejected_email(
+            application.contact_email, 
+            application.contact_name,
+            reason or "Application did not meet requirements."
+        )
+        
+        logger.info(f"B2B application rejected for {application.contact_email}. Reason: {reason}")
+
+    @staticmethod
+    def get_all_b2b_accounts():
+        """Returns a list of all B2B accounts with their company-specific details."""
+        return db.session.query(B2BUser).options(
+            joinedload(B2BUser.user),
+            joinedload(B2BUser.tier)
+        ).all()
 

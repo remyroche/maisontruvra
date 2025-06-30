@@ -6,6 +6,7 @@ from ..models.order_models import Order
 from ..services.notification_service import NotificationService
 import datetime
 from decimal import Decimal
+from database import db
 
 class LoyaltyService:
     
@@ -40,7 +41,7 @@ class LoyaltyService:
         return 0
     
     def get_user_loyalty_transactions(user_id):
-        loyalty_account = get_loyalty_account(user_id)
+        loyalty_account = LoyaltyService.get_loyalty_account(user_id)
         if loyalty_account:
             return LoyaltyTransaction.query.filter_by(loyalty_account_id=loyalty_account.id).order_by(LoyaltyTransaction.date.desc()).all()
         return []

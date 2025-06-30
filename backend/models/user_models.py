@@ -1,9 +1,11 @@
-from .base import Base
+from .base import Base, db, SoftDeleteMixin, BaseModel
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLAlchemyEnum
 from sqlalchemy.orm import relationship
 from werkzeug.security import generate_password_hash, check_password_hash
-from .enums import UserType, UserStatus, NotificationFrequency
+from .enums import UserType, UserStatus, NotificationFrequency, RoleType
 import datetime
+from backend.utils.encryption import decrypt_data, encrypt_data
+from sqlalchemy.ext.hybrid import hybrid_property
 
 class User(Base):
     """

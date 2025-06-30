@@ -5,7 +5,7 @@ from backend.models.product_models import Product
 from backend.models.cart_models import Cart
 from backend.models.address_models import Address
 from backend.services.loyalty_service import LoyaltyService
-from .exceptions import ServiceError, NotFoundException, ValidationException
+from .exceptions import ServiceError, NotFoundException, ValidationException, ServiceException
 from sqlalchemy.orm import joinedload, subqueryload
 from backend.models.user_models import User
 from backend.models.b2b_models import B2BUser
@@ -59,7 +59,7 @@ class OrderService:
 
 
     @staticmethod
-    def get_all_orders_for_user(user_id):
+    def get_all_orders_for_user(user_id, page=1, per_page=10):
         query = Order.query.options(
             # Eagerly load the user associated with each order
             joinedload(Order.user),
@@ -228,7 +228,8 @@ class OrderService:
             query = query.order_by(db.desc(order_by_attr))
         else:
             query = query.order_by(db.asc(order_by_attr))
-        
+        page=page
+        per_page=per_page
         return query.paginate(page=page, per_page=per_page, error_out=False)
     
     @staticmethod
@@ -298,7 +299,7 @@ class OrderService:
             order_total = 0
             order_items = []
 
-            for item_data in items_data
+            for item_data in order_data:
                 product = Product.query.filter_by(id=item_data['product_id']).with_for_update().first()
 
                 if not product or product.stock_quantity < item_data['quantity']:

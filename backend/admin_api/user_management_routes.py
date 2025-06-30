@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_user  
 from backend.services.user_service import UserService
 from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
 from backend.middleware import sanitize_request_data
@@ -6,8 +6,15 @@ from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from backend.utils.csrf_protection import CSRFProtection
 import logging
-from backend.utils.decorators import staff_required, roles_required, permissions_required
+from backend.utils.decorators import staff_required, roles_required, permissions_required, api_resource_handler
 from backend.services.discount_service import DiscountService
+from backend.models.user_models import User
+from backend.schemas import UserSchema, UpdateUserSchema
+from backend.utils.input_sanitizer import InputSanitizer
+from decimal import Decimal
+from flask_limiter import Limiter
+from backend.middleware import RBACService
+from backend.extensions import limiter
 
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
@@ -58,15 +65,16 @@ def get_users():
         logger.error(f"Error fetching users: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
-@admin_user_management_bp.route('/users/<int:user_id>', methods=['GET'])
+@user_management_bp.route('/users/<int:user_id>', methods=['GET'])
+@api_resource_handler(User, check_ownership=False)
 @roles_required ('Admin', 'Manager')
 def get_user_details(user_id):
     """
     Retrieves detailed information for a single user.
     C[R]UD - Read
     """
-    user = User.query.get_or_404(user_id)
-    return jsonify(user.to_admin_dict()) # Use a detailed serializer for admin views
+    # User is already validated and available as g.user
+    return jsonify(g.user.to_admin_dict()) # Use a detailed serializer for admin views
 
 
 @user_management_bp.route('/<int:user_id>/assign-tier', methods=['POST'])
@@ -156,17 +164,14 @@ def create_user():
         return jsonify({'error': 'Internal server error'}), 500
 
 @user_management_bp.route('/users/<int:user_id>', methods=['PUT'])
+@api_resource_handler(User, schema=UpdateUserSchema(), check_ownership=False)
 @roles_required ('Admin', 'Manager', 'Support')
 @sanitize_request_data
 @limiter.limit("20 per minute")
 def update_user(user_id):
     """Update user with full audit logging."""
     try:
-        update_data = request.get_json()
-        if not update_data:
-            raise ValidationException("Request data is required")
-
-        updated_user = UserService.update_user(user_id, update_data)
+        updated_user = UserService.update_user(user_id, g.validated_data)
 
         # Log admin action
         security_logger.info({
@@ -194,6 +199,7 @@ def update_user(user_id):
 
 
 @user_management_bp.route('/<int:user_id>', methods=['DELETE'])
+@api_resource_handler(User, check_ownership=False)
 @roles_required ('Admin', 'Manager', 'Support', 'Deleter')
 @sanitize_request_data
 def delete_user(user_id):
@@ -217,13 +223,14 @@ def delete_user(user_id):
         return jsonify({"error": "User not found"}), 404
         
 @user_management_bp.route('/<int:user_id>/restore', methods=['PUT'])
+@api_resource_handler(User, check_ownership=False)
 @roles_required('Admin', 'Manager', 'Support')
 def restore_user(user_id):
     if UserService.restore_user(user_id):
         return jsonify({"message": "User restored successfully"})
     return jsonify({"error": "User not found"}), 404
 
-@admin_user_management_bp.route('/users/<int:user_id>/roles', methods=['POST'])
+@user_management_bp.route('/users/<int:user_id>/roles', methods=['POST'])
 @roles_required('Admin', 'Manager')
 @limiter.limit("30 per minute")
 def assign_role_to_user(user_id):
@@ -231,7 +238,7 @@ def assign_role_to_user(user_id):
     Assigns a role to a user. RBAC implementation.
     """
     data = request.get_json()
-    role_name = sanitize_input(data.get('role_name'))
+    role_name = InputSanitizer.sanitize_input(data.get('role_name'))
     
     if not role_name:
         return jsonify({"error": "Role name is required."}), 400
@@ -247,14 +254,14 @@ def assign_role_to_user(user_id):
     
     return jsonify({"message": f"Role '{role_name}' assigned to user {user.email}."})
 
-@admin_user_management_bp.route('/users/<int:user_id>/roles/<string:role_name>', methods=['DELETE'])
+@user_management_bp.route('/users/<int:user_id>/roles/<string:role_name>', methods=['DELETE'])
 @roles_required('Admin', 'Manager')
 def remove_role_from_user(user_id, role_name):
     """
     Removes a role from a user. RBAC implementation.
     """
     user = User.query.get_or_404(user_id)
-    sanitized_role_name = sanitize_input(role_name)
+    sanitized_role_name = InputSanitizer.sanitize_input(role_name)
     
     RBACService.remove_role_from_user(user, sanitized_role_name)
 

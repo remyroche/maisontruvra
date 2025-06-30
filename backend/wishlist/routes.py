@@ -1,7 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from marshmallow import ValidationError
 from backend.services.wishlist_service import WishlistService
 from backend.utils.input_sanitizer import InputSanitizer
+from backend.utils.decorators import api_resource_handler
+from backend.schemas import AddToWishlistSchema
+from backend.models.product_models import Product
 
 wishlist_bp = Blueprint('wishlist_bp', __name__, url_prefix='/api/wishlist')
 
@@ -22,18 +26,16 @@ def get_wishlist():
 
 # ADD an item to the user's wishlist
 @wishlist_bp.route('/item', methods=['POST'])
+@api_resource_handler(Product, schema=AddToWishlistSchema())
 @jwt_required()
 def add_to_wishlist():
     """
     Add a product to the current user's wishlist.
     """
     user_id = get_jwt_identity()
-    data = request.get_json()
-    if not data or 'product_id' not in data:
-        return jsonify(status="error", message="product_id is required."), 400
 
     try:
-        product_id = int(InputSanitizer.sanitize_input(data['product_id']))
+        product_id = g.validated_data['product_id']
         wishlist_item = WishlistService.add_to_wishlist(user_id, product_id)
         if wishlist_item:
             return jsonify(status="success", data=wishlist_item.to_dict()), 201

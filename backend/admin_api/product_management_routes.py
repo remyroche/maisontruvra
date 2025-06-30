@@ -1,35 +1,35 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.utils.decorators import staff_required, roles_required, permissions_required, get_object_or_404
+from backend.utils.decorators import staff_required, admin_required, roles_required, permissions_required, get_object_or_404, api_resource_handler
 from backend.models.inventory_models import Inventory
 from backend.extensions import cache, db
 from backend.services.background_task_service import BackgroundTaskService
 from backend.tasks import send_back_in_stock_email_task
 from backend.schemas import CreateProductSchema
 from marshmallow import ValidationError
-from backend.schemas import CreateProductSchema, CreateProductInputSchema, ProductOutputSchema
-
+from backend.schemas import CreateProductSchema, CreateProductInputSchema, ProductOutputSchema, InventoryUpdateSchema
+from backend.models.product_models import Product
+from backend.services.product_service import ProductService
 
 
 product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
 product_service = ProductService()
 task_service = BackgroundTaskService()
 
+# Initialize schema instances
+product_output_schema = ProductOutputSchema()
+products_output_schema = ProductOutputSchema(many=True)
+
 # CREATE a new product
 @product_management_bp.route('/products', methods=['POST'])
+@api_resource_handler(Product, schema=CreateProductSchema(), check_ownership=False)
 @permissions_required('MANAGE_PRODUCTS')
 @roles_required ('Admin', 'Manager')
 def create_product():
     """
     Create a new product.
     """
-    json_data = request.get_json()
-    if not json_data:
-        # A basic check for an empty payload.
-        return jsonify({"message": "No input data provided"}), 400
-
-    validated_data = CreateProductSchema().load(json_data)
-    product = ProductService.create_product(validated_data)
+    product = ProductService.create_product(g.validated_data)
 
     try:
         cache.delete(ProductService.get_all_products)
@@ -69,20 +69,24 @@ def update_inventory(inventory_id):
     Updates the quantity of an inventory item and triggers back-in-stock
     notifications if the product was previously out of stock.
     """
-    data = request.get_json()
-    if 'quantity' not in data:
-        return jsonify({"error": "Quantity is required"}), 400
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided"}), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = InventoryUpdateSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed", "errors": err.messages}), 400
 
     inventory_item = Inventory.query.get(inventory_id)
     if not inventory_item:
         return jsonify({"error": "Inventory item not found"}), 404
 
-    try:
-        new_quantity = int(data['quantity'])
-        cache.delete(f'view//api/products/{inventory_item.product_id}')
-        cache.delete('view//api/products')
-    except ValueError:
-        return jsonify({"error": "Invalid quantity format"}), 400
+    new_quantity = validated_data['quantity']
+    cache.delete(f'view//api/products/{inventory_item.product_id}')
+    cache.delete('view//api/products')
 
     # --- Back-in-Stock Notification Logic ---
     # Check the available stock *before* making changes

@@ -8,8 +8,10 @@ from .exceptions import ServiceError, ValidationException, NotFoundException
 from .inventory_service import InventoryService
 from .monitoring_service import MonitoringService
 from backend.utils.input_sanitizer import InputSanitizer
-from ..models import ExclusiveReward, Product
-
+from ..models import ExclusiveReward, Product, User
+from backend.services.b2b_service import B2BService 
+from backend.models import UserType  
+from decimal import Decimal
 
 class CartService:
     @staticmethod
@@ -163,32 +165,31 @@ class CartService:
         """Update cart item quantity with inventory reservation adjustments."""
         update_data = InputSanitizer.sanitize_json(update_data)
         try:
-        if not current_user.is_authenticated:
-            raise ServiceError("User must be authenticated", 401)
-        user_id = current_user.id
+            if not current_user.is_authenticated:
+                raise ServiceError("User must be authenticated", 401)
+            user_id = current_user.id
 
-        cart_item = CartItem.query.join(Cart).filter(Cart.user_id == user_id, CartItem.id == item_id).first()
-        if not cart_item:
-            raise NotFoundException("Cart item not found")
-        
-        if 'quantity' not in update_data:
-            raise ValidationException("Quantity is required")
+            cart_item = CartItem.query.join(Cart).filter(Cart.user_id == user_id, CartItem.id == item_id).first()
+            if not cart_item:
+                raise NotFoundException("Cart item not found")
             
-        try:
-            new_quantity = int(update_data['quantity'])
-        except (ValueError, TypeError):
-            raise ValidationException("Quantity must be a valid number")
+            if 'quantity' not in update_data:
+                raise ValidationException("Quantity is required")
+                
+            try:
+                new_quantity = int(update_data['quantity'])
+            except (ValueError, TypeError):
+                raise ValidationException("Quantity must be a valid number")
 
-        if new_quantity <= 0:
-            return CartService.remove_from_cart(item_id)
+            if new_quantity <= 0:
+                return CartService.remove_from_cart(item_id)
 
-        old_quantity = cart_item.quantity
-        quantity_diff = new_quantity - old_quantity
+            old_quantity = cart_item.quantity
+            quantity_diff = new_quantity - old_quantity
 
-        if quantity_diff == 0:
-            return cart_item.cart.to_dict()
+            if quantity_diff == 0:
+                return cart_item.cart.to_dict()
 
-        try:
             # Adjust inventory reservation
             if quantity_diff > 0:
                 InventoryService.reserve_stock(cart_item.product_id, quantity_diff, user_id)
@@ -223,6 +224,8 @@ class CartService:
     
     @staticmethod
     def remove_from_cart(user_id: int, product_id: int) -> Cart:
+        item_id = "N/A"
+        quantity_to_release = 0 # Default to 0 to prevent errors if cart_item is not found
         try:
             cart = Cart.query.filter_by(user_id=user_id).first()
             if cart:

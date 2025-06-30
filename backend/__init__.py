@@ -23,6 +23,7 @@ from .extensions import (
 )
 
 from . import config
+from . import services
 from .middleware import setup_middleware, check_staff_session, mfa_check_middleware
 from .utils.input_sanitizer import init_app_middleware
 from .loggers import setup_logging, security_logger

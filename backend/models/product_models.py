@@ -154,7 +154,7 @@ class ProductVariant(BaseModel, SoftDeleteMixin):
             'sku': self.sku,
             'price': str(self.price), # Return as string for consistency
             'attributes': self.attributes,
-            'available_stock': self.inventory.available_quantity if self.inventory else 0,
+            'available_stock': self.stock.quantity if self.stock else 0,
             'is_deleted': self.is_deleted,
         }
 
@@ -232,3 +232,25 @@ class Review(BaseModel, SoftDeleteMixin):
         if view == 'admin':
             return self.to_admin_dict()
         return self.to_public_dict()
+
+class Stock(BaseModel):
+    """
+    Represents stock/inventory for a specific product variant.
+    """
+    __tablename__ = 'stocks'
+    id = db.Column(db.Integer, primary_key=True)
+    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False, default=0)
+    
+    # Relationship back to the variant
+    variant = db.relationship('ProductVariant', back_populates='stock')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'variant_id': self.variant_id,
+            'quantity': self.quantity,
+        }
+    
+    def __repr__(self):
+        return f'<Stock {self.id} for Variant {self.variant_id}>'

@@ -1,11 +1,14 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from backend.services.order_service import OrderService
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.utils.decorators import staff_required, roles_required, permissions_required
+from backend.utils.decorators import staff_required, roles_required, permissions_required, api_resource_handler
+from backend.models.order_models import Order
+from backend.schemas import OrderStatusUpdateSchema
 
 order_routes = Blueprint('admin_order_routes', __name__, url_prefix='/api/admin/orders')
 
 @order_routes.route('/<int:order_id>', methods=['GET'])
+@api_resource_handler(Order, check_ownership=False)
 @permissions_required('MANAGE_ORDERS')
 @roles_required ('Admin', 'Manager', 'Support')
 def get_order_details(order_id):
@@ -28,13 +31,12 @@ def get_order_details(order_id):
       404:
         description: Order not found.
     """
-    order = OrderService.get_order_by_id(order_id)
-    if not order:
-        return jsonify({"error": "Order not found"}), 404
-    return jsonify(order.to_dict(include_details=True))
+    # Order is already validated and available as g.order
+    return jsonify(g.order.to_dict(include_details=True))
 
 
 @order_routes.route('/<int:order_id>/status', methods=['PUT'])
+@api_resource_handler(Order, schema=OrderStatusUpdateSchema(), check_ownership=False)
 @permissions_required('MANAGE_ORDERS')
 @roles_required ('Admin', 'Manager', 'Support')
 def update_order_status(order_id):
@@ -68,13 +70,8 @@ def update_order_status(order_id):
       404:
         description: Order not found.
     """
-    data = request.get_json()
-    new_status = data.get('status')
-    if not new_status:
-        return jsonify({"error": "Status is required"}), 400
-    
     try:
-        updated_order = OrderService.update_order_status(order_id, new_status)
+        updated_order = OrderService.update_order_status(order_id, g.validated_data['status'])
         if not updated_order:
             return jsonify({"error": "Order not found"}), 404
         return jsonify(updated_order.to_dict())
@@ -113,44 +110,17 @@ def get_orders():
     return jsonify([order.to_dict() for order in orders])
 
 
-# UPDATE an existing order's status
-@order_routes.route('/<int:order_id>/status', methods=['PUT'])
-@permissions_required('MANAGE_ORDERS')
-@roles_required ('Admin', 'Manager', 'Support')
-def update_order_status(order_id):
-    """
-    Update an existing order's status.
-    """
-    data = request.get_json()
-    if not data or 'status' not in data:
-        return jsonify(status="error", message="Invalid or missing 'status' in JSON body"), 400
 
-    if not OrderService.get_order_by_id(order_id):
-        return jsonify(status="error", message="Order not found"), 404
-
-    sanitized_status = InputSanitizer.sanitize_input(data['status'])
-    
-    try:
-        # Assuming the service handles the logic of status transition
-        updated_order = OrderService.update_order_status(order_id, sanitized_status)
-        return jsonify(status="success", data=updated_order.to_dict()), 200
-    except ValueError as e: # Catch specific validation errors from the service
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        # In a real app, log the error e
-        return jsonify(status="error", message="An internal error occurred while updating the order status."), 500
 
 # DELETE an order
 @order_routes.route('/<int:order_id>', methods=['DELETE'])
+@api_resource_handler(Order, check_ownership=False)
 @permissions_required('MANAGE_ORDERS')
 @roles_required ('Admin', 'Manager', 'Support')
 def delete_order(order_id):
     """
     Delete an order. This should be used with caution.
     """
-    if not OrderService.get_order_by_id(order_id):
-        return jsonify(status="error", message="Order not found"), 404
-
     try:
         OrderService.delete_order(order_id)
         return jsonify(status="success", message="Order deleted successfully"), 200

@@ -1,4 +1,4 @@
-from backend.database import db
+from backend.database import db, Base
 from .base import BaseModel, SoftDeleteMixin
 from .enums import B2BRequestStatus
 from sqlalchemy.dialects.postgresql import UUID

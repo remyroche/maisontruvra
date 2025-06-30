@@ -144,6 +144,17 @@ class EmailService:
             recipients=[email],
             template="b2b_newsletter_confirmation.html"
         )
+    
+    @staticmethod
+    def send_b2b_application_rejected_email(email, name, reason):
+        """Informs a user that their B2B application has been rejected."""
+        EmailService.send_email(
+            subject="Votre demande de partenariat professionnel",
+            recipients=[email],
+            template="b2b_application_rejected.html",
+            name=name,
+            reason=reason
+        )
 
     # --- Order Emails (B2C & B2B) ---
     @staticmethod

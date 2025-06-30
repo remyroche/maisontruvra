@@ -1,7 +1,9 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from backend.services.blog_service import BlogService
-from backend.utils.decorators import roles_required
+from backend.utils.decorators import roles_required, api_resource_handler
 from backend.extensions import cache
+from backend.models.blog_models import BlogCategory, BlogPost
+from backend.schemas import BlogCategorySchema, BlogPostSchema
 
 blog_management_bp = Blueprint('blog_management_bp', __name__, url_prefix='/api/admin/blog')
 
@@ -13,22 +15,23 @@ def get_categories():
     return jsonify([category.to_dict() for category in categories])
 
 @blog_management_bp.route('/categories', methods=['POST'])
+@api_resource_handler(BlogCategory, schema=BlogCategorySchema(), check_ownership=False)
 @roles_required('Admin', 'Manager')
 def create_category():
-    data = request.get_json()
-    category = BlogService.create_category(data['name'])
+    category = BlogService.create_category(g.validated_data['name'])
     cache.delete_memoized(BlogService.get_all_categories)
     return jsonify(category.to_dict()), 201
 
 @blog_management_bp.route('/categories/<int:category_id>', methods=['PUT'])
+@api_resource_handler(BlogCategory, schema=BlogCategorySchema(), check_ownership=False)
 @roles_required('Admin', 'Manager')
 def update_category(category_id):
-    data = request.get_json()
-    category = BlogService.update_category(category_id, data['name'])
+    category = BlogService.update_category(category_id, g.validated_data['name'])
     cache.delete_memoized(BlogService.get_all_categories)
     return jsonify(category.to_dict())
 
 @blog_management_bp.route('/categories/<int:category_id>', methods=['DELETE'])
+@api_resource_handler(BlogCategory, check_ownership=False)
 @roles_required('Admin', 'Manager')
 def delete_category(category_id):
     BlogService.delete_category(category_id)
@@ -44,19 +47,19 @@ def get_posts():
     return jsonify([post.to_dict() for post in posts])
 
 @blog_management_bp.route('/posts', methods=['POST'])
+@api_resource_handler(BlogPost, schema=BlogPostSchema(), check_ownership=False)
 @roles_required('Admin', 'Manager', 'Editor')
 def create_post():
-    data = request.get_json()
-    post = BlogService.create_post(data)
+    post = BlogService.create_post(g.validated_data)
     # Invalidate cache for the list of posts
     cache.delete('view//api/blog/posts')
     return jsonify(post.to_dict()), 201
 
 @blog_management_bp.route('/posts/<int:post_id>', methods=['PUT'])
+@api_resource_handler(BlogPost, schema=BlogPostSchema(), check_ownership=False)
 @roles_required('Admin', 'Manager', 'Editor')
 def update_post(post_id):
-    data = request.get_json()
-    post = BlogService.update_post(post_id, data)
+    post = BlogService.update_post(post_id, g.validated_data)
     if not post:
         return jsonify({"error": "Post not found or update failed"}), 404
         
@@ -66,22 +69,18 @@ def update_post(post_id):
     return jsonify(post.to_dict())
 
 @blog_management_bp.route('/posts/<int:post_id>', methods=['GET'])
+@api_resource_handler(BlogPost, check_ownership=False)
 @roles_required('Admin', 'Manager', 'Editor')
 def get_post(post_id):
-    post = BlogService.get_post_by_id(post_id)
-    if not post:
-        return jsonify({"error": "Post not found"}), 404
-    return jsonify(post.to_dict())
+    # Post is already validated and available as g.blog_post
+    return jsonify(g.blog_post.to_dict())
 
 @blog_management_bp.route('/posts/<int:post_id>', methods=['DELETE'])
+@api_resource_handler(BlogPost, check_ownership=False)
 @roles_required('Admin', 'Manager')
 def delete_post(post_id):
-    # First, get the post to find its slug for cache invalidation
-    post = BlogService.get_post_by_id(post_id)
-    if not post:
-        return jsonify({"error": "Post not found"}), 404
-    
-    post_slug = post.slug
+    # Post is already validated and available as g.blog_post
+    post_slug = g.blog_post.slug
     
     # Now, delete the post
     BlogService.delete_post(post_id)

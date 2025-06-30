@@ -26,7 +26,6 @@ from backend.models.user_models import User
 
 import time
 from prometheus_client import Counter, Histogram
-from backend.extensions import-non-routable-path-
 
 # Prometheus metrics
 REQUEST_LATENCY = Histogram('request_latency_seconds', 'Request latency', ['method', 'endpoint'])

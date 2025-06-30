@@ -1,15 +1,17 @@
 # backend/api/checkout_routes.py
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from marshmallow import ValidationError
 from ..services.checkout_service import CheckoutService
 from ..services.discount_service import DiscountService 
 from ..utils.decorators import admin_required, roles_required
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.services.exceptions import NotFoundException, ValidationException
+from backend.services.exceptions import NotFoundException, ValidationException, DiscountInvalidException
 from flask_login import current_user
 from backend.services.checkout_service import process_user_checkout, process_guest_checkout, process_b2b_checkout
 from backend.services.cart_service import get_cart_by_id_or_session
 from backend.models.enums import UserType
+from backend.schemas import ApplyDiscountSchema, CheckoutSchema, AddressSchema
 
 checkout_bp = Blueprint('checkout_bp', __name__, url_prefix='/api')
 checkout_service = CheckoutService()
@@ -38,16 +40,24 @@ def apply_discount():
     user = g.get('user')
     if not user:
         return jsonify({"error": "You must be logged in to apply a discount."}), 401
-        
-    data = request.get_json()
-    code = data.get('code')
+    
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided."}), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = ApplyDiscountSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed.", "errors": err.messages}), 400
     
     cart = checkout_service.get_user_cart(user.id) # Assuming a method to get cart
     if not cart:
         return jsonify({"error": "Cart not found."}), 404
 
     try:
-        result = discount_service.apply_discount_code(cart, user, code)
+        result = discount_service.apply_discount_code(cart, user, validated_data['code'])
         return jsonify(result)
     except DiscountInvalidException as e:
         return jsonify({"error": str(e)}), 400
@@ -59,16 +69,19 @@ def checkout():
     Handles the checkout process.
     It differentiates between guest, authenticated B2C, and B2B users.
     """
-    data = request.get_json()
-    if not data:
+    json_data = request.get_json()
+    if not json_data:
         return jsonify({"error": "Invalid JSON data provided."}), 400
 
-    cart_id = data.get('cart_id')
-    payment_token = data.get('payment_token') # e.g., from Stripe.js
+    # Validate input using marshmallow schema
+    try:
+        schema = CheckoutSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed.", "errors": err.messages}), 400
 
-    # A cart ID is essential for any checkout process
-    if not cart_id:
-        return jsonify({"error": "Cart ID is missing."}), 400
+    cart_id = validated_data['cart_id']
+    payment_token = validated_data.get('payment_token') # e.g., from Stripe.js
 
     cart = get_cart_by_id_or_session(cart_id)
     if not cart or not cart.items:
@@ -79,14 +92,14 @@ def checkout():
         if current_user.is_authenticated:
             if hasattr(current_user, 'user_type') and current_user.user_type == UserType.B2B:
                 # B2B checkout process
-                payment_details = data.get('payment_details') # Could be PO number, etc.
+                payment_details = validated_data.get('payment_details') # Could be PO number, etc.
                 order = process_b2b_checkout(current_user, cart, payment_details)
             else:
                 # Regular B2C user checkout
                 order = process_user_checkout(current_user, cart, payment_token)
         else:
             # Guest checkout
-            guest_data = data.get('guest_info')
+            guest_data = validated_data.get('guest_info')
             if not guest_data or not guest_data.get('email'):
                 return jsonify({"error": "Guest information and email are required."}), 400
             order = process_guest_checkout(guest_data, cart, payment_token)
@@ -117,9 +130,20 @@ def get_user_addresses():
 def add_user_address():
     """Adds a new address for the currently authenticated user."""
     user_id = get_jwt_identity()
-    data = InputSanitizer.recursive_sanitize(request.get_json())
+    
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(error="Invalid JSON data provided."), 400
+    
+    # Validate input using marshmallow schema
     try:
-        address = CheckoutService.add_user_address(user_id, data)
+        schema = AddressSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(error="Validation failed.", errors=err.messages), 400
+    
+    try:
+        address = CheckoutService.add_user_address(user_id, validated_data)
         return jsonify(address=address.to_dict()), 201
     except (ValidationException, NotFoundException) as e:
         return jsonify(error=str(e)), 400
@@ -129,9 +153,20 @@ def add_user_address():
 def update_user_address(address_id):
     """Updates an existing address for the currently authenticated user."""
     user_id = get_jwt_identity()
-    data = InputSanitizer.recursive_sanitize(request.get_json())
+    
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(error="Invalid JSON data provided."), 400
+    
+    # Validate input using marshmallow schema
     try:
-        address = CheckoutService.update_user_address(user_id, address_id, data)
+        schema = AddressSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(error="Validation failed.", errors=err.messages), 400
+    
+    try:
+        address = CheckoutService.update_user_address(user_id, address_id, validated_data)
         return jsonify(address=address.to_dict())
     except NotFoundException as e:
         return jsonify(error=str(e)), 404

@@ -1,7 +1,8 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
+from marshmallow import ValidationError
 
 from backend.database import db
 from backend.models.user_models import User
@@ -12,7 +13,7 @@ from backend.services.address_service import AddressService
 from backend.services.email_service import EmailService
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.auth_helpers import send_password_change_email
-from backend.utils.decorators import b2b_user_required, admin_required
+from backend.utils.decorators import b2b_user_required, admin_required, api_resource_handler, roles_required
 from backend.services.product_service import ProductService # For product_service
 from backend.services.order_service import OrderService # For order_service
 from backend.admin_api.user_management_routes import admin_user_management_bp
@@ -20,6 +21,8 @@ from backend.products.routes import products_bp
 from backend.orders.routes import orders_bp
 from backend.services.user_service import UserService
 from backend.services.dashboard_service import DashboardService
+from backend.schemas import UpdateUserSchema, UpdatePasswordSchema, AddressSchema, LanguageUpdateSchema, TwoFactorSetupSchema, TwoFactorVerifySchema
+from backend.models.address_models import Address
 
 
 
@@ -80,6 +83,7 @@ def b2b_data():
 
 @account_bp.route('/admin-only-data')
 @admin_required
+@roles_required ('Admin', 'Manager')
 def admin_data():
     """
     Provides summary data intended for an admin user,
@@ -97,18 +101,14 @@ def admin_data():
 
 
 @account_bp.route('/api/account/language', methods=['PUT'])
+@api_resource_handler(User, schema=LanguageUpdateSchema(), check_ownership=True)
 @login_required
 def update_language():
     user_id = session.get('user_id') or session.get('b2b_user_id')
     user_type = session.get('user_type')
-    data = request.get_json()
-    language = data.get('language')
-
-    if not language:
-        return jsonify({"error": "Language is required"}), 400
 
     try:
-        user_service.update_user_language(user_id, language, user_type)
+        user_service.update_user_language(user_id, g.validated_data['language'], user_type)
         return jsonify({"message": "Language updated successfully"}), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -116,14 +116,24 @@ def update_language():
 @account_bp.route('/update', methods=['POST'])
 @login_required
 def update_account(): 
-    data = InputSanitizer.sanitize_json(request.get_json())
-    updated_user = user_service.update_user(current_user.id, data)
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided"}), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = UpdateUserSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed", "errors": err.messages}), 400
+    
+    updated_user = user_service.update_user(current_user.id, validated_data)
     return jsonify(updated_user.to_user_dict())
 
 
 # --- Misplaced Admin Route (should be in admin_api/user_management_routes.py) ---
 @admin_user_management_bp.route('/<int:user_id>', methods=['GET'])
-@admin_required
+@roles_required ('Admin', 'Manager')
 def get_user(user_id):
     user = user_service.get_user_by_id(user_id)
     if user:
@@ -152,6 +162,7 @@ def get_order_details(order_id): # This route uses Flask-Login's current_user
 # GET current user's profile
 @account_bp.route('/profile', methods=['GET'])
 @jwt_required()
+@login_required
 def get_profile():
     """
     Get the profile information for the currently authenticated user.
@@ -166,26 +177,18 @@ def get_profile():
     
 # UPDATE current user's profile
 @account_bp.route('/profile', methods=['PUT'])
+@api_resource_handler(User, schema=UpdateUserSchema(), check_ownership=True)
 @jwt_required()
+@login_required
 def update_profile():
     """
     Update the profile information for the currently authenticated user.
     """
     user_id = get_jwt_identity()
-    data = InputSanitizer.sanitize_json(request.get_json())
-    if not data:
-        return jsonify(status="error", message="Invalid or missing JSON body"), 400
     
-    sanitized_data = InputSanitizer.sanitize_json(data)
-
-    # For security, certain fields should not be updatable via this endpoint.
-    sanitized_data.pop('password', None)
-    sanitized_data.pop('email', None) # Email changes should have a separate, verified flow.
-    sanitized_data.pop('role', None) # Role should only be changed by an admin.
-    sanitized_data.pop('two_factor_enabled', None) # Use correct attribute name
-
     try:
-        updated_user = user_service.update_user(user_id, sanitized_data)
+        # g.validated_data contains the validated input from the schema
+        updated_user = user_service.update_user(user_id, g.validated_data)
         if not updated_user:
              return jsonify(status="error", message="User not found or update failed"), 404
         return jsonify(status="success", data=updated_user.to_dict()), 200
@@ -197,25 +200,21 @@ def update_profile():
 
 # UPDATE current user's password
 @account_bp.route('/password', methods=['PUT'])
+@api_resource_handler(User, schema=UpdatePasswordSchema(), check_ownership=True)
 @jwt_required()
+@login_required
 def update_password():
     """
     Update the password for the currently authenticated user.
     Requires the old password for verification.
     """
     user_id = get_jwt_identity()
-    data = request.get_json()
-    if not data or 'old_password' not in data or 'new_password' not in data:
-        return jsonify(status="error", message="Both old_password and new_password are required."), 400
-
-    old_password = data['old_password'] # Do not sanitize passwords
-    new_password = data['new_password']
 
     try:
         user = user_service.get_user_by_id(user_id)
-        if not user or not user.check_password(old_password):
+        if not user or not user.check_password(g.validated_data['old_password']):
             return jsonify({'error': 'Invalid old password'}), 400
-        user.set_password(new_password)
+        user.set_password(g.validated_data['new_password'])
         db.session.commit()
         send_password_change_email(user)
         return jsonify(status="success", message="Password updated successfully."), 200
@@ -229,6 +228,7 @@ def update_password():
 # GET current user's order history
 @account_bp.route('/orders', methods=['GET'])
 @jwt_required()
+@login_required
 def get_order_history():
     """
     Get the order history for the currently authenticated user.
@@ -255,6 +255,7 @@ def get_order_history():
 
 @account_bp.route('/2fa/setup', methods=['POST'])
 @jwt_required()
+@login_required
 def setup_2fa():
     """Initiates the 2FA setup process for the current user."""
     user_id = get_jwt_identity()
@@ -274,18 +275,18 @@ def setup_2fa():
 
 
 @account_bp.route('/2fa/verify', methods=['POST'])
+@api_resource_handler(User, schema=TwoFactorVerifySchema(), check_ownership=True)
 @jwt_required()
+@login_required
 def verify_2fa():
     """Verifies the token and enables 2FA for the user."""
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
-    data = request.get_json()
-    token = InputSanitizer.sanitize_string(data.get('token'))
     
     if not user.two_factor_secret: # Use correct attribute name
         return jsonify(status="error", message="No 2FA setup process was initiated."), 400
         
-    if mfa_service.verify_token(user.two_factor_secret, token): # Use correct attribute name
+    if mfa_service.verify_token(user.two_factor_secret, g.validated_data['totp_code']): # Use correct attribute name
         user.two_factor_enabled = True # Use correct attribute name
         db.session.commit()
         return jsonify(status="success", message="2FA enabled successfully."), 200
@@ -294,18 +295,18 @@ def verify_2fa():
 
 
 @account_bp.route('/2fa/disable', methods=['POST'])
+@api_resource_handler(User, schema=TwoFactorVerifySchema(), check_ownership=True)
 @jwt_required()
+@login_required
 def disable_2fa():
     """Disables 2FA for the user, requires a valid token to do so."""
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
-    data = request.get_json() # No need to sanitize the whole dict here
-    token = InputSanitizer.sanitize_string(data.get('token')) # Sanitize individual token
 
     if not user.two_factor_enabled: # Use correct attribute name
         return jsonify(status="error", message="2FA is not currently enabled."), 400
 
-    if mfa_service.verify_token(user.two_factor_secret, token): # Use correct attribute name
+    if mfa_service.verify_token(user.two_factor_secret, g.validated_data['totp_code']): # Use correct attribute name
         user.two_factor_enabled = False # Use correct attribute name
         user.two_factor_secret = None # Clear the secret
         db.session.commit()
@@ -318,32 +319,37 @@ def disable_2fa():
 
 @account_bp.route('/addresses', methods=['GET'])
 @jwt_required()
+@login_required
 def get_addresses():
     user_id = get_jwt_identity()
     addresses = Address.query.filter_by(user_id=user_id).all()
     return jsonify([address.to_dict() for address in addresses])
 
 @account_bp.route('/addresses', methods=['POST'])
+@api_resource_handler(Address, schema=AddressSchema())
 @jwt_required()
+@login_required
 def add_address():
     user_id = get_jwt_identity()
-    data = InputSanitizer.sanitize_json(request.get_json())
     try:
-        new_address = address_service.add_address_for_user(user_id, data)
+        new_address = address_service.add_address_for_user(user_id, g.validated_data)
         return jsonify(status="success", data=new_address.to_dict()), 201
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400 # Catches the 4-address limit error
 
 @account_bp.route('/addresses/<int:address_id>', methods=['PUT'])
+@api_resource_handler(Address, schema=AddressSchema(), check_ownership=True)
 @jwt_required()
+@login_required
 def update_address(address_id):
     user_id = get_jwt_identity()
-    data = InputSanitizer.sanitize_json(request.get_json())
-    updated_address = address_service.update_address(address_id, user_id, data)
+    updated_address = address_service.update_address(address_id, user_id, g.validated_data)
     return jsonify(status="success", data=updated_address.to_dict()), 200
 
 @account_bp.route('/addresses/<int:address_id>', methods=['DELETE'])
+@api_resource_handler(Address, check_ownership=True)
 @jwt_required()
+@login_required
 def delete_address(address_id):
     user_id = get_jwt_identity()
     address_service.delete_address(address_id, user_id)

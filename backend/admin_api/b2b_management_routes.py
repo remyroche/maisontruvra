@@ -1,10 +1,14 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_user
 from backend.services.b2b_service import B2BService
 from backend.services.exceptions import NotFoundException
 from backend.utils.decorators import staff_required, roles_required, permissions_required
-from backend.models.enums import B2BStatus
+from backend.models.enums import B2BStatus, B2BRequestStatus
+from backend.models.b2b_models import B2BPartnershipRequest
+from backend.models.user_models import User
 from decimal import Decimal
-
+from backend.utils.input_sanitizer import InputSanitizer
+from backend.services.audit_log_service import AuditLogService
+from backend.extensions import limiter
 
 b2b_management_bp = Blueprint('b2b_management_api', __name__, url_prefix='/admin/api/b2b')
 b2b_service = B2BService()
@@ -18,8 +22,7 @@ def get_b2b_accounts():
     accounts = b2b_service.get_all_b2b_accounts()
     return jsonify([acc.to_dict() for acc in accounts])
 
-@admin_b2b_management_bp.route('/b2b/applications', methods=['GET'])
-@b2b_management_bp.route('/', methods=['GET'])
+@b2b_management_bp.route('/b2b/applications', methods=['GET'])
 def get_b2b_applications():
     """
     Retrieves a paginated list of B2B applications.
@@ -27,9 +30,9 @@ def get_b2b_applications():
     """
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
-    status_filter = sanitize_input(request.args.get('status', 'PENDING', type=str))
+    status_filter = InputSanitizer.sanitize_input(request.args.get('status', 'pending', type=str))
 
-    applications_page = B2BApplication.query.filter_by(status=status_filter).paginate(
+    applications_page = B2BPartnershipRequest.query.filter_by(status=status_filter).paginate(
         page=page, per_page=per_page, error_out=False
     )
     
@@ -41,7 +44,7 @@ def get_b2b_applications():
         "pages": applications_page.pages
     })
 
-@admin_b2b_management_bp.route('/b2b/applications/<int:application_id>/approve', methods=['POST'])
+@b2b_management_bp.route('/b2b/applications/<int:application_id>/approve', methods=['POST'])
 @roles_required ('Admin', 'Manager', 'Support')
 @limiter.limit("10 per minute")
 def approve_b2b_application(application_id):
@@ -49,7 +52,7 @@ def approve_b2b_application(application_id):
     Approves a B2B application and converts the user to a B2B account.
     CR[U]D - Update
     """
-    application = B2BApplication.query.get_or_404(application_id)
+    application = B2BPartnershipRequest.query.get_or_404(application_id)
     
     # The service layer handles the logic of creating the B2B account, setting tiers, etc.
     b2b_user = B2BService.approve_b2b_application(application)
@@ -57,12 +60,12 @@ def approve_b2b_application(application_id):
     AuditLogService.log_action(
         user_id=current_user.id,
         action='approve_b2b_application',
-        details=f"Approved B2B application for '{b2b_user.email}' (ID: {application.user_id})."
+        details=f"Approved B2B application for '{application.contact_email}' (ID: {application.id})."
     )
     
-    return jsonify({"message": f"B2B application for {b2b_user.email} approved."})
+    return jsonify({"message": f"B2B application for {application.contact_email} approved."})
 
-@admin_b2b_management_bp.route('/b2b/applications/<int:application_id>/reject', methods=['POST'])
+@b2b_management_bp.route('/b2b/applications/<int:application_id>/reject', methods=['POST'])
 @roles_required ('Admin', 'Manager', 'Support')
 @limiter.limit("10 per minute")
 def reject_b2b_application(application_id):
@@ -70,20 +73,19 @@ def reject_b2b_application(application_id):
     Rejects a B2B application.
     CR[U]D - Update
     """
-    application = B2BApplication.query.get_or_404(application_id)
+    application = B2BPartnershipRequest.query.get_or_404(application_id)
     data = request.get_json()
-    rejection_reason = sanitize_input(data.get('reason', 'Application did not meet requirements.'))
+    rejection_reason = InputSanitizer.sanitize_input(data.get('reason', 'Application did not meet requirements.'))
 
     B2BService.reject_b2b_application(application, reason=rejection_reason)
     
-    user = User.query.get(application.user_id)
     AuditLogService.log_action(
         user_id=current_user.id,
         action='reject_b2b_application',
-        details=f"Rejected B2B application for '{user.email}' (ID: {application.user_id}). Reason: {rejection_reason}"
+        details=f"Rejected B2B application for '{application.contact_email}' (ID: {application.id}). Reason: {rejection_reason}"
     )
     
-    return jsonify({"message": f"B2B application for {user.email} rejected."})
+    return jsonify({"message": f"B2B application for {application.contact_email} rejected."})
 
 
 @b2b_management_bp.route('/<int:b2b_user_id>/status', methods=['PUT'])

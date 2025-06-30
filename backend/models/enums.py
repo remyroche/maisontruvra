@@ -23,6 +23,12 @@ class B2BRequestStatus(enum.Enum):
     APPROVED = 'approved'
     REJECTED = 'rejected'
 
+class B2BStatus(enum.Enum):
+    PENDING = 'pending'
+    APPROVED = 'approved'
+    REJECTED = 'rejected'
+    SUSPENDED = 'suspended'
+
     
 class B2BTier(enum.Enum):
     T1 = 'collaborateur'

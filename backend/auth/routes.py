@@ -12,6 +12,7 @@ from ..utils.rate_limiter import rate_limiter
 from ..services.exceptions import ValidationException, UnauthorizedException, NotFoundException
 from datetime import datetime, timezone
 from flask import current_app
+from backend.schemas import UserSchema, UserRegistrationSchema, LoginSchema, MfaVerificationSchema, PasswordResetRequestSchema, PasswordResetConfirmSchema
 
 import redis
 
@@ -58,12 +59,19 @@ def register():
 @rate_limiter(limit=10, per=60) # 10 requests per minute
 def login():
     """Authenticates a user, handling the first step of MFA if enabled."""
-    data = InputSanitizer.sanitize_input(request.get_json())
-    email = data.get('email')
-    password = data.get('password')
-
-    if not email or not password:
-        return jsonify(error="Email and password are required."), 400
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(error="Invalid JSON data provided."), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = LoginSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(error="Validation failed.", errors=err.messages), 400
+    
+    email = validated_data['email']
+    password = validated_data['password']
 
     try:
         result = AuthService.login_user(email, password)
@@ -86,12 +94,19 @@ def login():
 @rate_limiter(limit=5, per=60) # 5 requests per minute
 def verify_mfa():
     """Verifies the MFA token and returns JWTs upon success."""
-    data = InputSanitizer.sanitize_input(request.get_json())
-    user_id = data.get('user_id')
-    mfa_token = data.get('mfa_token')
-
-    if not user_id or not mfa_token:
-        return jsonify(error="user_id and mfa_token are required."), 400
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(error="Invalid JSON data provided."), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = MfaVerificationSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(error="Validation failed.", errors=err.messages), 400
+    
+    user_id = validated_data['user_id']
+    mfa_token = validated_data['mfa_token']
 
     try:
         if AuthService.verify_mfa_login(user_id, mfa_token):
@@ -155,9 +170,18 @@ def refresh():
 @rate_limiter(limit=3, per=300) # 3 requests per 5 minutes
 def request_password_reset():
     """Initiates the password reset process."""
-    data = InputSanitizer.sanitize_input(request.get_json())
-    email = data.get('email')
-    AuthService.send_password_reset_email(email)
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(error="Invalid JSON data provided."), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = PasswordResetRequestSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(error="Validation failed.", errors=err.messages), 400
+    
+    AuthService.send_password_reset_email(validated_data['email'])
     # Always return a generic success message to prevent email enumeration
     return jsonify(message="If an account with that email exists, a password reset link has been sent."), 200
 
@@ -165,13 +189,17 @@ def request_password_reset():
 @rate_limiter(limit=5, per=600) # 5 requests per 10 minutes
 def confirm_password_reset():
     """Resets the user's password using a valid token."""
-    data = InputSanitizer.sanitize_input(request.get_json())
-    token = data.get('token')
-    new_password = data.get('new_password')
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(error="Invalid JSON data provided."), 400
     
-    if not token or not new_password:
-        return jsonify(error="Token and new_password are required."), 400
-
-    if AuthService.reset_password_with_token(token, new_password):
+    # Validate input using marshmallow schema
+    try:
+        schema = PasswordResetConfirmSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(error="Validation failed.", errors=err.messages), 400
+    
+    if AuthService.reset_password_with_token(validated_data['token'], validated_data['new_password']):
         return jsonify(message="Password has been reset successfully."), 200
     return jsonify(error="Invalid or expired token."), 400

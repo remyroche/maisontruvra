@@ -15,6 +15,11 @@ from typing import List, Dict, Tuple, Optional, Set
 from dataclasses import dataclass, asdict
 import logging
 
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
@@ -117,10 +122,10 @@ def find_files(directory: str, extensions: List[str]) -> List[str]:
         for filename in filenames:
             if any(filename.endswith(ext) for ext in extensions):
                 matches.append(os.path.join(root, filename))
-    return matches
+        return matches
 
     # --- Running flake8 ---
-    print(f"\n{YELLOW}Running flake8...{RESET}")
+    print(f"\n{YELLOW}Running flake8...{NC}")
     try:
         flake8_process = subprocess.run(
             ['flake8', backend_path],
@@ -129,17 +134,16 @@ def find_files(directory: str, extensions: List[str]) -> List[str]:
             check=False # Do not throw exception on non-zero exit code
         )
         if flake8_process.stdout:
-            print(f"{RED}Flake8 found issues:{RESET}")
+            print(f"{RED}Flake8 found issues:{NC}")
             print(flake8_process.stdout)
         else:
-            print(f"{GREEN}flake8: No issues found.{RESET}")
+            print(f"{GREEN}flake8: No issues found.{NC}")
     except FileNotFoundError:
         print(f"{RED}Error: 'flake8' command not found. Please install it with 'pip install flake8'.{RESET}")
 
     
-
     # --- Running pylint ---
-    print(f"\n{YELLOW}Running pylint...{RESET}")
+    print(f"\n{YELLOW}Running pylint...{NC}")
     try:
         # Note: pylint can be noisy. It's best to configure it with a .pylintrc file.
         pylint_process = subprocess.run(
@@ -167,7 +171,7 @@ def find_files(directory: str, extensions: List[str]) -> List[str]:
 
 def audit_hardcoded_secrets():
     """Scans for potentially hardcoded secrets."""
-    print(f"\n{YELLOW}--- Auditing for hardcoded secrets (basic check) ---{RESET}")
+    print(f"\n{YELLOW}--- Auditing for hardcoded secrets (basic check) ---{NC}")
     # This is a very basic check. For real projects, use tools like git-secrets or trivy.
     backend_path = os.path.join(os.path.dirname(__file__), 'backend')
     found_secrets = False
@@ -184,10 +188,10 @@ def audit_hardcoded_secrets():
                                     print(f"Potential hardcoded secret in {filepath}:{i} -> {line.strip()}")
                                     found_secrets = True
                 except Exception as e:
-                    print(f"{RED}Error reading {filepath}: {e}{RESET}")
+                    print(f"{RED}Error reading {filepath}: {e}{NC}")
     
     if not found_secrets:
-        print(f"{GREEN}No obvious hardcoded secrets found.{RESET}")
+        print(f"{GREEN}No obvious hardcoded secrets found.{NC}")
 
 # --- Backend Best Practices Checks ---
 
@@ -1434,6 +1438,7 @@ def generate_html_report() -> str:
     </html>
     """
     return html
+
 
 def run_best_practices_audit(config: BestPracticesConfig):
     """Run the comprehensive best practices audit."""

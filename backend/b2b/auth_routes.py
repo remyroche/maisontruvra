@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from marshmallow import ValidationError
 from backend.utils.auth_helpers import b2b_required # Assumed to handle B2B auth
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.auth_service import AuthService # Corrected import
@@ -9,6 +10,7 @@ from backend.models.user_models import User
 from flask_login import current_user # Added: Import current_user
 from datetime import datetime # Added: Import datetime
 from flask import session # Added: Import session
+from backend.schemas import B2BRegistrationSchema, LoginSchema, PasswordResetRequestSchema, PasswordResetConfirmSchema
 # b2b_register function is defined in this file
 
 
@@ -17,25 +19,37 @@ b2b_auth_bp = Blueprint('b2b_auth_bp', __name__, url_prefix='/api/b2b/auth')
 @b2b_auth_bp.route('/forgot-password', methods=['POST'])
 def b2b_forgot_password():
     """Endpoint for B2B users to request a password reset email."""
-    data = request.get_json()
-    if not data or 'email' not in data:
-        return jsonify({"error": "Email is required"}), 400
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided"}), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = PasswordResetRequestSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed", "errors": err.messages}), 400
 
-    email = data.get('email')
-
-    AuthService.request_b2b_password_reset(data['email'])
+    AuthService.request_b2b_password_reset(validated_data['email'])
     # Always return a success message to prevent user enumeration
     return jsonify({"message": "If a B2B account with that email exists, a password reset link has been sent."}), 200
 
 @b2b_auth_bp.route('/reset-password', methods=['POST'])
 def b2b_reset_password():
     """Endpoint for B2B users to set a new password using a valid token."""
-    data = request.get_json()
-    token = data.get('token')
-    new_password = data.get('password')
-
-    if not token or not new_password:
-        return jsonify({"error": "Token and new password are required."}), 400
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided"}), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = PasswordResetConfirmSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed", "errors": err.messages}), 400
+    
+    token = validated_data['token']
+    new_password = validated_data['new_password']
 
     # Verify using the specific B2B salt
     user = AuthService.verify_password_reset_token(token, salt='b2b-password-reset-salt')
@@ -63,27 +77,23 @@ def b2b_register():
     """
     Submit a B2B account registration request for admin approval.
     """
-    data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid JSON"), 400
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(status="error", message="Invalid JSON data provided"), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = B2BRegistrationSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(status="error", message="Validation failed", errors=err.messages), 400
 
-    # Sanitize all incoming data
-    sanitized_data = {k: InputSanitizer.sanitize_input(v) for k, v in data.items()}
-
-    required_fields = [
-        'email', 'password', 'first_name', 'last_name', 
-        'company_name', 'vat_number', 'phone_number'
-    ]
-    if not all(field in sanitized_data for field in required_fields):
-        missing = [f for f in required_fields if f not in sanitized_data]
-        return jsonify(status="error", message=f"Missing required fields: {', '.join(missing)}"), 400
-
-    new_user = register_b2b_user(data)
+    new_user = register_b2b_user(validated_data)
     EmailService.send_b2b_account_pending_email(new_user) 
 
     try:
         # This service creates a B2B account with a 'pending' status
-        b2b_account = b2b_required.create_b2b_account_request(sanitized_data)
+        b2b_account = b2b_required.create_b2b_account_request(validated_data)
         return jsonify(
             status="success", 
             message="Your registration request has been submitted for approval.",
@@ -102,12 +112,19 @@ def b2b_login():
     Authenticate a B2B user and return JWT tokens.
     Ensures the user has the 'B2B' role and their account is 'approved'.
     """
-    data = request.get_json()
-    if not data or 'email' not in data or 'password' not in data:
-        return jsonify(status="error", message="Email and password are required."), 400
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(status="error", message="Invalid JSON data provided"), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = LoginSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(status="error", message="Validation failed", errors=err.messages), 400
 
-    email = InputSanitizer.sanitize_input(data.get('email'))
-    password = data.get('password') # Do not sanitize
+    email = validated_data['email']
+    password = validated_data['password']
 
     try:
         # This service method should verify credentials and B2B status

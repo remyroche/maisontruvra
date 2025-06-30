@@ -4,7 +4,7 @@ from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
-from flask import current_app, request  # Ensure request is imported
+from flask import current_app, request, g  # Ensure request is imported
 from flask_jwt_extended import get_jwt_identity
 from backend.models.b2b_models import B2BUser  # Add this import
 from backend.services.audit_log_service import AuditLogService
@@ -22,7 +22,7 @@ class UserService:
         # Recommendation Implemented: Log read-access to sensitive user data.
         if user:
             actor_id = g.user.id if g.user else 'system'
-            self.audit_log_service.log_admin_action(
+            UserService.audit_log_service.log_admin_action(
                 user_id=actor_id,
                 action=f"Viewed user profile",
                 target_id=user.id,
@@ -163,12 +163,12 @@ class UserService:
 
             # Log the update action
             actor_id = g.user.id if g.user else 'system'
-            self.audit_log_service.log_admin_action(
+            UserService.audit_log_service.log_admin_action(
                 user_id=actor_id,
                 action=f"Updated user profile",
                 target_id=user.id,
                 target_type="User",
-                details=data 
+                details=update_data 
             )
 
             MonitoringService.log_info(f"User created successfully: {user.email} (ID: {user.id})", "UserService")

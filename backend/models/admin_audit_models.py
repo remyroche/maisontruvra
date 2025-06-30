@@ -1,6 +1,8 @@
 from backend.database import db
 from backend.models.base import BaseModel
 from datetime import datetime, timezone
+import uuid
+from sqlalchemy.dialects.postgresql import UUID
 
 class AdminAuditLog(db.Model):
     __tablename__ = 'admin_audit_log'

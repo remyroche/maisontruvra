@@ -1,7 +1,7 @@
 # backend/Services/product_service.py
 from sqlalchemy import func
 from backend.database import db
-from backend.models.product_models import Product, ProductVariant
+from backend.models.product_models import Product, ProductVariant, Stock
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError, ProductNotFoundError, DuplicateProductError, InvalidAPIRequestError
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
@@ -12,13 +12,13 @@ from backend.models.user_models import User
 from backend.models.order_models import OrderItem
 from backend.models.b2b_loyalty_models import LoyaltyTier
 from sqlalchemy.orm import joinedload, selectinload
-from ..models import Product, Category, Collection, product_tags, db
+from ..models import Category, Collection, product_tags
 from backend.utils.input_sanitizer import sanitize_html
 
 
 class ProductService:
 
-        def get_all_products_paginated(self, page: int, per_page: int, user=None, filters: dict = None):
+    def get_all_products_paginated(self, page: int, per_page: int, user=None, filters: dict = None):
         """
         Gets a paginated list of all products, with comprehensive filtering and N+1 optimization.
 
@@ -28,7 +28,7 @@ class ProductService:
         """
         # Eagerly load related data to prevent N+1 queries
         query = Product.query.options(
-            selectinload(Product.variants).selectinload(ProductVariant.items),
+            selectinload(Product.variants).selectinload(ProductVariant.stock),
             joinedload(Product.category),
             selectinload(Product.tags)
         )
@@ -61,7 +61,7 @@ class ProductService:
             query = query.filter(Product.is_b2c_visible == True)
             products_with_restrictions = db.session.query(Product.id).join('restricted_to_tiers').distinct()
             query = query.filter(~Product.id.in_(products_with_restrictions))
-            
+        
         # --- Standard Filtering ---
         if filters:
             filters = InputSanitizer.sanitize_input(filters)
@@ -73,7 +73,7 @@ class ProductService:
                 query = query.filter(Product.category_id == filters['category_id'])
             
             if filters.get('collection_id'):
-                 query = query.filter(Product.collection_id == filters['collection_id'])
+                query = query.filter(Product.collection_id == filters['collection_id'])
 
             if filters.get('is_active') is not None:
                 query = query.filter(Product.is_active == filters['is_active'])
@@ -109,7 +109,7 @@ class ProductService:
         """
         # Eager load all relevant relationships
         product = Product.query.options(
-            selectinload(Product.variants).selectinload(ProductVariant.items),
+            selectinload(Product.variants).selectinload(ProductVariant.stock),
             joinedload(Product.category),
             selectinload(Product.reviews),
             selectinload(Product.tags),
@@ -137,8 +137,8 @@ class ProductService:
                 raise NotFoundException(f"Product with ID {product_id} not found")
                 
         # --- Serialization and Price Calculation ---
-        context = 'b2b' if is_b2b_user else 'public'
-        product_data = product.to_dict(context=context)
+        view = 'b2b' if is_b2b_user else 'public'
+        product_data = product.to_dict(view=view)
 
         # Calculate B2B-specific price if applicable
         if is_b2b_user:
@@ -268,35 +268,35 @@ class ProductService:
     def create_product(product_data: dict):
         """Create a new product with proper validation and logging."""
         # Check for duplicate product name before proceeding.
-        if Product.query.filter(Product.name.ilike(data['name'])).first():
-            raise DuplicateProductError(f"Product with name '{data['name']}' already exists.")
+        if Product.query.filter(Product.name.ilike(product_data['name'])).first():
+            raise DuplicateProductError(f"Product with name '{product_data['name']}' already exists.")
 
         # Sanitize user-provided string fields to prevent XSS.
-        sanitized_name = sanitize_html(data['name'])
-        sanitized_description = sanitize_html(data['description'])
+        sanitized_name = sanitize_html(product_data['name'])
+        sanitized_description = sanitize_html(product_data['description'])
 
         # Verify that the foreign key references are valid.
-        if not Category.query.get(data['category_id']):
-            raise InvalidAPIRequestError(f"Category with id {data['category_id']} not found.")
+        if not Category.query.get(product_data['category_id']):
+            raise InvalidAPIRequestError(f"Category with id {product_data['category_id']} not found.")
         
-        if data.get('collection_id') and not Collection.query.get(data['collection_id']):
-            raise InvalidAPIRequestError(f"Collection with id {data['collection_id']} not found.")
+        if product_data.get('collection_id') and not Collection.query.get(product_data['collection_id']):
+            raise InvalidAPIRequestError(f"Collection with id {product_data['collection_id']} not found.")
 
         # Create the main product record.
         new_product = Product(
             name=sanitized_name,
             description=sanitized_description,
-            price=data['price'],
-            category_id=data['category_id'],
-            collection_id=data.get('collection_id'),
-            is_active=data['is_active'],
-            is_featured=data['is_featured']
+            price=product_data['price'],
+            category_id=product_data['category_id'],
+            collection_id=product_data.get('collection_id'),
+            is_active=product_data['is_active'],
+            is_featured=product_data['is_featured']
         )
         db.session.add(new_product)
         db.session.flush()  # Flush to get the new_product.id for variant creation.
 
         # Create variants and their initial stock.
-        for variant_data in data['variants']:
+        for variant_data in product_data['variants']:
             if ProductVariant.query.filter_by(sku=variant_data['sku']).first():
                 db.session.rollback()  # Rollback the transaction to avoid partial creation.
                 raise DuplicateProductError(f"Variant with SKU '{variant_data['sku']}' already exists.")
@@ -390,7 +390,7 @@ class ProductService:
                 f"Product updated successfully: {product.name} (ID: {product.id})",
                 "ProductService"
             )
-            return product.to_dict(context='admin')
+            return product.to_dict(view='admin')
             
         except Exception as e:
             db.session.rollback()

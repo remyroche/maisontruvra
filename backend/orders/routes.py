@@ -1,33 +1,28 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from flask_login import current_user 
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from marshmallow import ValidationError
 from backend.services.order_service import OrderService
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.cart_service import CartService
-from backend.utils.decorators import login_required
+from backend.utils.decorators import login_required, api_resource_handler
 from backend.services.exceptions import ServiceError
 from backend.services.email_service import EmailService
-from backend.schemas import OrderSchema
+from backend.schemas import OrderSchema, GuestOrderSchema, AuthenticatedOrderSchema, CheckoutOrderSchema
+from backend.models.order_models import Order
 
 orders_bp = Blueprint('orders_bp', __name__, url_prefix='/api/orders')
 
 @orders_bp.route('/<int:order_id>', methods=['GET'])
+@api_resource_handler(Order, check_ownership=True)
 @login_required
 def get_order_details(order_id):
     """
     Get details for a specific order.
-    This endpoint is now protected against IDOR by filtering on the current_user's ID.
+    This endpoint is now protected against IDOR by the api_resource_handler decorator.
     """
-    # By filtering on both order_id and current_user.id, we ensure
-    # users can only see their own orders. An attacker cannot guess order IDs
-    # to view data belonging to other users.
-    order = Order.query.filter_by(id=order_id, user_id=current_user.id).first()
-    
-    if not order:
-        return jsonify({"error": "Order not found or you do not have permission to view it."}), 404
-        
-    # Assuming the Order model has a method to serialize its data
-    return jsonify(order.to_dict())
+    # The order is now available as g.order, already validated for ownership
+    return jsonify(g.order.to_dict())
 
 @orders_bp.route('/', methods=['GET'])
 @login_required
@@ -51,9 +46,19 @@ def create_guest_order():
     """
     Creates an order for a guest user.
     """
-    data = request.get_json()
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided"}), 400
+    
+    # Validate input using marshmallow schema
     try:
-        order = OrderService.create_guest_order(data)
+        schema = GuestOrderSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed", "errors": err.messages}), 400
+    
+    try:
+        order = OrderService.create_guest_order(validated_data)
         return jsonify(OrderSchema().dump(order)), 201
     except ServiceError as e:
         return jsonify({"error": e.message}), e.status_code
@@ -67,9 +72,19 @@ def create_authenticated_order():
     """
     Creates an order for an authenticated user.
     """
-    data = request.get_json()
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided"}), 400
+    
+    # Validate input using marshmallow schema
     try:
-        order = OrderService.create_authenticated_order(current_user.id, data)
+        schema = AuthenticatedOrderSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed", "errors": err.messages}), 400
+    
+    try:
+        order = OrderService.create_authenticated_order(current_user.id, validated_data)
         EmailService.send_order_confirmation_email(order)
         return jsonify(OrderSchema().dump(order)), 201
     except ServiceError as e:
@@ -88,16 +103,16 @@ def checkout():
     if not user_id and not session_id:
         return jsonify(status="error", message="A session is required to check out."), 401
 
-    data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid JSON body"), 400
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(status="error", message="Invalid JSON data provided"), 400
     
-    sanitized_data = InputSanitizer.sanitize_input(data)
-
-    required_fields = ['shipping_address', 'billing_address', 'payment_token']
-    if not all(field in sanitized_data for field in required_fields):
-        missing = [f for f in required_fields if f not in sanitized_data]
-        return jsonify(status="error", message=f"Missing required fields: {', '.join(missing)}"), 400
+    # Validate input using marshmallow schema
+    try:
+        schema = CheckoutOrderSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(status="error", message="Validation failed", errors=err.messages), 400
 
     try:
         # 1. Get the cart
@@ -119,7 +134,7 @@ def checkout():
         order = OrderService.create_order_from_cart(
             cart=cart,
             user_id=user_id,
-            checkout_data=sanitized_data
+            checkout_data=validated_data
         )
         
         return jsonify(status="success", message="Order placed successfully!", data=order.to_dict_for_user()), 201

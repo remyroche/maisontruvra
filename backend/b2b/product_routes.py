@@ -1,8 +1,10 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity
+from marshmallow import ValidationError
 from backend.services.product_service import ProductService
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import b2b_user_required
+from backend.schemas import ProductSearchSchema
 
 b2b_product_bp = Blueprint('b2b_product_bp', __name__, url_prefix='/api/b2b/products')
 

@@ -3,6 +3,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_login import login_user, logout_user, current_user, login_required
 from datetime import datetime
 import logging
+from marshmallow import ValidationError
 from backend.extensions import db
 from backend.services.mfa_service import MfaService
 from backend.services.user_service import UserService
@@ -11,6 +12,9 @@ from backend.services.exceptions import ServiceError
 from backend.utils.decorators import staff_required, roles_required, permissions_required
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.loggers import security_logger
+from backend.schemas import LoginSchema, PasswordResetRequestSchema, PasswordResetConfirmSchema
+from backend.services.audit_log_service import AuditLogService
+from backend.extensions import limiter
 
 admin_auth_bp = Blueprint('admin_auth_bp', __name__)
 user_service = UserService()
@@ -23,13 +27,20 @@ def forgot_password():
     """
     Endpoint for admins to request a password reset email.
     """
-    data = request.get_json()
-    if not data or 'email' not in data:
-        return jsonify({"error": "Email is required"}), 400
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided"}), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = PasswordResetRequestSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed", "errors": err.messages}), 400
     
     try:
         # This will only succeed and send an email if the user is a valid admin
-        AuthService.request_admin_password_reset(data['email'])
+        AuthService.request_admin_password_reset(validated_data['email'])
         # Always return a success message to prevent user enumeration.
         return jsonify({"message": "If an admin account with that email exists, a password reset link has been sent."}), 200
     except Exception as e:
@@ -179,7 +190,7 @@ def disable_mfa():
         return jsonify({"error": "Password is required to disable MFA."}), 400
 
     if AuthService.verify_password(current_user, password):
-        MFAService.disable_mfa(current_user)
+        MfaService.disable_mfa(current_user)
         AuditLogService.log_action(
             user_id=current_user.id,
             action='mfa_disabled',

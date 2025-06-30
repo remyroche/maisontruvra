@@ -13,9 +13,7 @@ from backend.database import db
 from redis import Redis
 from rq import Queue
 
-# Initialize the Redis queue
-redis_conn = Redis.from_url(current_app.config.get('REDIS_URL', 'redis://'))
-q = Queue(connection=redis_conn)
+# Redis queue will be initialized in the function to avoid context issues
 
 b2b_quick_order_bp = Blueprint('b2b_quick_order', __name__)
 
@@ -101,6 +99,8 @@ def create_b2b_quick_order():
         # --- Phase 3: Post-Order Tasks (optional, can be done by a worker) ---
         # Queue a background job to allocate specific serialized items
         # and generate the invoice.
+        redis_conn = Redis.from_url(current_app.config.get('REDIS_URL', 'redis://localhost:6379'))
+        queue = Queue(connection=redis_conn)
         queue.enqueue('worker.fulfill_order', order_id)
         
         return jsonify({

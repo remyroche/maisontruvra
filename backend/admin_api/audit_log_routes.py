@@ -1,8 +1,10 @@
 from flask import Blueprint, jsonify, request
 from backend.services.audit_log_service import AuditLogService
 from backend.utils.decorators import staff_required, roles_required, permissions_required
-
+from backend.utils.input_sanitizer import InputSanitizer
+from backend.models.admin_audit_models import AdminAuditLog
 audit_log_bp = Blueprint('admin_audit_log_routes', __name__, url_prefix='/api/admin/audit-log')
+from sqlalchemy.orm import joinedload
 
 @audit_log_bp.route('/', methods=['GET'])
 @roles_required ('Admin', 'Dev', 'Manager')
@@ -17,8 +19,8 @@ def get_audit_logs():
     per_page = request.args.get('per_page', 50, type=int)
 
     # Filtering parameters (all sanitized)
-    user_id_filter = sanitize_input(request.args.get('user_id', type=int))
-    action_filter = sanitize_input(request.args.get('action', type=str))
+    user_id_filter = InputSanitizer.sanitize_input(request.args.get('user_id', type=int))
+    action_filter = InputSanitizer.sanitize_input(request.args.get('action', type=str))
 
     # Build the query
     query = AdminAuditLog.query.options(joinedload(AdminAuditLog.user)).order_by(AdminAuditLog.timestamp.desc())

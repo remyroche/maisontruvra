@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from marshmallow import ValidationError
 from backend.services.product_service import ProductService
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.exceptions import NotFoundException, ValidationException
@@ -6,6 +7,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.extensions import cache
 import logging
 from backend.services.review_service import ReviewService
+from backend.schemas import ProductSearchSchema, ReviewSchema
 
 products_bp = Blueprint('products_bp', __name__, url_prefix='/api/products')
 logger = logging.getLogger(__name__)
@@ -46,10 +48,17 @@ def get_products():
     - q: Search query for product name or description.
     """
     try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 24, type=int)
-        category = InputSanitizer.InputSanitizer.sanitize_input(request.args.get('category'))
-        search_query = InputSanitizer.InputSanitizer.sanitize_input(request.args.get('q', ''))
+        # Validate query parameters using marshmallow schema
+        try:
+            schema = ProductSearchSchema()
+            validated_params = schema.load(request.args)
+        except ValidationError as err:
+            return jsonify(status="error", message="Invalid query parameters", errors=err.messages), 400
+
+        page = validated_params.get('page', 1)
+        per_page = validated_params.get('per_page', 24)
+        category = validated_params.get('category')
+        search_query = validated_params.get('q', '')
 
         filters = {'category': category, 'search': search_query}
         
@@ -116,17 +125,21 @@ def create_product_review(product_id):
     Submit a new review for a product. Requires authentication.
     """
     user_id = get_jwt_identity()
-    data = request.get_json()
-    if not data or 'rating' not in data or 'comment' not in data:
-        return jsonify(status="error", message="Rating and comment are required."), 400
+    
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify(status="error", message="Invalid JSON data provided."), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = ReviewSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify(status="error", message="Validation failed.", errors=err.messages), 400
 
     try:
-        sanitized_data = InputSanitizer.InputSanitizer.sanitize_input(data)
-        rating = int(sanitized_data['rating'])
-        comment = sanitized_data['comment']
-
         # The service layer should handle validation, e.g., if the user has purchased the product
-        new_review = ReviewService.create_review(user_id, product_id, rating, comment)
+        new_review = ReviewService.create_review(user_id, product_id, validated_data['rating'], validated_data.get('comment'))
         return jsonify(status="success", data=new_review.to_dict_for_public()), 201
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400 # Catches validation errors
