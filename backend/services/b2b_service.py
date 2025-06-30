@@ -39,35 +39,73 @@ class B2BService:
       
     # --- B2B Account Management ---
 
-      def get_b2b_user_dashboard(self, user_id):
+
+    def get_b2b_user_dashboard(self, user_id):
         """
-        Retrieves and aggregates dashboard data for a B2B user from various services.
+        Retrieves and aggregates comprehensive dashboard data for a B2B user.
         """
         b2b_user = B2BUser.query.filter_by(user_id=user_id).first()
         if not b2b_user:
             return None
 
-        # Get recent orders (e.g., last 5) from the OrderService.
+        # --- Basic Information ---
+        company = b2b_user.company
         recent_orders_paginated = self.order_service.get_user_orders(user_id, page=1, per_page=5)
         recent_orders = [order.to_dict() for order in recent_orders_paginated.items]
-
-        # Get recent invoices (e.g., last 5) from the InvoiceService.
         recent_invoices_paginated = self.invoice_service.get_user_invoices(user_id, page=1, per_page=5)
         recent_invoices = [invoice.to_dict() for invoice in recent_invoices_paginated.items]
 
-        # Get loyalty data from the LoyaltyService.
+        # --- Key Performance Indicators (KPIs) ---
+        total_spend = db.session.query(func.sum(Order.total_amount)).filter(Order.user_id == user_id).scalar() or 0
+        total_orders = db.session.query(func.count(Order.id)).filter(Order.user_id == user_id).scalar() or 0
+
+        # --- Loyalty and Referral Analytics ---
         loyalty_data = self.loyalty_service.get_user_loyalty_status(user_id)
+        points_from_purchases = db.session.query(func.sum(LoyaltyTransaction.points)).filter(
+            LoyaltyTransaction.user_id == user_id, 
+            LoyaltyTransaction.reason.ilike('%purchase%')
+        ).scalar() or 0
+        points_from_referrals = db.session.query(func.sum(LoyaltyTransaction.points)).filter(
+            LoyaltyTransaction.user_id == user_id,
+            LoyaltyTransaction.reason.ilike('%referral%')
+        ).scalar() or 0
+        successful_referrals = Referral.query.filter_by(referrer_id=user_id).count()
 
-        # Get company details from the relationship.
-        company = b2b_user.company
+        # --- Frequently Ordered Products ---
+        top_product_ids = db.session.query(
+            OrderItem.product_id, 
+            func.count(OrderItem.product_id).label('purchase_count')
+        ).join(Order).filter(Order.user_id == user_id).group_by(OrderItem.product_id).order_by(func.desc('purchase_count')).limit(5).all()
+        
+        frequently_ordered_products = []
+        if top_product_ids:
+            product_ids = [item[0] for item in top_product_ids]
+            top_products = Product.query.filter(Product.id.in_(product_ids)).all()
+            # Create a dictionary for quick lookups
+            product_map = {p.id: p for p in top_products}
+            for pid, count in top_product_ids:
+                if pid in product_map:
+                    product_data = product_map[pid].to_dict()
+                    product_data['purchase_count'] = count
+                    frequently_ordered_products.append(product_data)
 
-        # Assemble the dashboard data.
+        # --- Assemble the complete dashboard data ---
         dashboard_data = {
             "company_name": company.name,
             "recent_orders": recent_orders,
             "recent_invoices": recent_invoices,
-            "loyalty_points": loyalty_data.get('points', 0),
-            "tier": loyalty_data.get('tier', 'N/A')
+            "analytics": {
+                "total_spend": total_spend,
+                "total_orders": total_orders,
+                "frequently_ordered_products": frequently_ordered_products
+            },
+            "loyalty": {
+                "total_points": loyalty_data.get('points', 0),
+                "tier": loyalty_data.get('tier', 'N/A'),
+                "points_from_purchases": points_from_purchases,
+                "points_from_referrals": points_from_referrals,
+                "successful_referrals": successful_referrals
+            }
         }
         return dashboard_data
 
