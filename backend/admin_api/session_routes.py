@@ -6,53 +6,53 @@ from backend.utils.decorators import staff_required, roles_required, permissions
 
 session_routes = Blueprint('session_routes', __name__, url_prefix='/api/admin/sessions')
 
-@session_routes.route('/', methods=['GET'])
+@admin_session_routes_bp.route('/sessions', methods=['GET'])
 @roles_required ('Admin', 'Manager')
-def get_all_sessions():
+def list_active_sessions():
     """
-    Retrieves all user sessions.
-    ---
-    tags:
-      - Sessions
-    security:
-      - cookieAuth: []
-    responses:
-      200:
-        description: A list of all user sessions.
-      401:
-        description: Unauthorized.
+    Retrieves a paginated list of all active user sessions.
+    This endpoint is for administrators to monitor site-wide activity.
+    [R]ead in CRUD
     """
-    sessions = AuthService.get_all_user_sessions()
-    return jsonify(sessions), 200
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    
+    sessions_page = SessionService.get_all_active_sessions(page=page, per_page=per_page)
+    
+    # The response is formatted for compatibility with the frontend data table,
+    # including pagination details.
+    return jsonify({
+        "sessions": [session.to_dict() for session in sessions_page.items],
+        "total": sessions_page.total,
+        "page": sessions_page.page,
+        "pages": sessions_page.pages
+    })
 
-@session_routes.route('/<session_id>/terminate', methods=['POST'])
+@admin_session_routes_bp.route('/sessions/<string:session_id>', methods=['DELETE'])
 @roles_required ('Admin', 'Manager')
+@limiter.limit("30 per minute") # Rate limit to prevent abuse
 def terminate_session(session_id):
     """
-    Terminates a specific user session.
-    ---
-    tags:
-      - Sessions
-    parameters:
-      - in: path
-        name: session_id
-        required: true
-        schema:
-          type: string
-        description: The ID of the session to terminate.
-    security:
-      - cookieAuth: []
-    responses:
-      200:
-        description: Session terminated successfully.
-      401:
-        description: Unauthorized.
-      404:
-        description: Session not found.
+    Terminates a specific user session (forces logout).
+    This is a critical security feature for administrators.
+    CRU[D] - Delete
     """
-    if AuthService.terminate_user_session(session_id):
-        return jsonify({"message": "Session terminated successfully."}), 200
-    return jsonify({"error": "Session not found."}), 404
+    if not session_id:
+        return jsonify({"error": "Session ID is required."}), 400
+
+    was_terminated = SessionService.terminate_session(session_id, performing_user_id=current_user.id)
+    
+    if was_terminated:
+        # A critical security action like this must be logged.
+        AuditLogService.log_action(
+            user_id=current_user.id,
+            action='terminate_session',
+            details=f"Terminated session with ID: {session_id}."
+        )
+        return jsonify({"message": f"Session {session_id} has been terminated."}), 200
+    else:
+        return jsonify({"error": "Session not found or already inactive."}), 404
+
 
 @session_routes.route('/user/<user_id>/freeze', methods=['POST'])
 @roles_required ('Admin', 'Manager')
