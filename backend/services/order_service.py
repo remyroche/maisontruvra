@@ -55,14 +55,19 @@ class OrderService:
         return Order.query.options(
             joinedload(Order.user),
             joinedload(Order.items).joinedload(OrderItem.product)
-        ).filter_by(id=order_id, user_id=user_id).first()
+        ).filter(Order.id == order_id).first()
+
 
     @staticmethod
     def get_all_orders_for_user(user_id):
-        """Gets all orders for a specific user, optimized to prevent N+1."""
-        return Order.query.options(
+        query = Order.query.options(
+            # Eagerly load the user associated with each order
+            joinedload(Order.user),
+            # Eagerly load the order items, and for each item, load the associated product
             joinedload(Order.items).joinedload(OrderItem.product)
-        ).filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
+        ).order_by(Order.order_date.desc())
+        
+        return query.paginate(page=page, per_page=per_page, error_out=False)
 
     @staticmethod
     def create_order_from_cart(user_id, user_type, checkout_data):
