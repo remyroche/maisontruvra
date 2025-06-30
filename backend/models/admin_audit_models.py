@@ -29,6 +29,7 @@ class AdminAuditLog(db.Model):
         """Serializes the object to a dictionary."""
         return {
             'id': self.id,
+            "staff_log_id": self.staff_log_id,
             'timestamp': self.timestamp.isoformat(),
             'userEmail': self.user.email if self.user else 'Utilisateur inconnu',
             'action': self.action,
