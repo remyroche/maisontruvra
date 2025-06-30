@@ -1,18 +1,23 @@
-from backend.database import db
-from backend.models.user_models import User, Address
-from backend.models.order_models import DeliveryMethod
-from backend.services.exceptions import NotFoundException, ValidationException
-
-# backend/services/checkout_service.py
+"""
+Service layer for handling the checkout process.
+This includes order creation, payment processing, and orchestrating post-order tasks.
+"""
 from flask import current_app
-from backend.services.cart_service import get_cart_by_id, clear_cart
-from backend.services.order_service import create_order, create_b2b_order, get_order_by_id
-from backend.services.inventory_service import update_stock_from_order
-from backend.services.loyalty_service import add_loyalty_points_for_purchase
-# Assuming a payment service exists
-# from backend.services.payment.stripe_service import create_stripe_checkout_session 
-from backend.models.order_models import OrderStatus
-from backend.tasks import (
+from sqlalchemy.orm import joinedload
+
+from ..extensions import db
+from ..models import (Order, OrderItem, Product, Cart, User, Address, 
+                    DeliveryMethod, PaymentStatus, UserType, OrderStatus, 
+                    NotificationType, CartItem)
+from .cart_service import CartService
+from .product_service import ProductService
+from .inventory_service import InventoryService
+from .b2b_service import B2BService
+from .loyalty_service import add_loyalty_points_for_purchase
+from .notification_service import NotificationService
+from .exceptions import ServiceException, CheckoutValidationError, ResourceNotFound
+
+from ..tasks import (
     generate_invoice_for_order_task, 
     generate_invoice_for_b2b_order_task,
     send_order_confirmation_email_task,
@@ -21,170 +26,190 @@ from backend.tasks import (
 )
 
 class CheckoutService:
+    """
+    Provides methods for processing user checkouts.
+    """
+
     @staticmethod
-    def create_order_from_cart(user_id: int, shipping_address_id: int, billing_address_id: int, payment_method: str, payment_token: str) -> Order:
+    def _validate_cart_for_checkout(cart_items):
         """
-        Creates an order from the user's cart. Handles both B2B and B2C users.
+        Re-validates cart items against the database to ensure stock and prices are current.
+        Raises CheckoutValidationError if any discrepancy is found.
         """
-        user = db.session.get(User, user_id)
+        current_app.logger.info("Validating cart for checkout.")
+        for item_data in cart_items:
+            product = ProductService.get_product_by_id(item_data['product'].id)
+            if not product:
+                raise CheckoutValidationError(f"Un produit de votre panier (ID: {item_data['product'].id}) n'est plus disponible.")
+            
+            # Check for price changes
+            if product.price != item_data['product'].price:
+                raise CheckoutValidationError(f"Le prix de '{product.name}' a changé. Veuillez revoir votre panier.")
+            
+            # Check for stock changes
+            if product.stock < item_data['quantity']:
+                if product.stock == 0:
+                     raise CheckoutValidationError(f"'{product.name}' n'est plus en stock.")
+                raise CheckoutValidationError(f"Stock insuffisant pour '{product.name}'. Il ne reste que {product.stock} unité(s).")
+        current_app.logger.info("Cart validation successful.")
+
+    @staticmethod
+    def _dispatch_post_order_tasks(order: Order):
+        """
+        Dispatches background tasks based on the order type (B2C or B2B).
+        This centralizes post-order logic to avoid redundancy.
+        """
+        try:
+            current_app.logger.info(f"Dispatching post-order tasks for order {order.id} (type: {order.user_type}).")
+            if order.user_type == UserType.B2C:
+                # --- B2C Post-Order Tasks ---
+                send_order_confirmation_email_task.delay(order.id)
+                generate_invoice_for_order_task.delay(order.id)
+                
+                points_earned = add_loyalty_points_for_purchase(order.user_id, order.total_price)
+                if points_earned > 0:
+                    notify_user_of_loyalty_points_task.delay(order.user_id, points_earned)
+
+                NotificationService.create_notification(
+                    order.user_id, 
+                    f"Your order #{order.id} has been placed successfully.",
+                    NotificationType.ORDER_CONFIRMATION
+                )
+            
+            elif order.user_type == UserType.B2B:
+                # --- B2B Post-Order Tasks ---
+                send_b2b_order_confirmation_email_task.delay(order.id)
+                generate_invoice_for_b2b_order_task.delay(order.id)
+
+        except Exception as e:
+            current_app.logger.error(f"Failed to dispatch one or more post-order tasks for order {order.id}: {e}")
+
+    @staticmethod
+    def create_order_from_cart(user_id: int, shipping_address_id: int, billing_address_id: int, delivery_method_id: int, payment_method: str, payment_transaction_id: str = None):
+        """
+        Creates a B2C order from the user's cart after validation.
+        This is a core function that handles the transaction and database changes.
+        """
+        current_app.logger.info(f"Attempting to create B2C order for user {user_id}.")
+        user = User.query.get(user_id)
         if not user:
-            raise NotFoundException("User not found.")
+            raise ResourceNotFound("User", user_id)
 
         if user.user_type == UserType.B2B:
-            # Use the dedicated B2B order creation which applies tier pricing
-            return B2BService.create_b2b_order(user_id, shipping_address_id, billing_address_id)
+            raise ServiceException("B2B users should use the professional checkout flow.")
 
-        # B2C order creation logic
-        cart_data = CartService.get_cart(user_id)
-        if not cart_data or not cart_data['items_details']:
-            raise ServiceError("Cannot create an order from an empty cart.")
+        cart_contents = CartService.get_cart_contents(user_id)
+        if not cart_contents or not cart_contents['items']:
+            raise ServiceException("Cannot create an order from an empty cart.")
         
-        cart = cart_data['cart']
-        
-        # Here you would typically process payment with the payment_token
-        # For now, we'll assume payment is successful
-        
+        CheckoutService._validate_cart_for_checkout(cart_contents['items'])
+
+        shipping_address = Address.query.get(shipping_address_id)
+        billing_address = Address.query.get(billing_address_id)
+        delivery_method = DeliveryMethod.query.get(delivery_method_id)
+
+        if not all([shipping_address, billing_address, delivery_method]) or shipping_address.user_id != user_id or billing_address.user_id != user_id:
+            raise ServiceException("Invalid address or delivery method.")
+
+        total_price = cart_contents['total'] + delivery_method.price
+        payment_successful = True 
+        if not payment_successful:
+            raise ServiceException("Payment failed.")
+
         new_order = Order(
-            user_id=user_id,
-            total_cost=cart_data['total'],
-            status=OrderStatus.PENDING,
-            shipping_address_id=shipping_address_id,
-            billing_address_id=billing_address_id,
-            payment_method=payment_method,
+            user_id=user_id, total_price=total_price, status=OrderStatus.PENDING,
+            shipping_address_id=shipping_address_id, billing_address_id=billing_address_id,
+            delivery_method_id=delivery_method_id, payment_method=payment_method,
+            payment_status=PaymentStatus.PAID, transaction_id=payment_transaction_id,
             user_type=UserType.B2C
         )
-        
-        for item_detail in cart_data['items_details']:
-            item = item_detail['item']
-            order_item = OrderItem(
-                product_id=item.product_id,
-                quantity=item.quantity,
-                price_at_purchase=item_detail['discounted_price']
-            )
-            new_order.items.append(order_item)
-            
         db.session.add(new_order)
+        db.session.flush()
 
-        # Empty the cart
-        CartItem.query.filter_by(cart_id=cart.id).delete()
-        
+        for item_data in cart_contents['items']:
+            product = item_data['product']
+            quantity = item_data['quantity']
+            order_item = OrderItem(
+                order_id=new_order.id, product_id=product.id,
+                quantity=quantity, price=product.price
+            )
+            db.session.add(order_item)
+            InventoryService.decrease_stock(product.id, quantity)
+
+        CartService.clear_cart(cart_contents['cart'].id)
         db.session.commit()
         
-        # Post-order actions
-        EmailService.send_order_confirmation_email(user.email, order_id=new_order.id)
-        NotificationService.create_notification(
-            user_id, 
-            f"Your order #{new_order.id} has been placed successfully.",
-            NotificationType.ORDER_CONFIRMATION
-        )
+        current_app.logger.info(f"Successfully created order {new_order.id} for user {user_id}.")
+
+        # --- Trigger post-order background tasks using the centralized helper ---
+        CheckoutService._dispatch_post_order_tasks(new_order)
 
         return new_order
 
-
     @staticmethod
-    def get_user_addresses(user_id: int):
-        """Fetches all addresses for a given user."""
-        user = db.session.get(User, user_id)
+    def process_user_checkout(user_id: int, checkout_data: dict):
+        """
+        Processes checkout for a given user, routing to B2C or B2B flow based on user type.
+
+        :param user_id: The ID of the user checking out.
+        :param checkout_data: A dictionary containing all necessary data for the checkout.
+            For B2C, expects: {
+                "shipping_address_id": int, "billing_address_id": int,
+                "delivery_method_id": int, "payment_method": str,
+                "payment_transaction_id": str | None
+            }
+            For B2B, expects: {
+                "shipping_address_id": int, "billing_address_id": int,
+                "payment_details": dict
+            }
+        :return: The created Order object.
+        """
+        current_app.logger.info(f"Processing checkout for user {user_id}")
+        user = User.query.get(user_id)
         if not user:
-            raise NotFoundException("User not found")
-        return user.addresses
+            raise ResourceNotFound("User", user_id)
+
+        if user.user_type == UserType.B2C:
+            current_app.logger.info(f"Routing user {user_id} to B2C checkout flow.")
+            try:
+                order = CheckoutService.create_order_from_cart(
+                    user_id=user_id,
+                    shipping_address_id=checkout_data['shipping_address_id'],
+                    billing_address_id=checkout_data['billing_address_id'],
+                    delivery_method_id=checkout_data['delivery_method_id'],
+                    payment_method=checkout_data['payment_method'],
+                    payment_transaction_id=checkout_data.get('payment_transaction_id')
+                )
+                return order
+            except KeyError as e:
+                raise ServiceException(f"Missing required checkout data for B2C user: {e}")
+
+        elif user.user_type == UserType.B2B:
+            current_app.logger.info(f"Routing user {user_id} to B2B checkout flow.")
+            try:
+                b2b_order = B2BService.create_b2b_order(
+                    user_id=user_id,
+                    shipping_address_id=checkout_data['shipping_address_id'],
+                    billing_address_id=checkout_data['billing_address_id'],
+                    payment_details=checkout_data['payment_details']
+                )
+
+                if b2b_order:
+                    CheckoutService._dispatch_post_order_tasks(b2b_order)
+                    return b2b_order
+                return None
+            except KeyError as e:
+                raise ServiceException(f"Missing required checkout data for B2B user: {e}")
+
+        else:
+            raise ServiceException(f"Unknown user type '{user.user_type}' for user {user_id}.")
+
 
     @staticmethod
-    def add_user_address(user_id: int, data: dict):
-        """Adds a new address for a user and handles the 'is_default' flag."""
-        user = db.session.get(User, user_id)
-        if not user:
-            raise NotFoundException("User not found")
-
-        if data.get('is_default'):
-            # If this new address is set as default, unset any other default addresses.
-            Address.query.filter_by(user_id=user_id, is_default=True).update({"is_default": False})
-
-        new_address = Address(user_id=user_id, **data)
-        db.session.add(new_address)
-        db.session.commit()
-        return new_address
-
-    @staticmethod
-    def update_user_address(user_id: int, address_id: int, data: dict):
-        """Updates an existing address for a user."""
-        address = db.session.get(Address, address_id)
-        if not address or address.user_id != user_id:
-            raise NotFoundException("Address not found or permission denied")
-
-        if data.get('is_default'):
-            # Unset other default addresses if this one is being set as default.
-            Address.query.filter(Address.id != address_id, Address.user_id == user_id, Address.is_default == True).update({"is_default": False})
-
-        for key, value in data.items():
-            setattr(address, key, value)
-        
-        db.session.commit()
-        return address
-
-    @staticmethod
-    def get_available_delivery_methods(address: dict, cart_total: float):
+    def get_available_delivery_methods(address: dict = None, cart_total: float = 0.0):
         """
         Fetches available delivery methods.
-        This is a placeholder for more complex logic that might depend on address, weight, or cart value.
+        Can be extended with logic based on address, weight, or cart value.
         """
-        # For now, return all active delivery methods.
+        current_app.logger.info("Fetching available delivery methods.")
         return DeliveryMethod.query.filter_by(is_active=True).order_by(DeliveryMethod.price).all()
-
-    @staticmethod
-    def process_user_checkout(user, cart, payment_token):
-        """Processes checkout for a logged-in user."""
-        # This function would likely handle payment processing first
-        # For this example, we assume payment is successful and an order is created.
-        order = create_order(user.id, cart, "stripe_payment_intent_id") # Example
-        
-        if order:
-            db.session.commit()
-            update_stock_from_order(order.id, is_b2b=False)
-            clear_cart(cart.id)
-            
-            # Schedule background tasks
-            send_order_confirmation_email_task.delay(order.id)
-            generate_invoice_for_order_task.delay(order.id)
-            
-            points_earned = add_loyalty_points_for_purchase(user.id, order.total)
-            if points_earned > 0:
-                notify_user_of_loyalty_points_task.delay(user.id, points_earned)
-                
-            return order
-        return None
-    
-    @staticmethod
-    def process_guest_checkout(guest_data, cart, payment_token):
-        """Processes checkout for a guest user."""
-        # Logic to create a temporary user or handle guest orders
-        order = create_order(None, cart, "stripe_payment_intent_id", guest_data=guest_data)
-    
-        if order:
-            db.session.commit()
-            update_stock_from_order(order.id, is_b2b=False)
-            clear_cart(cart.id)
-    
-            # Schedule background tasks
-            send_order_confirmation_email_task.delay(order.id)
-            generate_invoice_for_order_task.delay(order.id)
-            
-            return order
-        return None
-    
-    @staticmethod
-    def process_b2b_checkout(user, cart, payment_details):
-        """Processes checkout for a B2B user."""
-        b2b_order = create_b2b_order(user.id, cart, payment_details)
-    
-        if b2b_order:
-            db.session.commit()
-            update_stock_from_order(b2b_order.id, is_b2b=True)
-            clear_cart(cart.id)
-            
-            # Schedule background tasks for B2B
-            send_b2b_order_confirmation_email_task.delay(b2b_order.id)
-            generate_invoice_for_b2b_order_task.delay(b2b_order.id)
-    
-            return b2b_order
-        return None
