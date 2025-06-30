@@ -1,47 +1,102 @@
-// website/src/stores/cart.js
-// Description: This store is simplified to use the new API service methods.
-
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import api from '@/services/api'; // Use the new centralized API service
+import api from '@/services/api';
+import { useNotificationStore } from '@/stores/notification';
 
-export const useCartStore = defineStore('cart', () => {
-  const items = ref([]);
-  const cartId = ref(null);
+export const useCartStore = defineStore('cart', {
+  state: () => ({
+    items: [],
+    loading: false,
+    error: null,
+  }),
+  
+  // Recommendation Implemented: Added getters for derived state.
+  // This centralizes the logic for calculating cart properties like item count
+  // and the total price, ensuring it's consistent wherever it's used in the app.
+  getters: {
+    /**
+     * Calculates the total number of items in the cart.
+     * @returns {number} The total item count.
+     */
+    itemCount: (state) => {
+      return state.items.reduce((total, item) => total + item.quantity, 0);
+    },
 
-  async function fetchCart() {
-    try {
-      const response = await api.getCart();
-      items.value = response.data.items;
-      cartId.value = response.data.id;
-    } catch (error) {
-      console.error('Failed to fetch cart:', error);
-      // No user notification needed here, the interceptor does it.
+    /**
+     * Calculates the total price of all items in the cart.
+     * @returns {number} The total price of the cart.
+     */
+    totalPrice: (state) => {
+      return state.items.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+    },
+  },
+
+  actions: {
+    async fetchCart() {
+      this.loading = true;
+      try {
+        const response = await api.get('/cart');
+        this.items = response.data.items;
+      } catch (error) {
+        this.error = 'Failed to fetch cart.';
+        const notificationStore = useNotificationStore();
+        notificationStore.addNotification('Error fetching cart', 'error');
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async addToCart(productId, quantity) {
+      this.loading = true;
+      const notificationStore = useNotificationStore();
+      try {
+        await api.post('/cart/add', { product_id: productId, quantity });
+        await this.fetchCart(); // Refresh cart state
+        notificationStore.addNotification('Item added to cart', 'success');
+      } catch (error) {
+        this.error = 'Failed to add item to cart.';
+        notificationStore.addNotification('Could not add item to cart', 'error');
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async removeFromCart(itemId) {
+        this.loading = true;
+        const notificationStore = useNotificationStore();
+        try {
+            await api.post('/cart/remove', { item_id: itemId });
+            await this.fetchCart(); // Refresh cart state
+            notificationStore.addNotification('Item removed from cart', 'success');
+        } catch (error) {
+            this.error = 'Failed to remove item from cart.';
+            notificationStore.addNotification('Could not remove item from cart', 'error');
+        } finally {
+            this.loading = false;
+        }
+    },
+
+    async updateQuantity(itemId, quantity) {
+        if (quantity <= 0) {
+            await this.removeFromCart(itemId);
+            return;
+        }
+        this.loading = true;
+        const notificationStore = useNotificationStore();
+        try {
+            await api.post('/cart/update', { item_id: itemId, quantity });
+            await this.fetchCart(); // Refresh cart state
+            notificationStore.addNotification('Cart updated', 'success');
+        } catch (error) {
+            this.error = 'Failed to update cart quantity.';
+            notificationStore.addNotification('Could not update cart', 'error');
+        } finally {
+            this.loading = false;
+        }
+    },
+
+    clearCart() {
+      this.items = [];
+      // Optionally, could also call an API endpoint to clear the cart on the server
     }
-  }
-
-  // The addItem action now calls the dedicated API method.
-  async function addItem(productId, quantity = 1) {
-    try {
-      const response = await api.addToCart(productId, quantity);
-      // On success, update the cart state from the response
-      items.value = response.data.items;
-    } catch (error) {
-      // The error is already handled and shown to the user by the api.js interceptor.
-      console.error('Failed to add item to cart:', error);
-    }
-  }
-
-  // ... other actions (removeItem, updateQuantity) would be simplified similarly ...
-  async function removeItem(itemId) {
-    try {
-        const response = await api.removeFromCart(itemId);
-        items.value = response.data.items;
-    } catch(error) {
-        console.error('Failed to remove item from cart:', error);
-    }
-  }
-
-
-  return { items, addItem, fetchCart, removeItem };
+  },
 });
