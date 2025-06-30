@@ -1,11 +1,14 @@
 from decimal import Decimal
 from sqlalchemy.orm import joinedload
 
-from ..models import db, User, Product, Order, OrderItem, Cart, Tier
+from ..models import db, User, Product, Order, OrderItem, Cart, Tier, Discount
 from ..models.enums import UserType
 from ..services.exceptions import NotFoundException, ServiceError
 from ..services.monitoring_service import MonitoringService
 from ..extensions import redis_client
+from datetime import datetime
+from ..services.exceptions import DiscountInvalidException
+
 
 CACHE_TTL_SECONDS = 600
 
@@ -27,6 +30,77 @@ class DiscountService:
         db.session.commit()
         return new_tier
 
+    
+    @staticmethod
+    def apply_discount_code(self, cart, code):
+        """
+        Applies a discount code to a cart.
+        Validates the discount against the database and calculates the new total.
+        """
+        # Find the discount by its code, ensuring it is active.
+        discount = Discount.query.filter_by(code=code, is_active=True).first()
+
+        if not discount:
+            raise DiscountInvalidException("Discount code not found or is not active.")
+
+        # Check if the discount has expired.
+        if discount.expiry_date and discount.expiry_date < datetime.utcnow():
+            raise DiscountInvalidException("Discount code has expired.")
+
+        # Check if the discount has reached its usage limit.
+        if discount.usage_limit is not None and discount.times_used >= discount.usage_limit:
+            raise DiscountInvalidException("Discount code has reached its usage limit.")
+
+        # TODO: Add logic to check for user-specific or product-specific discounts if needed.
+
+        # Calculate the actual discount amount based on its type.
+        discount_amount = 0
+        if discount.discount_type == 'percentage':
+            discount_amount = (cart.total_cost * discount.value) / 100
+        elif discount.discount_type == 'fixed_amount':
+            discount_amount = discount.value
+        
+        # Ensure the discount doesn't make the cart total negative.
+        discount_amount = min(discount_amount, cart.total_cost)
+
+        # Apply the discount to the cart.
+        cart.discount_amount = discount_amount
+        cart.total_cost -= discount_amount
+        cart.applied_discount_code = code
+
+        # Increment the usage count for the discount.
+        discount.times_used += 1
+        
+        db.session.commit()
+
+        return {
+            "success": True, 
+            "message": "Discount applied successfully.",
+            "new_total": cart.total_cost,
+            "discount_amount": cart.discount_amount
+        }
+
+    @staticmethod
+    def remove_discount_from_cart(self, cart):
+        """Removes a discount from the cart and reverts the total cost."""
+        if not cart.applied_discount_code:
+            return {"success": False, "message": "No discount to remove."}
+
+        discount = Discount.query.filter_by(code=cart.applied_discount_code).first()
+
+        # If the discount exists, revert the cost and decrement its usage count.
+        if discount:
+            cart.total_cost += cart.discount_amount
+            if discount.times_used > 0:
+                 discount.times_used -= 1
+        
+        cart.discount_amount = 0.0
+        cart.applied_discount_code = None
+        
+        db.session.commit()
+        return {"success": True, "message": "Discount removed."}
+
+    
     @staticmethod
     def get_tier(tier_id: int) -> Tier:
         return db.session.query(Tier).get(tier_id)
