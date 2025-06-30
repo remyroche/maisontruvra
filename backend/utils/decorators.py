@@ -155,20 +155,6 @@ def api_resource_handler(model, schema=None, role_required=None, action_log=None
             # Execute the actual route function
             response = f(*args, **kwargs)
 
-            # 4. Activity Logging (if action_log is provided and user is authenticated)
-            if action_log and (200 <= response.status_code < 300) and user:
-                log_message = action_log
-                # Allow for dynamic log messages
-                if callable(action_log):
-                    log_message = action_log(target_object)
-
-                audit_log_service.log_activity(
-                    user_id=user.id,
-                    action=log_message,
-                    target_id=target_object.id if target_object else None,
-                    target_type=model.__name__ if target_object else None
-                )
-
             return response
         return decorated_function
     return decorator
