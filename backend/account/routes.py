@@ -12,14 +12,15 @@ from backend.services.address_service import AddressService
 from backend.services.email_service import EmailService
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.auth_helpers import send_password_change_email
-from backend.utils.decorators import admin_required # For admin_required decorator
+from backend.utils.decorators import b2b_user_required, admin_required
 from backend.services.product_service import ProductService # For product_service
 from backend.services.order_service import OrderService # For order_service
 from backend.admin_api.user_management_routes import admin_user_management_bp
 from backend.products.routes import products_bp
 from backend.orders.routes import orders_bp
 from backend.services.user_service import UserService
-from ..services.dashboard_service import DashboardService
+from backend.services.dashboard_service import DashboardService
+
 
 
 account_bp = Blueprint('account_bp', __name__)
@@ -38,16 +39,25 @@ order_service = OrderService() # Instantiation
 def get_account_details():
     return jsonify(current_user.to_user_dict())
 
-@account_bp.route('/dashboard', methods=['GET'])
-@jwt_required()
+@account_bp.route('/dashboard-data')
+@login_required
 def get_dashboard_data():
-    """Aggregates and returns all data needed for the user dashboard."""
-    user_id = get_jwt_identity()
-    # You would need a way to determine user_type (b2c/b2b) from the JWT or user model
-    user_type = 'b2c' # Placeholder
-    dashboard_data = DashboardService.get_dashboard_data(user_id, user_type)
-    return jsonify(dashboard_data)
-    
+    if current_user.is_b2b:
+        return jsonify(dashboard_service.get_b2b_dashboard_data(current_user.id))
+    return jsonify(dashboard_service.get_b2c_dashboard_data(current_user.id))
+
+@account_bp.route('/b2b-specific-data')
+@b2b_user_required
+def b2b_data():
+    # some b2b specific logic
+    return jsonify({"message": "B2B specific data"})
+
+@account_bp.route('/admin-only-data')
+@admin_required
+def admin_data():
+    # some admin specific logic
+    return jsonify({"message": "Admin only data"})
+
 @account_bp.route('/api/account/language', methods=['PUT'])
 @login_required
 def update_language():
