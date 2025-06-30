@@ -10,8 +10,9 @@ export const useCartStore = defineStore('cart', {
   }),
   
   // Recommendation Implemented: Added getters for derived state.
-  // This centralizes the logic for calculating cart properties like item count
-  // and the total price, ensuring it's consistent wherever it's used in the app.
+  // This centralizes the logic for calculating cart properties. Now, any
+  // component can get the cart total or item count without duplicating the
+  // calculation logic, leading to cleaner and more maintainable code.
   getters: {
     /**
      * Calculates the total number of items in the cart.
