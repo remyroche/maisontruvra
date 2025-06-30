@@ -1,45 +1,61 @@
-# Run backend_code_scanner.py, best_practices_audit.py and security_audit.py
-
 #!/bin/bash
 
-# Script pour exécuter tous les audits de qualité et de sécurité du backend.
+# This script runs a series of audits on the Maison Truvra codebase.
+# It checks for best practices, security vulnerabilities, and code quality.
 
-# --- Fonction pour afficher les en-têtes de section en couleur ---
-print_header() {
-    echo ""
-    echo "========================================================================"
-    echo "  $1"
-    echo "========================================================================"
-    echo ""
-}
+# Define colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
 
-# --- Début du processus d'audit ---
-echo "Lancement des audits automatisés du code backend..."
+echo -e "${YELLOW}==========================================${NC}"
+echo -e "${YELLOW}  Starting Maison Truvra Code Audits        ${NC}"
+echo -e "${YELLOW}==========================================${NC}"
 
-# --- Audit 1: Scanner de code (Syntaxe et Importations Circulaires) ---
-print_header "ANALYSE 1: Vérification de la syntaxe et des importations circulaires"
-if [ -f "backend_code_scanner.py" ]; then
-    python3 backend_code_scanner.py
+# --- 1. Best Practices & Static Analysis Audit (Backend) ---
+echo -e "\n${GREEN}--- Running Backend Best Practices Audit ---${NC}"
+python3 best_practices_audit.py
+echo -e "${GREEN}--- Backend Best Practices Audit Complete ---\n${NC}"
+
+# --- 2. Security Focused Audit (Backend) ---
+echo -e "${GREEN}--- Running Backend Security Audit ---${NC}"
+python3 security_audit.py
+echo -e "${GREEN}--- Backend Security Audit Complete ---\n${NC}"
+
+
+# --- 3. Dependency & Component Security ---
+echo -e "${GREEN}--- Running Dependency & Component Security Audit ---${NC}"
+
+# 3a. Backend Python Dependencies
+echo -e "\n${YELLOW}Scanning Python dependencies for vulnerabilities...${NC}"
+# First, ensure safety is installed
+if ! python3 -m pip show safety &> /dev/null; then
+    echo "Installing safety..."
+    python3 -m pip install safety
+fi
+# Run the check against the requirements file
+python3 -m safety check -r backend/requirements.txt
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}No known security vulnerabilities found in Python packages.${NC}"
 else
-    echo "[ERREUR] Le script backend_code_scanner.py n'a pas été trouvé."
+    echo -e "${RED}Vulnerabilities found in Python packages. Please review the output above.${NC}"
 fi
 
-# --- Audit 2: Audit des meilleures pratiques ---
-print_header "ANALYSE 2: Audit des meilleures pratiques de codage"
-if [ -f "best_practices_audit.py" ]; then
-    python3 best_practices_audit.py
+# 3b. Frontend Node.js Dependencies
+echo -e "\n${YELLOW}Scanning Node.js dependencies for vulnerabilities...${NC}"
+# Navigate to the website directory to run npm audit
+(cd website && npm audit)
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}No known security vulnerabilities found in Node.js packages.${NC}"
 else
-    echo "[ERREUR] Le script best_practices_audit.py n'a pas été trouvé."
+    echo -e "${RED}Vulnerabilities found in Node.js packages. Please review the output above.${NC}"
 fi
 
-# --- Audit 3: Audit de sécurité ---
-print_header "ANALYSE 3: Audit de sécurité du code"
-if [ -f "security_audit.py" ]; then
-    python3 security_audit.py
-else
-    echo "[ERREUR] Le script security_audit.py n'a pas été trouvé."
-fi
+echo -e "${GREEN}--- Dependency & Component Security Audit Complete ---\n${NC}"
 
-# --- Fin ---
-print_header "Toutes les analyses sont terminées."
+
+echo -e "${YELLOW}==========================================${NC}"
+echo -e "${YELLOW}  All Audits Complete                     ${NC}"
+echo -e "${YELLOW}==========================================${NC}"
 
