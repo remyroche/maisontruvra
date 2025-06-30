@@ -5,6 +5,32 @@ from backend.utils.decorators import staff_required, roles_required, permissions
 
 order_routes = Blueprint('admin_order_routes', __name__, url_prefix='/api/admin/orders')
 
+@admin_order_routes_bp.route('/orders', methods=['GET'])
+@permissions_required('MANAGE_ORDERS')
+@roles_required ('Admin', 'Manager', 'Support')
+def list_all_orders():
+    """
+    Retrieves a paginated list of all customer orders.
+    C[R]UD - Read (List)
+    """
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    status_filter = sanitize_input(request.args.get('status'))
+
+    query = Order.query.options(joinedload(Order.user)).order_by(Order.created_at.desc())
+    
+    if status_filter:
+        query = query.filter(Order.status == status_filter)
+
+    orders_page = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    return jsonify({
+        "orders": [order.to_admin_dict() for order in orders_page.items],
+        "total": orders_page.total,
+        "page": orders_page.page,
+        "pages": orders_page.pages
+    })
+    
 @order_routes.route('/<int:order_id>', methods=['GET'])
 @permissions_required('MANAGE_ORDERS')
 @roles_required ('Admin', 'Manager', 'Support')
