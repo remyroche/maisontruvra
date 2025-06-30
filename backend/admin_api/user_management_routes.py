@@ -17,6 +17,7 @@ user_management_bp = Blueprint('user_management', __name__)
 @user_management_bp.route('/users', methods=['GET'])
 @roles_required ('Admin', 'Manager')
 @sanitize_request_data
+@limiter.limit("30 per minute")
 def get_users():
     """Get paginated list of users with proper N+1 optimization."""
     try:
@@ -57,6 +58,17 @@ def get_users():
         logger.error(f"Error fetching users: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
+@admin_user_management_bp.route('/users/<int:user_id>', methods=['GET'])
+@roles_required ('Admin', 'Manager')
+def get_user_details(user_id):
+    """
+    Retrieves detailed information for a single user.
+    C[R]UD - Read
+    """
+    user = User.query.get_or_404(user_id)
+    return jsonify(user.to_admin_dict()) # Use a detailed serializer for admin views
+
+
 @user_management_bp.route('/<int:user_id>/assign-tier', methods=['POST'])
 @roles_required ('Admin', 'Manager')
 @sanitize_request_data
@@ -79,6 +91,7 @@ def assign_tier_to_user(user_id):
 @user_management_bp.route('/<int:user_id>/custom-discount', methods=['POST'])
 @roles_required ('Admin', 'Manager')
 @sanitize_request_data
+@limiter.limit("10 per minute")
 def set_custom_discount(user_id):
     """
     Sets a custom discount percentage and monthly spend limit for any user.
@@ -106,6 +119,7 @@ def set_custom_discount(user_id):
 @user_management_bp.route('/users', methods=['POST'])
 @roles_required ('Admin', 'Manager')
 @sanitize_request_data
+@limiter.limit("20 per minute")
 def create_user():
     """Create a new user with full audit logging."""
     try:
@@ -144,6 +158,7 @@ def create_user():
 @user_management_bp.route('/users/<int:user_id>', methods=['PUT'])
 @roles_required ('Admin', 'Manager', 'Support')
 @sanitize_request_data
+@limiter.limit("20 per minute")
 def update_user(user_id):
     """Update user with full audit logging."""
     try:
@@ -207,3 +222,46 @@ def restore_user(user_id):
     if UserService.restore_user(user_id):
         return jsonify({"message": "User restored successfully"})
     return jsonify({"error": "User not found"}), 404
+
+@admin_user_management_bp.route('/users/<int:user_id>/roles', methods=['POST'])
+@roles_required('Admin', 'Manager')
+@limiter.limit("30 per minute")
+def assign_role_to_user(user_id):
+    """
+    Assigns a role to a user. RBAC implementation.
+    """
+    data = request.get_json()
+    role_name = sanitize_input(data.get('role_name'))
+    
+    if not role_name:
+        return jsonify({"error": "Role name is required."}), 400
+
+    user = User.query.get_or_404(user_id)
+    RBACService.assign_role_to_user(user, role_name)
+    
+    AuditLogService.log_action(
+        user_id=current_user.id,
+        action='assign_role',
+        details=f"Assigned role '{role_name}' to user '{user.email}' (ID: {user_id})."
+    )
+    
+    return jsonify({"message": f"Role '{role_name}' assigned to user {user.email}."})
+
+@admin_user_management_bp.route('/users/<int:user_id>/roles/<string:role_name>', methods=['DELETE'])
+@roles_required('Admin', 'Manager')
+def remove_role_from_user(user_id, role_name):
+    """
+    Removes a role from a user. RBAC implementation.
+    """
+    user = User.query.get_or_404(user_id)
+    sanitized_role_name = sanitize_input(role_name)
+    
+    RBACService.remove_role_from_user(user, sanitized_role_name)
+
+    AuditLogService.log_action(
+        user_id=current_user.id,
+        action='remove_role',
+        details=f"Removed role '{sanitized_role_name}' from user '{user.email}' (ID: {user_id})."
+    )
+    
+    return jsonify({"message": f"Role '{sanitized_role_name}' removed from user {user.email}."})
