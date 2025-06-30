@@ -8,7 +8,7 @@
           </router-link>
           <div class="hidden md:block">
             <div class="ml-10 flex items-baseline space-x-4">
-              <!-- Navigation Links -->
+              <!-- Navigation Links from your script -->
               <router-link v-for="item in navigation" :key="item.name" :to="item.href"
                 class="text-gray-500 hover:text-primary px-3 py-2 rounded-md text-sm font-medium"
                 active-class="text-primary">{{ $t(item.name) }}</router-link>
@@ -18,14 +18,14 @@
         <div class="hidden md:block">
           <div class="ml-4 flex items-center md:ml-6">
             
-            <!-- Language Switcher -->
+            <!-- Language Switcher from your script -->
             <div class="relative">
               <button @click="toggleLanguage" class="p-1 rounded-full text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
                 <span class="text-sm font-medium">{{ currentLanguage.toUpperCase() }}</span>
               </button>
             </div>
 
-            <!-- Search Button -->
+            <!-- Search Button from your script -->
             <button @click="openSearch" class="p-1 rounded-full text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ml-4">
               <span class="sr-only">Search</span>
               <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -33,7 +33,7 @@
               </svg>
             </button>
 
-            <!-- Profile/Account -->
+            <!-- Profile/Account from your script -->
             <router-link to="/account" class="p-1 rounded-full text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ml-4">
               <span class="sr-only">View account</span>
               <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -41,12 +41,12 @@
               </svg>
             </router-link>
 
-            <!-- Mini Cart -->
-            <button @click="openMiniCart" class="ml-4 p-1 rounded-full text-gray-400 hover:text-gray-600 relative">
+            <!-- Cart Icon now links directly to the /cart page -->
+            <router-link to="/cart" class="ml-4 p-1 rounded-full text-gray-400 hover:text-gray-600 relative">
                 <span class="sr-only">View cart</span>
                 <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                 <span v-if="cartCount > 0" class="absolute top-0 right-0 block h-4 w-4 rounded-full bg-primary text-white text-xs flex items-center justify-center">{{ cartCount }}</span>
-            </button>
+            </router-link>
 
           </div>
         </div>
@@ -59,9 +59,11 @@
 <script setup>
 import { computed } from 'vue';
 import { useCartStore } from '@/stores/cart';
-import i18n from '@/services/i18n';
+import { useI18n } from 'vue-i18n'; // Standard way to get i18n instance in script setup
 
-// Dummy navigation data, keys should match i18n files
+const { t, locale } = useI18n();
+
+// Navigation data remains the same
 const navigation = [
   { name: 'header.shop', href: '/shop' },
   { name: 'header.journal', href: '/journal' },
@@ -70,6 +72,7 @@ const navigation = [
 ];
 
 const cartStore = useCartStore();
+// cartCount computed property remains the same
 const cartCount = computed(() => cartStore.itemCount);
 
 const openSearch = () => {
@@ -77,16 +80,13 @@ const openSearch = () => {
   console.log('Open search');
 };
 
-const openMiniCart = () => {
-    // Logic to open mini cart
-    console.log('Open mini cart');
-}
+// No longer need openMiniCart, as it's now a direct link.
 
-const currentLanguage = computed(() => i18n.currentLocale.value);
+const currentLanguage = computed(() => locale.value);
 
 const toggleLanguage = () => {
     const newLocale = currentLanguage.value === 'fr' ? 'en' : 'fr';
-    i18n.setLocale(newLocale);
+    locale.value = newLocale;
 };
 
 </script>
