@@ -2,7 +2,7 @@
 from sqlalchemy import func
 from backend.database import db
 from backend.models.product_models import Product, ProductVariant
-from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
+from backend.services.exceptions import NotFoundException, ValidationException, ServiceError, ProductNotFoundError, DuplicateProductError, InvalidAPIRequestError
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from backend.services.monitoring_service import MonitoringService
@@ -13,6 +13,7 @@ from backend.models.order_models import OrderItem
 from backend.models.b2b_loyalty_models import LoyaltyTier
 from sqlalchemy.orm import joinedload, selectinload
 from ..models import Product, Category, Collection, product_tags, db
+from backend.utils.input_sanitizer import sanitize_html
 
 
 class ProductService:
@@ -254,50 +255,63 @@ class ProductService:
     @staticmethod
     def create_product(product_data: dict):
         """Create a new product with proper validation and logging."""
-        product_data = InputSanitizer.sanitize_input(product_data)
+        # Check for duplicate product name before proceeding.
+        if Product.query.filter(Product.name.ilike(data['name'])).first():
+            raise DuplicateProductError(f"Product with name '{data['name']}' already exists.")
+
+        # Sanitize user-provided string fields to prevent XSS.
+        sanitized_name = sanitize_html(data['name'])
+        sanitized_description = sanitize_html(data['description'])
+
+        # Verify that the foreign key references are valid.
+        if not Category.query.get(data['category_id']):
+            raise InvalidAPIRequestError(f"Category with id {data['category_id']} not found.")
         
-        # Validate required fields
-        required_fields = ['name', 'description', 'category_id']
-        for field in required_fields:
-            if not product_data.get(field):
-                raise ValidationException(f"Field '{field}' is required")
+        if data.get('collection_id') and not Collection.query.get(data['collection_id']):
+            raise InvalidAPIRequestError(f"Collection with id {data['collection_id']} not found.")
+
+        # Create the main product record.
+        new_product = Product(
+            name=sanitized_name,
+            description=sanitized_description,
+            price=data['price'],
+            category_id=data['category_id'],
+            collection_id=data.get('collection_id'),
+            is_active=data['is_active'],
+            is_featured=data['is_featured']
+        )
+        db.session.add(new_product)
+        db.session.flush()  # Flush to get the new_product.id for variant creation.
+
+        # Create variants and their initial stock.
+        for variant_data in data['variants']:
+            if ProductVariant.query.filter_by(sku=variant_data['sku']).first():
+                db.session.rollback()  # Rollback the transaction to avoid partial creation.
+                raise DuplicateProductError(f"Variant with SKU '{variant_data['sku']}' already exists.")
+
+            new_variant = ProductVariant(
+                product_id=new_product.id,
+                sku=variant_data['sku'],
+                price_offset=variant_data['price_offset']
+            )
+            db.session.add(new_variant)
+            db.session.flush()  # Flush to get new_variant.id for stock creation.
+
+            new_stock = Stock(
+                variant_id=new_variant.id,
+                quantity=variant_data['stock']
+            )
+            db.session.add(new_stock)
+
+        # Log the administrative action for auditing purposes.
+        AuditLogService.log_admin_action(
+            action='create_product',
+            target_id=new_product.id,
+            details=f"Created product '{new_product.name}'"
+        )
         
-        try:
-            product = Product(
-                name=product_data['name'],
-                description=product_data['description'],
-                category_id=product_data['category_id'],
-                is_active=product_data.get('is_active', True),
-                metadata=product_data.get('metadata', {})
-            )
-            
-            db.session.add(product)
-            db.session.flush()
-            
-            # Log the action
-            AuditLogService.log_action(
-                'PRODUCT_CREATED',
-                target_id=product.id,
-                details={'name': product.name, 'category_id': product.category_id}
-            )
-            
-            db.session.commit()
-            
-            MonitoringService.log_info(
-                f"Product created successfully: {product.name} (ID: {product.id})",
-                "ProductService"
-            )
-            return product.to_dict(context='admin')
-            
-        except Exception as e:
-            db.session.rollback()
-            MonitoringService.log_error(
-                f"Failed to create product: {str(e)}",
-                "ProductService",
-                exc_info=True
-            )
-            raise ValidationException(f"Failed to create product: {str(e)}")
-    
+        db.session.commit()
+        return new_product    
     @staticmethod
     def update_product(product_id: int, update_data: dict):
         """Update product with proper validation and logging."""
