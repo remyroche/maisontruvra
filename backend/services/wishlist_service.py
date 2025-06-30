@@ -8,6 +8,7 @@ from backend.services.audit_log_service import AuditLogService
 from flask import current_app
 from flask_jwt_extended import get_jwt_identity
 from sqlalchemy.exc import IntegrityError
+from backend.models import Wishlist, Product
 
 
 class WishlistItem(db.Model):
@@ -29,7 +30,10 @@ class WishlistItem(db.Model):
 
 class WishlistService:
     """Service for managing user wishlists"""
-    
+    def get_wishlist(self, user_id):
+        safe_user_id = InputSanitizer.sanitize_integer(user_id)
+        return self.db_session.query(Wishlist).filter_by(user_id=safe_user_id).first()
+
     @staticmethod
     def get_wishlist_items(user_id):
         """Get all wishlist items for a user"""
