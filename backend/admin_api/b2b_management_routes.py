@@ -14,34 +14,33 @@ b2b_management_bp = Blueprint('b2b_management_api', __name__, url_prefix='/admin
 @b2b_management_bp.route('/', methods=['GET'])
 @roles_required ('Admin', 'Manager', 'Support')
 def get_b2b_accounts():
-    """Returns a list of all B2B accounts with their status and tier."""
+    """Returns a list of all B2B accounts with their company-specific details."""
     b2b_users = B2BService.get_all_b2b_users_with_details()
     accounts_data = []
     for b2b_user in b2b_users:
+        user_data = b2b_user.user # Get related user data
         accounts_data.append({
             'b2b_user_id': b2b_user.id,
+            'user_id': user_data.id,
             'company_name': b2b_user.company_name,
-            'user_email': b2b_user.user.email if b2b_user.user else 'N/A',
+            'user_email': user_data.email if user_data else 'N/A',
             'status': b2b_user.status.value if b2b_user.status else 'N/A',
-            'tier_name': b2b_user.tier.name if b2b_user.tier else 'N/A',
-            'tier_id': b2b_user.tier_id
+            # Tier and discount info is now managed at the user level
+            'tier_name': user_data.tier.name if user_data and user_data.tier else 'N/A',
+            'custom_discount_percentage': str(user_data.custom_discount_percentage) if user_data and user_data.custom_discount_percentage is not None else None,
         })
     return jsonify(accounts_data), 200
 
 @b2b_management_bp.route('/<int:b2b_user_id>/status', methods=['PUT'])
 @roles_required ('Admin', 'Manager', 'Support')
 def update_b2b_account_status(b2b_user_id):
-    """
-    Updates a B2B account's status.
-    Accepts a JSON body with a "status" key (e.g., "approved", "rejected").
-    """
+    """Updates a B2B account's status (e.g., "approved", "rejected")."""
     data = request.get_json()
     new_status_str = data.get('status')
     if not new_status_str:
         return jsonify({'message': 'Status is required'}), 400
     
     try:
-        # Validate and convert string to B2BStatus enum
         new_status = B2BStatus(new_status_str.lower())
     except ValueError:
         valid_statuses = [s.value for s in B2BStatus]
@@ -54,7 +53,7 @@ def update_b2b_account_status(b2b_user_id):
         return jsonify({'message': str(e)}), 404
     except Exception as e:
         return jsonify({'message': f'An error occurred: {str(e)}'}), 500
-
+        
 # --- Tier Management ---
 
 @b2b_management_bp.route('/tiers', methods=['POST'])
