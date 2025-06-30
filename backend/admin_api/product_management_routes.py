@@ -4,7 +4,7 @@ from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import staff_required, roles_required, permissions_required
 from backend.models.inventory_models import Inventory
 from backend.extensions import cache, db
-# Assuming the Celery task is defined in a tasks.py file at the backend root
+from backend.services.background_task_service import BackgroundTaskService
 from backend.tasks import send_back_in_stock_email_task
 
 product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
