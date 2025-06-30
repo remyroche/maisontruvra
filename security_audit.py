@@ -1165,42 +1165,57 @@ def check_dependency_vulnerabilities(directory: str, command: str):
         print(f"[ERROR] An error occurred while checking dependencies: {e}")
     print("-" * 40)
 
-def run_enhanced_audit(directory: str):
-    """The central point for running all audit checks."""
-    print(f"--- Starting Enhanced Security Audit in: {directory} ---")
 
-    # 1. Check for dependency vulnerabilities
-    backend_dir = os.path.join(directory, 'backend')
-    if os.path.exists(os.path.join(backend_dir, 'requirements.txt')):
-        check_dependency_vulnerabilities(backend_dir, "pip-audit -r requirements.txt")
-    else:
-        print("\n[INFO] Skipping dependency check: `backend/requirements.txt` not found.")
+    def run_enhanced_audit(self):
+        """Runs all security checks and prints a summary."""
+        print(f"{Colors.HEADER}{Colors.BOLD}--- Starting Comprehensive Security Audit: run_pip_audit, run_npm_audit, run_bandit_scan---{Colors.ENDC}")
 
-    # 2. Perform static code analysis
-    print("\n--- Starting static code analysis ---")
-    all_issues = []
-    for file_path in find_python_files(directory):
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-            
-            # Run both content and AST checks
-            all_issues.extend(audit_file_content(file_path, lines))
-            all_issues.extend(audit_ast(file_path, lines))
+        # 1. External Tool Scans
+        self.run_pip_audit()
+        self.run_npm_audit()
+        self.run_bandit_scan()
 
-        except Exception as e:
-            print(f"[ERROR] Could not process file {file_path}: {e}")
-
-    if all_issues:
-        print(f"\nFound {len(all_issues)} potential static code issues:\n")
-        all_issues.sort(key=lambda x: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}[x.severity])
-        for issue in all_issues:
-            print(f"{issue}\n" + "-"*40)
-    else:
-        print("\nNo static code analysis issues found.")
+        # 2. Filesystem and Configuration Checks
+        print(f"\n{Colors.HEADER}--- Running Configuration and Filesystem Checks: check_file_permissions, check_network_security_headers, check_https_enforcement ---{Colors.ENDC}")
+        self.check_file_permissions()
+        self.check_network_security_headers()
+        self.check_https_enforcement()
         
-    print("\n--- Enhanced security audit finished. ---")
+        # 3. Static Code Analysis on all Python files
+        print(f"\n{Colors.HEADER}--- Running Custom Static Code Analysis ---{Colors.ENDC}")
+        py_files = self.find_files('.py')
+        print(f"Found {len(py_files)} Python files to analyze: check_hardcoded_secrets, check_sql_injection_patterns, check_xss_vulnerabilities, analyze_file_for_unprotected_routes, check_debug_information, check_weak_crypto_patterns, check_secure_cookies, check_unsanitized_input")
+        print(security_audit.py
+        for file_path in py_files:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                tree = ast.parse("".join(lines), filename=file_path)
+                
+                # Call all individual static analysis checks
+                self.check_hardcoded_secrets(file_path, lines)
+                self.check_sql_injection_patterns(file_path, lines)
+                self.check_xss_vulnerabilities(file_path, lines, tree)
+                self.analyze_file_for_unprotected_routes(file_path, tree) # Alias for check_missing_permissions
+                self.check_debug_information(file_path, tree)
+                self.check_weak_crypto_patterns(file_path, lines)
+                self.check_secure_cookies(file_path, tree)
+                self.check_unsanitized_input(file_path, lines)
 
+            except Exception as e:
+                print(f"{Colors.WARNING}Could not analyze {file_path}: {e}{Colors.ENDC}")
+        
+        # 4. Report Results
+        print(f"\n{Colors.HEADER}{Colors.BOLD}--- Audit Summary ---{Colors.ENDC}")
+        if not self.issues:
+            print(f"{Colors.GREEN}No high or medium severity issues found in custom scan.{Colors.ENDC}")
+        else:
+            print(f"{Colors.FAIL}Found {len(self.issues)} issues:{Colors.ENDC}\n")
+            self.issues.sort(key=lambda x: ("HIGH", "MEDIUM", "LOW").index(x.severity))
+            for issue in self.issues:
+                print(f"{issue}\n" + "-"*60)
+        
+        print(f"\n{Colors.HEADER}{Colors.BOLD}--- Comprehensive Security Audit Finished ---{Colors.ENDC}")
 if __name__ == "__main__":
     project_directory = os.path.dirname(os.path.abspath(__file__))
     run_enhanced_audit(project_directory)
