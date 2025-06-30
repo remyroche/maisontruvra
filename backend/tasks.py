@@ -6,12 +6,15 @@ import os
 from playwright.sync_api import sync_playwright
 
 # Import all necessary services and models
-from backend.services.email_service import EmailService
 from backend.services.passport_service import PassportService
 from backend.models import B2BUser, User
 from backend.models.invoice_models import Invoice
 from backend.models.order_models import Order
 from backend.services.monitoring_service import MonitoringService
+
+from backend.services.invoice_service import generate_invoice_pdf_for_order, generate_invoice_pdf_for_b2b_order
+from backend.services.email_service import EmailService
+from backend.services.notification_service import notify_user_of_loyalty_points
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +80,79 @@ def send_back_in_stock_email_task(user_ids, product_id):
                 template_name='emails/back_in_stock_notification.html',
                 context=context
             )
+
+@celery.task
+def generate_invoice_for_order_task(order_id):
+    generate_invoice_pdf_for_order(order_id)
+
+@celery.task
+def generate_invoice_for_b2b_order_task(order_id):
+    generate_invoice_pdf_for_b2b_order(order_id)
+
+@celery.task
+def send_order_confirmation_email_task(order_id):
+    EmailService.send_order_confirmation_email(order_id)
+
+@celery.task
+def send_b2b_order_confirmation_email_task(order_id):
+    EmailService.send_b2b_order_confirmation_email(order_id)
+    
+@celery.task
+def notify_user_of_loyalty_points_task(user_id, points):
+    notify_user_of_loyalty_points(user_id, points)
+
+@celery.task
+def send_password_reset_email_task(user_id, token, is_b2b=False):
+    # You need to fetch user object here before passing to service
+    from backend.models.user_models import User
+    from backend.models.b2b_models import B2BUser
+    user = B2BUser.query.get(user_id) if is_b2b else User.query.get(user_id)
+    if user:
+        EmailService.send_password_reset_email(user, token, is_b2b)
+
+@celery.task
+def send_2fa_status_change_email_task(user_id, enabled):
+    from backend.models.user_models import User
+    user = User.query.get(user_id)
+    if user:
+        EmailService.send_2fa_status_change_email(user, enabled)
+
+@celery.task
+def send_b2b_account_approved_email_task(b2b_user_id):
+    from backend.models.b2b_models import B2BUser
+    user = B2BUser.query.get(b2b_user_id)
+    if user:
+        EmailService.send_b2b_account_approved_email(user)
+
+@celery.task
+def send_security_alert_email_task(user_id, ip_address):
+    from backend.models.user_models import User
+    user = User.query.get(user_id)
+    if user:
+        EmailService.send_security_alert_email(user, ip_address)
+
+@celery.task
+def send_back_in_stock_notification_task(user_id, product_id):
+    from backend.models.user_models import User
+    from backend.models.product_models import Product
+    user = User.query.get(user_id)
+    product = Product.query.get(product_id)
+    if user and product:
+        EmailService.send_back_in_stock_email(user, product)
+
+@celery.task
+def send_order_shipped_email_task(order_id, tracking_link, tracking_number):
+    from backend.models.order_models import Order
+    order = Order.query.get(order_id)
+    if order:
+        EmailService.send_order_shipped_email(order, tracking_link, tracking_number)
+
+@celery.task
+def send_order_cancelled_email_task(order_id):
+    from backend.models.order_models import Order
+    order = Order.query.get(order_id)
+    if order:
+        EmailService.send_order_cancelled_email(order)
 
 @celery.task(name='tasks.generate_invoice_pdf', bind=True, max_retries=3, default_retry_delay=60)
 def generate_invoice_pdf_task(self, invoice_id: int):
