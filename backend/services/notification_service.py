@@ -6,9 +6,30 @@ from .monitoring_service import MonitoringService
 from .exceptions import ServiceError, NotFoundException, ValidationException
 from flask import current_app
 from ..tasks import send_back_in_stock_email_task
-
+from backend.services.email_service import send_email
 
 class NotificationService:
+
+def notify_user_of_loyalty_points(user_id, points):
+    """Notifies a user that they have received loyalty points."""
+    user = User.query.get(user_id)
+    if not user:
+        current_app.logger.warning(f"Could not send loyalty notification to user {user_id}. User not found.")
+        return
+
+    try:
+        # This can be expanded to include other notification types (e.g., push notifications)
+        send_email(
+            to=user.email,
+            subject="Vous avez gagné des points de fidélité !",
+            template="emails/loyalty_points_notification.html", # Assuming this template exists
+            user=user,
+            points=points
+        )
+        current_app.logger.info(f"Sent loyalty points notification to {user.email}.")
+    except Exception as e:
+        current_app.logger.error(f"Failed to send loyalty notification to {user.email}: {e}")
+
     @staticmethod
     def create_stock_notification_request(user_id, product_id):
         """Creates a request for a user to be notified when a product is back in stock."""
