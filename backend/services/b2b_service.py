@@ -10,12 +10,17 @@ from .exceptions import B2BAccountExistsError
 
 from ..extensions import redis_client
 from ..models import (db, B2BUser, User, Team, TeamMember, B2BInvitation, Tier,
-                    Cart, Order, Product, OrderItem, Invoice)
+                    Cart, Order, Product, OrderItem, Invoice, Company)
 from ..models.enums import B2BStatus, NotificationType, UserType
 from ..services.email_service import EmailService
 from ..services.exceptions import (UserNotFoundError, NotFoundException, ServiceError)
 from ..services.notification_service import NotificationService
 from .monitoring_service import MonitoringService
+
+from ..services.order_service import OrderService
+from ..services.invoice_service import InvoiceService
+from ..services.loyalty_service import LoyaltyService
+
 
 logger = logging.getLogger(__name__)
 CACHE_TTL_SECONDS = 600  # Cache for 10 minutes
@@ -26,8 +31,46 @@ class B2BService:
     This service handles business logic for B2B users, including account management,
     teams, and B2B-specific commerce features like tiered pricing.
     """
-
+  
+    def __init__(self):
+        self.order_service = OrderService()
+        self.invoice_service = InvoiceService()
+        self.loyalty_service = LoyaltyService()
+      
     # --- B2B Account Management ---
+
+      def get_b2b_user_dashboard(self, user_id):
+        """
+        Retrieves and aggregates dashboard data for a B2B user from various services.
+        """
+        b2b_user = B2BUser.query.filter_by(user_id=user_id).first()
+        if not b2b_user:
+            return None
+
+        # Get recent orders (e.g., last 5) from the OrderService.
+        recent_orders_paginated = self.order_service.get_user_orders(user_id, page=1, per_page=5)
+        recent_orders = [order.to_dict() for order in recent_orders_paginated.items]
+
+        # Get recent invoices (e.g., last 5) from the InvoiceService.
+        recent_invoices_paginated = self.invoice_service.get_user_invoices(user_id, page=1, per_page=5)
+        recent_invoices = [invoice.to_dict() for invoice in recent_invoices_paginated.items]
+
+        # Get loyalty data from the LoyaltyService.
+        loyalty_data = self.loyalty_service.get_user_loyalty_status(user_id)
+
+        # Get company details from the relationship.
+        company = b2b_user.company
+
+        # Assemble the dashboard data.
+        dashboard_data = {
+            "company_name": company.name,
+            "recent_orders": recent_orders,
+            "recent_invoices": recent_invoices,
+            "loyalty_points": loyalty_data.get('points', 0),
+            "tier": loyalty_data.get('tier', 'N/A')
+        }
+        return dashboard_data
+
 
     @staticmethod
     def create_b2b_account(user: User, company_name: str, vat_number: str) -> B2BUser:
