@@ -47,7 +47,7 @@
         No B2B accounts found.
     </div>
 
-     <!-- Modal for Editing B2B Account -->
+    <!-- Modal for Editing B2B Account -->
     <Modal :is-open="isModalOpen" @close="closeModal">
       <h2 class="text-xl font-bold mb-4">Edit B2B Account</h2>
       <div v-if="selectedAccount" class="space-y-4">
