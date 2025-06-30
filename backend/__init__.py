@@ -65,6 +65,11 @@ def create_app(config_class=config.Config):
     }
     Talisman(app, content_security_policy=csp)
 
+
+    # Initialize services
+    with app.app_context():
+        services.init_app(app)
+
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
