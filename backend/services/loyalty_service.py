@@ -1,13 +1,50 @@
 import secrets
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
-from .. import db
-from ..models import User, LoyaltyTier, UserLoyalty, Referral, ReferralRewardTier, PointVoucher, ExclusiveReward, LoyaltyPointLog
+from ..models import User, LoyaltyTier, UserLoyalty, Referral, ReferralRewardTier, PointVoucher, ExclusiveReward, LoyaltyPointLog, LoyaltyAccount, LoyaltyTier, LoyaltyTransaction, User
 from ..models.order_models import Order
 from ..services.notification_service import NotificationService
+import datetime
+from decimal import Decimal
 
 class LoyaltyService:
-
+    
+    def get_loyalty_account(user_id):
+        user = User.query.get(user_id)
+        return user.loyalty_account if user else None
+    
+    def add_loyalty_points_for_purchase(user_id, order_total):
+        """Adds loyalty points to a user's account after a purchase and returns points added."""
+        user = User.query.get(user_id)
+        if not user or not user.loyalty_account:
+            return 0
+    
+        # Example: 1 point for every 10 euros spent
+        points_to_add = int(Decimal(order_total) / 10)
+    
+        if points_to_add > 0:
+            loyalty_account = user.loyalty_account
+            loyalty_account.points += points_to_add
+    
+            transaction = LoyaltyTransaction(
+                loyalty_account_id=loyalty_account.id,
+                points=points_to_add,
+                transaction_type="purchase",
+                description=f"Points earned from purchase.",
+            )
+            db.session.add(transaction)
+            db.session.commit()
+            
+            return points_to_add
+            
+        return 0
+    
+    def get_user_loyalty_transactions(user_id):
+        loyalty_account = get_loyalty_account(user_id)
+        if loyalty_account:
+            return LoyaltyTransaction.query.filter_by(loyalty_account_id=loyalty_account.id).order_by(LoyaltyTransaction.date.desc()).all()
+        return []
+        
     @staticmethod
     def get_all_tiers():
         return LoyaltyTier.query.order_by(LoyaltyTier.min_spend).all()
