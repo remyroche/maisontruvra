@@ -40,6 +40,17 @@ def create_product():
         # Log the error e
         return jsonify(status="error", message="An internal error occurred while creating the product."), 500
 
+
+@product_management_bp.route('/products/import', methods=['POST'])
+@roles_required ('Admin', 'Manager')
+def import_products():
+    """
+    Starts a background task to import products from a CSV file.
+    """
+    # ... logic to handle file upload
+    task = task_service.run_task('app.tasks.import_products_task', args=[...])
+    return jsonify({"task_id": task.id}), 202
+
 @product_management_bp.route('/inventory/<int:inventory_id>', methods=['PUT'])
 @permissions_required('MANAGE_PRODUCTS')
 @roles_required ('Admin', 'Manager', 'Farmer')
