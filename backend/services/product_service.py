@@ -11,17 +11,28 @@ from flask_jwt_extended import get_jwt_identity
 from backend.models.user_models import User
 from backend.models.order_models import OrderItem
 from backend.models.b2b_loyalty_models import LoyaltyTier
+from sqlalchemy.orm import joinedload, selectinload
+from ..models import Product, Category, Collection, product_tags, db
 
 
 class ProductService:
 
-    @staticmethod
-    def get_all_products(user=None):
+        def get_all_products_paginated(self, page: int, per_page: int, user=None, filters: dict = None):
         """
-        Gets all products, filtering based on the user's role and loyalty tier.
+        Gets a paginated list of all products, with comprehensive filtering and N+1 optimization.
+
+        - Optimizes queries using eager loading.
+        - Filters based on the user's role (B2B/B2C) and loyalty tier.
+        - Filters based on search, category, active status, etc.
         """
-        query = Product.query
-        
+        # Eagerly load related data to prevent N+1 queries
+        query = Product.query.options(
+            selectinload(Product.variants).selectinload(ProductVariant.items),
+            joinedload(Product.category),
+            selectinload(Product.tags)
+        )
+
+        # --- User-based Filtering (Visibility & Tier Restrictions) ---
         if user:
             # Filter by B2C/B2B visibility
             if hasattr(user, 'is_b2b') and user.is_b2b:
@@ -30,13 +41,11 @@ class ProductService:
                 query = query.filter(Product.is_b2c_visible == True)
 
             # Handle tier-specific restrictions
-            # A subquery finds products that have *any* tier restrictions
-            products_with_restrictions = db.session.query(Product.id).join(
-                'restricted_to_tiers'
-            ).distinct()
+            products_with_restrictions = db.session.query(Product.id).join('restricted_to_tiers').distinct()
             
-            # Filter products: either they have no restrictions, OR the user's tier is in their allowed list
             if hasattr(user, 'loyalty') and user.loyalty:
+                # User has loyalty info, so they can see non-restricted items
+                # OR items restricted to their specific tier.
                 query = query.filter(
                     ~Product.id.in_(products_with_restrictions) |
                     (Product.id.in_(
@@ -44,16 +53,92 @@ class ProductService:
                     ))
                 )
             else:
-                # If user has no loyalty info, they can only see non-restricted items
+                # User has no loyalty info, they can only see non-restricted items
                 query = query.filter(~Product.id.in_(products_with_restrictions))
         else:
-            # For non-logged-in users, only show public B2C products with no tier restrictions
+            # For non-logged-in users, show only public B2C products with no tier restrictions
             query = query.filter(Product.is_b2c_visible == True)
-            # Find products that have any tier restrictions and exclude them
             products_with_restrictions = db.session.query(Product.id).join('restricted_to_tiers').distinct()
             query = query.filter(~Product.id.in_(products_with_restrictions))
             
-        return query.all()
+        # --- Standard Filtering ---
+        if filters:
+            filters = InputSanitizer.sanitize_input(filters)
+            # By default, only show non-deleted (active) products unless specified
+            if not filters.get('include_deleted', False):
+                query = query.filter(Product.deleted_at.is_(None))
+            
+            if filters.get('category_id'):
+                query = query.filter(Product.category_id == filters['category_id'])
+            
+            if filters.get('collection_id'):
+                 query = query.filter(Product.collection_id == filters['collection_id'])
+
+            if filters.get('is_active') is not None:
+                query = query.filter(Product.is_active == filters['is_active'])
+                
+            if filters.get('search'):
+                search_term = f"%{filters['search']}%"
+                query = query.filter(
+                    db.or_(
+                        Product.name.ilike(search_term),
+                        Product.description.ilike(search_term)
+                    )
+                )
+
+        return query.order_by(Product.created_at.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+
+    def get_product_by_id(self, product_id: int, user=None):
+        """
+        Get a single product by ID, handling serialization, visibility, and B2B pricing.
+        """
+        # Eager load all relevant relationships
+        product = Product.query.options(
+            selectinload(Product.variants).selectinload(ProductVariant.items),
+            joinedload(Product.category),
+            selectinload(Product.reviews),
+            selectinload(Product.tags),
+            selectinload(Product.restricted_to_tiers)
+        ).get(product_id)
+        
+        if not product:
+            raise NotFoundException(f"Product with ID {product_id} not found")
+
+        # --- Visibility Check ---
+        is_b2b_user = hasattr(user, 'is_b2b') and user.is_b2b
+        if is_b2b_user and not product.is_b2b_visible:
+            raise NotFoundException(f"Product with ID {product_id} not found")
+        if not is_b2b_user and not product.is_b2c_visible:
+            raise NotFoundException(f"Product with ID {product_id} not found")
+
+        # --- Tier Restriction Check ---
+        if product.restricted_to_tiers:
+            if not user or not hasattr(user, 'loyalty') or not user.loyalty:
+                 raise NotFoundException(f"Product with ID {product_id} not found")
+            
+            user_tier_id = user.loyalty.tier_id
+            allowed_tier_ids = {tier.id for tier in product.restricted_to_tiers}
+            if user_tier_id not in allowed_tier_ids:
+                raise NotFoundException(f"Product with ID {product_id} not found")
+                
+        # --- Serialization and Price Calculation ---
+        context = 'b2b' if is_b2b_user else 'public'
+        product_data = product.to_dict(context=context)
+
+        # Calculate B2B-specific price if applicable
+        if is_b2b_user:
+            tier_discount = 0
+            if user.loyalty and user.loyalty.tier:
+                tier_discount = user.loyalty.tier.discount
+            
+            b2b_price = product.price * (1 - tier_discount / 100)
+            product_data['b2c_price'] = product.price
+            product_data['b2b_price'] = b2b_price
+
+        return product_data
+
 
     @staticmethod
     def search_products(query, limit=10):
@@ -165,107 +250,6 @@ class ProductService:
             )
             raise ServiceError("Product creation failed due to a database error.")
 
-    @staticmethod
-    def get_b2b_product_by_id(product_id, user_id):
-        """Fetch a product with B2B-specific pricing for a given user."""
-        product = Product.query.get(product_id)
-        if not product:
-            raise NotFoundException(f"Product with ID {product_id} not found")
-
-        # Fetch user and their tier discount
-        user = User.query.get(user_id)
-        tier_discount = 0
-        if user and user.loyalty and user.loyalty.tier:
-            tier_discount = user.loyalty.tier.discount
-
-        # Calculate B2B price
-        b2b_price = product.price * (1 - tier_discount / 100)
-
-        product_data = product.to_dict(view='b2b')
-        product_data['b2c_price'] = product.price
-        product_data['b2b_price'] = b2b_price
-
-        return product_data
-
-    @staticmethod
-    def get_b2b_products_paginated(user_id, page, per_page, **filters):
-        """Fetch paginated products with B2B pricing."""
-        query = Product.query.filter(Product.is_b2b_visible == True)
-
-        # Apply filters if any
-        if filters.get('category'):
-            query = query.filter(Product.category_id == filters['category'])
-        if filters.get('collection'):
-            query = query.filter(Product.collection_id == filters['collection'])
-        if filters.get('search_term'):
-            search_term = f"%{filters['search_term']}%"
-            query = query.filter(Product.name.ilike(search_term))
-
-        # Fetch user and their tier discount
-        user = User.query.get(user_id)
-        tier_discount = 0
-        if user and user.loyalty and user.loyalty.tier:
-            tier_discount = user.loyalty.tier.discount
-
-        # Paginate and calculate B2B prices
-        products_pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-        products_data = []
-        for product in products_pagination.items:
-            b2b_price = product.price * (1 - tier_discount / 100)
-            product_data = product.to_dict(view='b2b')
-            product_data['b2c_price'] = product.price
-            product_data['b2b_price'] = b2b_price
-            products_data.append(product_data)
-
-        return products_data, products_pagination.total, products_pagination.pages, products_pagination.page
-
-
-    @staticmethod
-    def get_product_by_id(product_id: int, context: str = 'public'):
-        """Get product by ID with different serialization contexts."""
-        # Optimize query to avoid N+1 problem
-        product = Product.query.options(
-            db.selectinload(Product.variants).selectinload(ProductVariant.items),
-            db.selectinload(Product.category),
-            db.selectinload(Product.reviews)
-        ).get(product_id)
-        
-        if not product:
-            raise NotFoundException(f"Product with ID {product_id} not found")
-        
-        return product.to_dict(context=context)
-    
-    @staticmethod
-    def get_all_products_paginated(page: int, per_page: int, filters: dict = None):
-        """Get paginated products with N+1 optimization."""
-        query = Product.query.options(
-            db.selectinload(Product.variants),
-            db.selectinload(Product.category)
-        )
-
-        # Handle soft-deleted filter
-        if filters and not filters.get('include_deleted', False):
-            # By default, only show non-deleted (active) products
-            query = query.filter(Product.deleted_at.is_(None))
-        
-        if filters:
-            filters = InputSanitizer.sanitize_input(filters)
-            if filters.get('category_id'):
-                query = query.filter(Product.category_id == filters['category_id'])
-            if filters.get('is_active') is not None:
-                query = query.filter(Product.is_active == filters['is_active'])
-            if filters.get('search'):
-                search_term = f"%{filters['search']}%"
-                query = query.filter(
-                    db.or_(
-                        Product.name.ilike(search_term),
-                        Product.description.ilike(search_term)
-                    )
-                )
-        
-        return query.order_by(Product.created_at.desc()).paginate(
-            page=page, per_page=per_page, error_out=False
-        )
     
     @staticmethod
     def create_product(product_data: dict):
