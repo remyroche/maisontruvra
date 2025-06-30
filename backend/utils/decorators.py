@@ -5,6 +5,8 @@ from flask_jwt_extended import get_jwt_identity, get_jwt, jwt_required
 from backend.models.user_models import User
 from backend.services.audit_log_service import AuditLogService
 from backend.utils.csrf_protection import CSRFProtection
+from marshmallow import ValidationError
+from ..models import User, AdminAuditLog, db
 
 # Initialize loggers
 logger = logging.getLogger(__name__)
@@ -62,29 +64,17 @@ def get_object_or_404(model):
     """
     A decorator to fetch a model instance by its ID from the route's URL variables.
     If the object is not found, it aborts the request with a 404 error.
-    
-    The fetched object is added to Flask's request context `g` for easy access
-    in the decorated route function.
-    
-    Example:
-        @get_object_or_404(Product)
-        def get_product(product_id):
-            product = g.product  # Access the fetched product
-            ...
+    The fetched object is added to Flask's request context `g`.
     """
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # Derives the keyword argument name from the model's name (e.g., 'Product' -> 'product_id')
             object_id_key = f"{model.__name__.lower()}_id"
-            
-            # Fallback for generic 'id' if specific key isn't in kwargs
             if object_id_key not in kwargs and 'id' in kwargs:
                 object_id_key = 'id'
 
             if object_id_key not in kwargs:
-                # This indicates a configuration mismatch between the route URL and the decorator.
-                abort(500, description=f"Could not find ID key ('{object_id_key}' or 'id') for model {model.__name__} in route.")
+                abort(500, description=f"Could not find ID key for model {model.__name__} in route.")
 
             obj_id = kwargs.get(object_id_key)
             obj = model.query.get(obj_id)
@@ -92,13 +82,76 @@ def get_object_or_404(model):
             if obj is None:
                 abort(404, description=f"{model.__name__} with ID {obj_id} not found.")
             
-            # Attach the fetched object to the request context `g`.
-            # The attribute name is the lowercase model name (e.g., g.product).
             setattr(g, model.__name__.lower(), obj)
             
             return f(*args, **kwargs)
         return decorated_function
     return decorator
+
+
+def api_resource_handler(model, schema=None, role_required=None, action_log=None, check_ownership=False):
+    """
+    A comprehensive decorator that handles role checks, object fetching,
+    input validation, and activity logging for API resource routes.
+    
+    - role_required: (Optional) Enforces user must have this role.
+    - check_ownership: (Optional) Enforces that g.user.id matches the resource's user_id.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # 1. Authentication & Authorization (only if a role is specified)
+            if role_required:
+                if 'user' not in g or not g.user:
+                    abort(401, description="Authentication required for this action.")
+                if role_required not in [role.name for role in g.user.roles]:
+                    abort(403, description=f"You do not have permission to perform this action. Requires '{role_required}' role.")
+
+            # 2. Fetch the object (reusing get_object_or_404 logic)
+            object_id_key = f"{model.__name__.lower()}_id"
+            if object_id_key not in kwargs and 'id' in kwargs:
+                object_id_key = 'id'
+
+            target_object = None
+            if object_id_key in kwargs:
+                obj_id = kwargs.get(object_id_key)
+                target_object = model.query.get(obj_id)
+                if target_object is None:
+                    abort(404, description=f"{model.__name__} with ID {obj_id} not found.")
+                setattr(g, model.__name__.lower(), target_object)
+
+            # 3. Ownership Check (only if requested)
+            if check_ownership and target_object:
+                if 'user' not in g or not g.user:
+                    abort(401, description="Authentication required to check resource ownership.")
+                if not hasattr(target_object, 'user_id') or target_object.user_id != g.user.id:
+                    abort(403, description="You do not have permission to access this resource.")
+
+            # 4. Input Validation (for POST/PUT)
+            if request.method in ['POST', 'PUT']:
+                if not schema:
+                    abort(500, description="A schema must be provided for validation on POST/PUT requests.")
+                try:
+                    g.validated_data = schema.load(request.get_json())
+                except ValidationError as err:
+                    abort(400, description={"errors": err.messages})
+
+            # Execute the actual route function
+            response = f(*args, **kwargs)
+
+            # 5. Activity Logging (if action_log is provided and user is authenticated)
+            if action_log and (200 <= response.status_code < 300) and 'user' in g and g.user:
+                audit_log_service.log_activity(
+                    user_id=g.user.id,
+                    action=action_log,
+                    target_id=target_object.id if target_object else None,
+                    target_type=model.__name__ if target_object else None
+                )
+
+            return response
+        return decorated_function
+    return decorator
+    
     
 def _execute_and_log_action(func: Callable, *args: Any, **kwargs: Any) -> Any:
     """
