@@ -294,16 +294,41 @@ class OrderService:
         
     @staticmethod
     def create_order(user_id, order_data):
-        """Create a new order."""
-        order = Order(
-            user_id=user_id,
-            total_amount=order_data['total_amount'],
-            status=order_data.get('status', 'PENDING')
-        )
-        db.session.add(order)
-        db.session.commit()
-        return order
-    
+        try:
+            order_total = 0
+            order_items = []
+
+            for item_data in items_data
+                product = Product.query.filter_by(id=item_data['product_id']).with_for_update().first()
+
+                if not product or product.stock_quantity < item_data['quantity']:
+                    raise ServiceException(f"Product {product.name if product else item_data['product_id']} is out of stock or does not exist.")
+                
+                # Decrease stock
+                product.stock_quantity -= item_data['quantity']
+                
+                order_item = OrderItem(
+                    product_id=product.id,
+                    quantity=item_data['quantity'],
+                    price=product.price
+                )
+                order_items.append(order_item)
+                order_total += order_item.price * order_item.quantity
+
+            new_order = Order(
+                user_id=user_id,
+                total_amount=order_total,
+                items=order_items
+            )
+
+            db.session.add(new_order)
+            db.session.commit()
+            return new_order
+            
+        except Exception as e:
+            db.session.rollback()
+            # Log the exception e
+            raise ServiceException("Failed to create order.") from e    
     @staticmethod
     def update_order_status(order_id, new_status):
         """Update an order's status."""
