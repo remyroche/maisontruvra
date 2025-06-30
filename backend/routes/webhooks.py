@@ -1,59 +1,38 @@
-import hmac
-import hashlib
-from flask import Blueprint, request, abort, current_app
+import stripe
+from flask import Blueprint, current_app, jsonify, request
+from backend.services.order_service import get_order_by_id, update_order_status
+from backend.models.order_models import OrderStatus
+from backend.tasks import generate_invoice_for_order_task, send_order_confirmation_email_task
 
 webhooks_bp = Blueprint('webhooks', __name__)
 
 @webhooks_bp.route('/stripe', methods=['POST'])
 def stripe_webhook():
-    """Handles incoming webhooks from Stripe."""
-    # --- IMPLEMENTATION: Webhook Signature Verification ---
-    # This is a conceptual implementation. For production, use Stripe's official library.
-    # It safely compares the signature from the 'Stripe-Signature' header with one
-    # generated from the payload and a shared secret.
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get("Stripe-Signature")
+    webhook_secret = current_app.config["STRIPE_WEBHOOK_SECRET"]
     
-    webhook_secret = current_app.config.get('STRIPE_WEBHOOK_SECRET')
-    if not webhook_secret:
-        # Abort if the secret is not configured on the server.
-        abort(500, 'Webhook secret not configured.')
-
-    payload = request.get_data()
-    sig_header = request.headers.get('Stripe-Signature')
-
     try:
-        # A real implementation would use:
-        # event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-        
-        # Conceptual implementation for demonstration:
-        # This simulates checking the signature without the actual library.
-        # You would replace this block with the line above.
-        if not sig_header:
-            raise ValueError("Missing Stripe-Signature header")
-        
-        # A simplified check. The real check is more complex.
-        computed_signature = hmac.new(
-            key=webhook_secret.encode('utf-8'),
-            msg=payload,
-            digestmod=hashlib.sha256
-        ).hexdigest()
+        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+    except (ValueError, stripe.error.SignatureVerificationError) as e:
+        current_app.logger.error(f"Stripe webhook error: {e}")
+        return jsonify({"error": str(e)}), 400
 
-        if not hmac.compare_digest(f"sha256={computed_signature}", sig_header):
-             raise ValueError("Invalid signature")
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        order_id = session.get("client_reference_id")
 
-    except (ValueError, hmac.error) as e:
-        # Invalid payload or signature
-        abort(400, f'Invalid signature: {e}')
-    
-    # Process the event payload
-    event_data = request.get_json()
-    event_type = event_data['type']
+        if order_id:
+            order = get_order_by_id(order_id)
+            if order and order.status != OrderStatus.COMPLETED:
+                update_order_status(order.id, OrderStatus.COMPLETED)
+                
+                # Call tasks directly
+                send_order_confirmation_email_task.delay(order.id)
+                generate_invoice_for_order_task.delay(order.id)
+                current_app.logger.info(f"Order {order_id} processing initiated via webhook.")
+            else:
+                current_app.logger.warning(f"Webhook received for already processed or non-existent order {order_id}")
 
-    if event_type == 'checkout.session.completed':
-        # Fulfill the purchase...
-        pass
-    elif event_type == 'invoice.payment_succeeded':
-        # Handle successful subscription payment...
-        pass
-    # ... handle other event types
-
+    return jsonify({"status": "success"}), 200
     return {'status': 'success'}, 200
