@@ -152,7 +152,7 @@ This project includes a custom security audit script.
 
 ```bash
 # From the root directory
-python security_audit.py
+run_audits.sh
 ```
 
 ## 📄 License
