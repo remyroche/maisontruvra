@@ -1,104 +1,93 @@
 <template>
   <div class="bg-white">
-    <div v-if="isLoading" class="text-center py-40">
-      <p>{{ i18n.loading }}</p>
-    </div>
-    <div v-else-if="error" class="text-center py-40 text-red-600">
-      <p>{{ i18n.error }}</p>
-    </div>
-    <div v-else-if="product" class="mx-auto max-w-2xl px-4 py-16 sm:px-6 sm:py-24 lg:max-w-7xl lg:px-8">
-      <div class="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8">
-        <!-- Image gallery -->
-        <div class="flex flex-col-reverse">
-          <!-- Image selector -->
-          <div class="mx-auto mt-6 hidden w-full max-w-2xl sm:block lg:max-w-none">
-            <div class="grid grid-cols-4 gap-6" aria-orientation="horizontal">
-              <button v-for="image in product.images" :key="image.id" @click="selectedImage = image.url" class="relative flex h-24 cursor-pointer items-center justify-center rounded-md bg-white text-sm font-medium uppercase text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring focus:ring-opacity-50 focus:ring-offset-4">
-                <span class="sr-only">{{ image.alt_text }}</span>
-                <span class="absolute inset-0 overflow-hidden rounded-md">
-                  <img :src="image.url" :alt="image.alt_text" class="h-full w-full object-cover object-center" />
-                </span>
-                <span :class="[selectedImage === image.url ? 'ring-indigo-500' : 'ring-transparent', 'pointer-events-none absolute inset-0 rounded-md ring-2 ring-offset-2']" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+    <div class="pt-6">
 
-          <div class="aspect-h-1 aspect-w-1 w-full">
-            <img :src="selectedImage" :alt="product.name" class="h-full w-full object-cover object-center sm:rounded-lg" />
-          </div>
-        </div>
-
-        <!-- Product info -->
-        <div class="mt-10 px-4 sm:mt-16 sm:px-0 lg:mt-0">
-          <h1 class="text-3xl font-bold tracking-tight text-gray-900">{{ product.name }}</h1>
-
-          <div class="mt-3">
-            <h2 class="sr-only">Product information</h2>
-            <p class="text-3xl tracking-tight text-gray-900">€{{ product.price.toFixed(2) }}</p>
-          </div>
-
-          <div class="mt-6">
-            <h3 class="sr-only">{{ i18n.descriptionTitle }}</h3>
-            <div class="space-y-6 text-base text-gray-700" v-html="product.description" />
-          </div>
-
-          <form @submit.prevent="handleAddToCart" class="mt-6">
-            <div class="mt-10 flex">
-              <button type="submit" :disabled="isAddingToCart" class="flex max-w-xs flex-1 items-center justify-center rounded-md border border-transparent bg-indigo-600 px-8 py-3 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-50 sm:w-full disabled:bg-indigo-400">
-                {{ isAddingToCart ? 'Adding...' : i18n.addToCart }}
-              </button>
-            </div>
-          </form>
-        </div>
+      <!-- Loading State -->
+      <div v-if="isLoading" class="text-center py-24">
+        <p class="text-lg text-gray-500">Chargement du produit...</p>
+        <!-- You can add a spinner here -->
       </div>
 
-      <!-- Recommendations Section -->
-      <ProductRecommendations :product-id="id" />
+      <!-- Error State -->
+      <div v-else-if="error" class="max-w-2xl mx-auto py-16 px-4 sm:py-24 sm:px-6 lg:max-w-7xl lg:px-8">
+          <div class="text-center p-8 bg-red-50 border border-red-200 rounded-lg">
+            <h3 class="text-xl font-semibold text-red-800">Une erreur est survenue</h3>
+            <p class="text-red-600 mt-2">{{ error.message || 'Désolé, nous n\'avons pas pu charger les détails du produit.' }}</p>
+            <button @click="fetchData" class="mt-6 px-5 py-2.5 bg-red-600 text-white font-medium rounded-lg text-sm hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-300">
+              Réessayer
+            </button>
+          </div>
+      </div>
+      
+      <!-- Product Info -->
+      <div v-else-if="product" class="mx-auto max-w-2xl px-4 pb-16 pt-10 sm:px-6 lg:grid lg:max-w-7xl lg:grid-cols-3 lg:grid-rows-[auto,auto,1fr] lg:gap-x-8 lg:px-8 lg:pb-24 lg:pt-16">
+        <!-- Main Product Layout (unchanged) -->
+        <div class="lg:col-span-2 lg:border-r lg:border-gray-200 lg:pr-8">
+           <h1 class="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">{{ product.name }}</h1>
+        </div>
+        
+        <!-- Options and Add to Cart -->
+        <div class="mt-4 lg:row-span-3 lg:mt-0">
+          <h2 class="sr-only">Product information</h2>
+          <p class="text-3xl tracking-tight text-gray-900">{{ formatCurrency(product.price) }}</p>
+          
+           <!-- Reviews, etc -->
+
+          <form class="mt-10" @submit.prevent="handleAddToCart">
+            <!-- Colors, Sizes etc. would go here -->
+            <button type="submit" class="mt-10 flex w-full items-center justify-center rounded-md border border-transparent bg-indigo-600 px-8 py-3 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Ajouter au panier</button>
+          </form>
+        </div>
+
+        <div class="py-10 lg:col-span-2 lg:col-start-1 lg:border-r lg:border-gray-200 lg:pb-16 lg:pr-8 lg:pt-6">
+          <!-- Description and details -->
+          <div>
+            <h3 class="sr-only">Description</h3>
+            <div class="space-y-6">
+              <p class="text-base text-gray-900">{{ product.description }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Not Found State -->
+      <div v-else class="text-center py-24">
+        <h2 class="text-2xl font-bold text-gray-900">Produit non trouvé</h2>
+        <p class="text-lg text-gray-500 mt-2">Désolé, nous n'avons pas pu trouver ce produit.</p>
+        <router-link :to="{ name: 'Shop' }" class="mt-6 inline-block px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg text-sm hover:bg-indigo-700">
+            Retour à la boutique
+        </router-link>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
-import { useApiData } from '@/composables/useApiData';
-import { apiClient } from '@/services/api';
+import { onMounted } from 'vue';
+import { useRoute } from 'vue-router';
+import { useApiData } from '@/composables/useApiData.js';
 import { useCartStore } from '@/stores/cart';
+import { useCurrencyFormatter } from '@/composables/useCurrencyFormatter';
 import { useNotificationStore } from '@/stores/notification';
-import ProductRecommendations from '@/components/products/ProductRecommendations.vue';
-import i18nData from '@/locales/pages/product-detail.json';
 
-const props = defineProps({
-  id: { type: String, required: true },
-});
-
+const route = useRoute();
 const cartStore = useCartStore();
 const notificationStore = useNotificationStore();
-const isAddingToCart = ref(false);
-const currentLang = ref('fr');
-const i18n = computed(() => i18nData[currentLang.value]);
+const { formatCurrency } = useCurrencyFormatter();
 
-const { data: product, isLoading, error } = useApiData(
-  () => apiClient.get(`/products/${props.id}`),
-  () => props.id
-);
+// Use the composable for fetching data, which includes loading and error states
+const { data: product, error, isLoading, fetchData } = useApiData();
 
-const selectedImage = ref('');
-
-watch(product, (newProduct) => {
-  if (newProduct && newProduct.images && newProduct.images.length > 0) {
-    selectedImage.value = newProduct.images[0].url;
-  }
-}, { immediate: true });
-
-const handleAddToCart = async () => {
-  if (!product.value) return;
-  isAddingToCart.value = true;
-  try {
-    await cartStore.addItem(props.id, 1); // Assuming quantity of 1 for now
-    notificationStore.showNotification({ message: `${product.value.name} has been added to your cart.`, type: 'success' });
-  } finally {
-    isAddingToCart.value = false;
+const handleAddToCart = () => {
+  if (product.value) {
+    cartStore.addItem({ product: product.value, quantity: 1 });
+    notificationStore.addNotification(`${product.value.name} a été ajouté au panier.`, 'success');
   }
 };
 
+onMounted(() => {
+  // Fetch data on component mount, passing the specific API endpoint
+  const slug = route.params.slug;
+  fetchData(`/api/products/${slug}`);
+});
 </script>
