@@ -119,6 +119,76 @@ def find_files(directory: str, extensions: List[str]) -> List[str]:
                 matches.append(os.path.join(root, filename))
     return matches
 
+    # --- Running flake8 ---
+    print(f"\n{YELLOW}Running flake8...{RESET}")
+    try:
+        flake8_process = subprocess.run(
+            ['flake8', backend_path],
+            capture_output=True,
+            text=True,
+            check=False # Do not throw exception on non-zero exit code
+        )
+        if flake8_process.stdout:
+            print(f"{RED}Flake8 found issues:{RESET}")
+            print(flake8_process.stdout)
+        else:
+            print(f"{GREEN}flake8: No issues found.{RESET}")
+    except FileNotFoundError:
+        print(f"{RED}Error: 'flake8' command not found. Please install it with 'pip install flake8'.{RESET}")
+
+    
+
+    # --- Running pylint ---
+    print(f"\n{YELLOW}Running pylint...{RESET}")
+    try:
+        # Note: pylint can be noisy. It's best to configure it with a .pylintrc file.
+        pylint_process = subprocess.run(
+            ['pylint', backend_path],
+            capture_output=True,
+            text=True,
+            check=False # Do not throw exception on non-zero exit code
+        )
+        if pylint_process.stdout and "Your code has been rated at" in pylint_process.stdout:
+             # A basic check to see if pylint ran successfully
+            print(f"{YELLOW}Pylint analysis complete. See details below:{RESET}")
+            print(pylint_process.stdout)
+        elif pylint_process.returncode != 0:
+            print(f"{RED}Pylint found issues:{RESET}")
+            print(pylint_process.stdout)
+            if pylint_process.stderr:
+                print(pylint_process.stderr)
+        else:
+            print(f"{GREEN}pylint: No issues found.{RESET}")
+
+    except FileNotFoundError:
+        print(f"{RED}Error: 'pylint' command not found. Please install it with 'pip install pylint'.{RESET}")
+
+
+
+def audit_hardcoded_secrets():
+    """Scans for potentially hardcoded secrets."""
+    print(f"\n{YELLOW}--- Auditing for hardcoded secrets (basic check) ---{RESET}")
+    # This is a very basic check. For real projects, use tools like git-secrets or trivy.
+    backend_path = os.path.join(os.path.dirname(__file__), 'backend')
+    found_secrets = False
+    secret_keywords = ['password', 'secret', 'api_key', 'token']
+    for root, _, files in os.walk(backend_path):
+        for file in files:
+            if file.endswith('.py') and file != 'config.py':
+                filepath = os.path.join(root, file)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        for i, line in enumerate(f, 1):
+                            if any(keyword in line.lower() for keyword in secret_keywords) and ('=' in line):
+                                 if not (line.lstrip().startswith('#') or 'secret_key' in line): # Ignore comments and specific safe keys
+                                    print(f"Potential hardcoded secret in {filepath}:{i} -> {line.strip()}")
+                                    found_secrets = True
+                except Exception as e:
+                    print(f"{RED}Error reading {filepath}: {e}{RESET}")
+    
+    if not found_secrets:
+        print(f"{GREEN}No obvious hardcoded secrets found.{RESET}")
+
 # --- Backend Best Practices Checks ---
 
 def check_cors_configuration(py_files: List[str]) -> int:
@@ -1407,7 +1477,12 @@ def run_best_practices_audit(config: BestPracticesConfig):
     # General checks
     total_issues += check_environment_configuration()
     total_issues += check_documentation_practices()
-    
+
+
+    run_static_analysis() # pyling, flake8
+    # check_for_print_statements() # leftover print statements in the backend code, 
+    audit_hardcoded_secrets()
+
     # Security-related best practices
     all_files = []
     if backend_py_files:
