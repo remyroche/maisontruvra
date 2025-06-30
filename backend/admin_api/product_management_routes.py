@@ -8,6 +8,8 @@ from backend.extensions import cache, db
 from backend.tasks import send_back_in_stock_email_task
 
 product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
+product_service = ProductService()
+task_service = BackgroundTaskService()
 
 # CREATE a new product
 @product_management_bp.route('/products', methods=['POST'])
@@ -29,9 +31,9 @@ def create_product():
         return jsonify(status="error", message=f"Missing required fields: {', '.join(missing_fields)}"), 400
 
     try:
-        new_product = ProductService.create_product(sanitized_data)
-        cache.delete('view//api/products')
-        return jsonify(status="success", data=new_product.to_dict()), 201
+        product = product_service.create_product(data)
+        cache.delete(product_service.get_all_products)
+        return jsonify(product.to_dict()), 201
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400
     except Exception as e:
