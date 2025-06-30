@@ -33,23 +33,35 @@ class Product(BaseModel, SoftDeleteMixin):
     is_published = db.Column(db.Boolean, default=False, nullable=False)
     product_type = db.Column(db.String(50), default='standard') # e.g., standard, b2b_exclusive, blog
     
-    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
-    collection_id = db.Column(db.Integer, db.ForeignKey('collections.id'), nullable=True)
-    
+    # Use back_populates for explicit relationship management
+    variants = db.relationship('ProductVariant', back_populates='product', cascade="all, delete-orphan", lazy='joined')
     category = db.relationship('Category', back_populates='products')
     collection = db.relationship('Collection', back_populates='products')
     
+    assets = db.relationship('Asset', backref='product', lazy='dynamic')
     images = db.relationship('ProductImage', back_populates='product', cascade="all, delete-orphan")
     reviews = db.relationship('Review', back_populates='product', lazy=True, cascade="all, delete-orphan")
     inventory = db.relationship('Inventory', back_populates='product', uselist=False, cascade="all, delete-orphan")
-    variants = db.relationship('ProductVariant', back_populates='product', cascade="all, delete-orphan")
     passport = db.relationship('ProductPassport', back_populates='product', uselist=False, cascade="all, delete-orphan")
     
     stock = db.Column(db.Integer, default=0)
-
-    # --- New Fields ---
     internal_note = db.Column(db.Text, nullable=True) # Note for staff
-    
+
+    @property
+    def image_url(self):
+        """
+        Returns the URL for the product's primary image.
+        This property is automatically picked up by the ProductOutputSchema.
+        """
+        # This logic assumes the first associated asset is the primary image.
+        # You could enhance this by adding an 'is_primary' flag to your Asset model.
+        primary_asset = self.assets.first()
+        if primary_asset:
+            # Assuming your Asset model has a 'file_url' property or field
+            return primary_asset.file_url 
+        # Return a placeholder if no image is associated.
+        return "https://placehold.co/600x400/EEE/31343C?text=No+Image"
+
     # Visibility Rules
     is_b2c_visible = db.Column(db.Boolean, default=True)
     is_b2b_visible = db.Column(db.Boolean, default=True)
@@ -130,7 +142,7 @@ class ProductVariant(BaseModel, SoftDeleteMixin):
     attributes = db.Column(db.JSON, nullable=False)
 
     # Each variant has its own inventory record
-    inventory = db.relationship('Inventory', backref='variant', uselist=False, cascade="all, delete-orphan")
+    stock = db.relationship('Stock', back_populates='variant', uselist=False, cascade="all, delete-orphan")
 
     # The parent product
     product = db.relationship('Product', back_populates='variants')
