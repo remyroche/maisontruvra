@@ -6,6 +6,9 @@ from backend.models.inventory_models import Inventory
 from backend.extensions import cache, db
 from backend.services.background_task_service import BackgroundTaskService
 from backend.tasks import send_back_in_stock_email_task
+from backend.schemas import CreateProductSchema
+from marshmallow import ValidationError
+
 
 product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
 product_service = ProductService()
@@ -19,20 +22,16 @@ def create_product():
     """
     Create a new product.
     """
-    data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid or missing JSON body"), 400
+    json_data = request.get_json()
+    if not json_data:
+        # A basic check for an empty payload.
+        return jsonify({"message": "No input data provided"}), 400
 
-    sanitized_data = InputSanitizer.recursive_sanitize(data)
-
-    required_fields = ['name', 'description', 'price', 'category_id']
-    if not all(field in sanitized_data for field in required_fields):
-        missing_fields = [field for field in required_fields if field not in sanitized_data]
-        return jsonify(status="error", message=f"Missing required fields: {', '.join(missing_fields)}"), 400
+    validated_data = CreateProductSchema().load(json_data)
 
     try:
-        product = product_service.create_product(data)
-        cache.delete(product_service.get_all_products)
+        product = ProductService.create_product(validated_data)
+        cache.delete(ProductService.get_all_products)
         return jsonify(product.to_dict()), 201
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400
