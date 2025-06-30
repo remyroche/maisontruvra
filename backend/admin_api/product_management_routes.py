@@ -28,11 +28,11 @@ def create_product():
         return jsonify({"message": "No input data provided"}), 400
 
     validated_data = CreateProductSchema().load(json_data)
+    product = ProductService.create_product(validated_data)
 
     try:
-        product = ProductService.create_product(validated_data)
         cache.delete(ProductService.get_all_products)
-        return jsonify(product.to_dict()), 201
+        return jsonify(product_output_schema.dump(product)), 201
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400
     except Exception as e:
@@ -40,6 +40,16 @@ def create_product():
         return jsonify(status="error", message="An internal error occurred while creating the product."), 500
 
 
+@product_management_bp.route('/', methods=['GET'])
+@admin_required
+def get_all_products():
+    """
+    Endpoint to get a list of all products.
+    Uses the ProductOutputSchema (with many=True) for serialization.
+    """
+    products = ProductService.get_all_products()
+    return jsonify(products_output_schema.dump(products)), 200
+    
 @product_management_bp.route('/products/import', methods=['POST'])
 @roles_required ('Admin', 'Manager')
 def import_products():
@@ -132,11 +142,10 @@ def get_products():
 @cache.cached(timeout=21600)
 @get_object_or_404(Product)
 def get_product(product_id):
-    """
-    Get a single product by their ID.
-    """
-    product = g.product
-    return jsonify(product.to_dict_detailed())
+    product = ProductService.get_product_by_id(product_id)
+    # The ProductNotFoundError is handled by the global error handler.
+    return jsonify(product_output_schema.dump(product)), 200
+
 
 
 # UPDATE an existing product
