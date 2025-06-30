@@ -50,17 +50,14 @@ class EmailService:
     def send_order_confirmation_email(order_id):
         order = Order.query.get(order_id)
         if order:
-            send_email(to=order.user.email, subject="Confirmation de votre commande", template="b2c_order_confirmation.html", order=order)
+            EmailService.send_email(to=order.user.email, subject="Confirmation de votre commande", template="b2c_order_confirmation.html", order=order)
     
     @staticmethod
     def send_b2b_order_confirmation_email(order_id):
         order = B2BOrder.query.get(order_id)
         if order:
-            send_email(to=order.user.email, subject="Confirmation de votre commande B2B", template="b2b_order_confirmation.html", order=order)
-    
+            EmailService.send_email(to=order.user.email, subject="Confirmation de votre commande B2B", template="b2b_order_confirmation.html", order=order)
 
-
-    
     @staticmethod
     def send_email_immediately(recipient, subject, template_name, context):
         """
@@ -82,8 +79,7 @@ class EmailService:
             f"CELERY WORKER: Email to {recipient} sent successfully.",
             "EmailService"
         )
-              
-
+            
     # --- B2C & General User Emails ---
     @staticmethod
     def send_verification_email(user, token):
@@ -149,10 +145,9 @@ class EmailService:
             template="b2b_newsletter_confirmation.html"
         )
 
-    
     # --- Order Emails (B2C & B2B) ---
     @staticmethod
-    def send_order_confirmation_email(order):
+    def send_order_confirmation(order):
         """Sends an order confirmation. Differentiates between B2C and B2B."""
         if order.b2b_account_id:
             user = order.b2b_account.primary_user
@@ -163,8 +158,7 @@ class EmailService:
             template = "b2c_order_confirmation.html"
             subject = f"Votre commande Maison Truvrā n°{order.id} est confirmée"
         
-        EmailService.send_email(subject=subject, recipients=[user.email], template=template, order=order)
-
+        EmailService.send_email(subject=subject, to=user.email, template=template, order=order)
 
     def send_order_confirmation_with_invoice(self, user, order, invoice_pdf_bytes):
         """
@@ -190,7 +184,6 @@ class EmailService:
         ]
         
         self.send_email(user.email, subject, html_body, attachments=attachments)
-
     
     @staticmethod
     def send_order_shipped_email(order, tracking_link, tracking_number):
@@ -268,4 +261,3 @@ class EmailService:
             ip_address=ip_address,
             now=datetime.utcnow()
         )
-
