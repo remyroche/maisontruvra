@@ -59,6 +59,31 @@ class Permissions:
         MANAGE_INVOICES, VIEW_AUDIT_LOGS
     ]
 
+def require_b2b_user(f):
+    """
+    A decorator to ensure the current user is a logged-in B2B user.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in g or not g.user:
+            abort(401, description="Authentication required.")
+        if not hasattr(g.user, 'is_b2b') or not g.user.is_b2b:
+            abort(403, description="Access denied. B2B account required.")
+        return f(*args, **kwargs)
+    return decorated_function
+
+def require_b2c_user(f):
+    """
+    A decorator to ensure the current user is a logged-in B2C user.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in g or not g.user:
+            abort(401, description="Authentication required.")
+        if hasattr(g.user, 'is_b2b') and g.user.is_b2b:
+            abort(403, description="Access denied. This area is for B2C users.")
+        return f(*args, **kwargs)
+    return decorated_function
 
 def get_object_or_404(model):
     """
@@ -93,21 +118,12 @@ def api_resource_handler(model, schema=None, role_required=None, action_log=None
     """
     A comprehensive decorator that handles role checks, object fetching,
     input validation, and activity logging for API resource routes.
-    
-    - role_required: (Optional) Enforces user must have this role.
-    - check_ownership: (Optional) Enforces that g.user.id matches the resource's user_id.
+    check_ownership: (Optional) Enforces that g.user.id matches the resource's user_id.
     """
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # 1. Authentication & Authorization (only if a role is specified)
-            if role_required:
-                if 'user' not in g or not g.user:
-                    abort(401, description="Authentication required for this action.")
-                if role_required not in [role.name for role in g.user.roles]:
-                    abort(403, description=f"You do not have permission to perform this action. Requires '{role_required}' role.")
-
-            # 2. Fetch the object (reusing get_object_or_404 logic)
+            # 1. Fetch the object (reusing get_object_or_404 logic)
             object_id_key = f"{model.__name__.lower()}_id"
             if object_id_key not in kwargs and 'id' in kwargs:
                 object_id_key = 'id'
@@ -120,14 +136,14 @@ def api_resource_handler(model, schema=None, role_required=None, action_log=None
                     abort(404, description=f"{model.__name__} with ID {obj_id} not found.")
                 setattr(g, model.__name__.lower(), target_object)
 
-            # 3. Ownership Check (only if requested)
+            # 2. Ownership Check (only if requested)
             if check_ownership and target_object:
                 if 'user' not in g or not g.user:
                     abort(401, description="Authentication required to check resource ownership.")
                 if not hasattr(target_object, 'user_id') or target_object.user_id != g.user.id:
                     abort(403, description="You do not have permission to access this resource.")
 
-            # 4. Input Validation (for POST/PUT)
+            # 3. Input Validation (for POST/PUT)
             if request.method in ['POST', 'PUT']:
                 if not schema:
                     abort(500, description="A schema must be provided for validation on POST/PUT requests.")
@@ -139,7 +155,7 @@ def api_resource_handler(model, schema=None, role_required=None, action_log=None
             # Execute the actual route function
             response = f(*args, **kwargs)
 
-            # 5. Activity Logging (if action_log is provided and user is authenticated)
+            # 4. Activity Logging (if action_log is provided and user is authenticated)
             if action_log and (200 <= response.status_code < 300) and 'user' in g and g.user:
                 audit_log_service.log_activity(
                     user_id=g.user.id,
