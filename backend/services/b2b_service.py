@@ -5,14 +5,15 @@ from decimal import Decimal
 from flask import url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
+from backend.models.enums import UserType, NotificationType
+from .exceptions import B2BAccountExistsError
 
 from ..extensions import redis_client
 from ..models import (db, B2BUser, User, Team, TeamMember, B2BInvitation, Tier,
                     Cart, Order, Product, OrderItem, Invoice)
 from ..models.enums import B2BStatus, NotificationType, UserType
 from ..services.email_service import EmailService
-from ..services.exceptions import (B2BAccountExistsError, UserNotFoundError,
-                                   NotFoundException, ServiceError)
+from ..services.exceptions import (UserNotFoundError, NotFoundException, ServiceError)
 from ..services.notification_service import NotificationService
 from .monitoring_service import MonitoringService
 
