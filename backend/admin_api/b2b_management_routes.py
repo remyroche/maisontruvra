@@ -1,16 +1,18 @@
 from flask import Blueprint, request, jsonify
 from backend.services.b2b_service import B2BService
 from backend.services.exceptions import NotFoundException
-from backend.utils.decorators import admin_required
+from backend.utils.decorators import staff_required, roles_required, permissions_required
 from backend.models.enums import B2BStatus
 from decimal import Decimal
+
+
 
 b2b_management_bp = Blueprint('b2b_management_api', __name__, url_prefix='/admin/api/b2b')
 
 # --- B2B Account Management ---
 
 @b2b_management_bp.route('/', methods=['GET'])
-@admin_required
+@roles_required ('Admin', 'Manager', 'Support')
 def get_b2b_accounts():
     """Returns a list of all B2B accounts with their status and tier."""
     b2b_users = B2BService.get_all_b2b_users_with_details()
@@ -27,7 +29,7 @@ def get_b2b_accounts():
     return jsonify(accounts_data), 200
 
 @b2b_management_bp.route('/<int:b2b_user_id>/status', methods=['PUT'])
-@admin_required
+@roles_required ('Admin', 'Manager', 'Support')
 def update_b2b_account_status(b2b_user_id):
     """
     Updates a B2B account's status.
@@ -56,7 +58,7 @@ def update_b2b_account_status(b2b_user_id):
 # --- Tier Management ---
 
 @b2b_management_bp.route('/tiers', methods=['POST'])
-@admin_required
+@roles_required ('Admin', 'Manager')
 def create_tier():
     """Creates a new B2B pricing tier."""
     data = request.get_json()
@@ -74,7 +76,7 @@ def create_tier():
         return jsonify({'message': f'An error occurred: {str(e)}'}), 500
 
 @b2b_management_bp.route('/tiers', methods=['GET'])
-@admin_required
+@roles_required ('Admin', 'Manager', 'Support')
 def get_all_tiers():
     """Retrieves all B2B pricing tiers."""
     tiers = B2BService.get_all_tiers()
@@ -86,7 +88,7 @@ def get_all_tiers():
     } for tier in tiers]), 200
 
 @b2b_management_bp.route('/tiers/<int:tier_id>', methods=['PUT'])
-@admin_required
+@roles_required ('Admin', 'Manager')
 def update_tier(tier_id):
     """Updates an existing B2B pricing tier."""
     data = request.get_json()
@@ -104,7 +106,7 @@ def update_tier(tier_id):
         return jsonify({'message': f'An error occurred: {str(e)}'}), 500
 
 @b2b_management_bp.route('/users/<int:b2b_user_id>/assign-tier', methods=['POST'])
-@admin_required
+@roles_required ('Admin', 'Manager', 'Support')
 def assign_tier_to_user(b2b_user_id):
     """Assigns a tier to a B2B user."""
     data = request.get_json()
