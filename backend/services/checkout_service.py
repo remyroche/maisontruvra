@@ -21,9 +21,65 @@ from backend.tasks import (
 )
 
 class CheckoutService:
-    """
-    Handles business logic related to the checkout process.
-    """
+    @staticmethod
+    def create_order_from_cart(user_id: int, shipping_address_id: int, billing_address_id: int, payment_method: str, payment_token: str) -> Order:
+        """
+        Creates an order from the user's cart. Handles both B2B and B2C users.
+        """
+        user = db.session.get(User, user_id)
+        if not user:
+            raise NotFoundException("User not found.")
+
+        if user.user_type == UserType.B2B:
+            # Use the dedicated B2B order creation which applies tier pricing
+            return B2BService.create_b2b_order(user_id, shipping_address_id, billing_address_id)
+
+        # B2C order creation logic
+        cart_data = CartService.get_cart(user_id)
+        if not cart_data or not cart_data['items_details']:
+            raise ServiceError("Cannot create an order from an empty cart.")
+        
+        cart = cart_data['cart']
+        
+        # Here you would typically process payment with the payment_token
+        # For now, we'll assume payment is successful
+        
+        new_order = Order(
+            user_id=user_id,
+            total_cost=cart_data['total'],
+            status=OrderStatus.PENDING,
+            shipping_address_id=shipping_address_id,
+            billing_address_id=billing_address_id,
+            payment_method=payment_method,
+            user_type=UserType.B2C
+        )
+        
+        for item_detail in cart_data['items_details']:
+            item = item_detail['item']
+            order_item = OrderItem(
+                product_id=item.product_id,
+                quantity=item.quantity,
+                price_at_purchase=item_detail['discounted_price']
+            )
+            new_order.items.append(order_item)
+            
+        db.session.add(new_order)
+
+        # Empty the cart
+        CartItem.query.filter_by(cart_id=cart.id).delete()
+        
+        db.session.commit()
+        
+        # Post-order actions
+        EmailService.send_order_confirmation_email(user.email, order_id=new_order.id)
+        NotificationService.create_notification(
+            user_id, 
+            f"Your order #{new_order.id} has been placed successfully.",
+            NotificationType.ORDER_CONFIRMATION
+        )
+
+        return new_order
+
 
     @staticmethod
     def get_user_addresses(user_id: int):
