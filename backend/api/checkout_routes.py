@@ -1,7 +1,9 @@
 # backend/api/checkout_routes.py
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from backend.services.checkout_service import CheckoutService
+from ..services.checkout_service import CheckoutService
+from ..services.discount_service import DiscountService 
+from ..utils.decorators import admin_required, roles_required
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.exceptions import NotFoundException, ValidationException
 from flask_login import current_user
@@ -10,6 +12,46 @@ from backend.services.cart_service import get_cart_by_id_or_session
 from backend.models.enums import UserType
 
 checkout_bp = Blueprint('checkout_bp', __name__, url_prefix='/api')
+checkout_service = CheckoutService()
+discount_service = DiscountService()
+
+@checkout_bp.route('/session', methods=['GET'])
+def get_checkout_session():
+    """
+    Gets all necessary data for the checkout page, now including available discounts.
+    """
+    user = g.get('user', None)
+    checkout_data = checkout_service.get_checkout_data(user)
+    
+    # --- New Addition: Get available discounts for the logged-in user ---
+    if user:
+        checkout_data['available_discounts'] = discount_service.get_available_discounts_for_user(user)
+    else:
+        checkout_data['available_discounts'] = []
+    
+    return jsonify(checkout_data)
+
+@checkout_bp.route('/apply-discount', methods=['POST'])
+@roles_required('Admin', 'Manager')
+def apply_discount():
+    """Endpoint for the user to apply a discount code to their cart."""
+    user = g.get('user')
+    if not user:
+        return jsonify({"error": "You must be logged in to apply a discount."}), 401
+        
+    data = request.get_json()
+    code = data.get('code')
+    
+    cart = checkout_service.get_user_cart(user.id) # Assuming a method to get cart
+    if not cart:
+        return jsonify({"error": "Cart not found."}), 404
+
+    try:
+        result = discount_service.apply_discount_code(cart, user, code)
+        return jsonify(result)
+    except DiscountInvalidException as e:
+        return jsonify({"error": str(e)}), 400
+
 
 @checkout_bp.route('/', methods=['POST'])
 def checkout():
