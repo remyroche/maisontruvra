@@ -1,101 +1,60 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request, jsonify
 from backend.services.b2b_service import B2BService
-from backend.utils.decorators import staff_required, roles_required, permissions_required
-from backend.models.enums import B2BRequestStatus
-from backend.services.b2b_service import B2BService
-from backend.services.exceptions import B2BAccountExistsError, UserNotFoundError, NotFoundException
+from backend.services.exceptions import NotFoundException
+from backend.utils.decorators import admin_required
+from backend.models.enums import B2BStatus
+from decimal import Decimal
 
+b2b_management_bp = Blueprint('b2b_management_api', __name__, url_prefix='/admin/api/b2b')
 
-b2b_management_bp = Blueprint('b2b_management', __name__, url_prefix='/api/admin/b2b')
+# --- B2B Account Management ---
 
-@b2b_management_bp.route('/accounts', methods=['GET'])
-@roles_required ('Admin', 'Manager', 'Support')
+@b2b_management_bp.route('/', methods=['GET'])
+@admin_required
 def get_b2b_accounts():
     """Returns a list of all B2B accounts with their status and tier."""
-    # This needs to be implemented to fetch all B2B users and their tiers
-    b2b_users = B2BService.get_all_b2b_users_with_details() # Assumes a method in B2BService
-    return jsonify([user.to_dict() for user in b2b_users]), 200
+    b2b_users = B2BService.get_all_b2b_users_with_details()
+    accounts_data = []
+    for b2b_user in b2b_users:
+        accounts_data.append({
+            'b2b_user_id': b2b_user.id,
+            'company_name': b2b_user.company_name,
+            'user_email': b2b_user.user.email if b2b_user.user else 'N/A',
+            'status': b2b_user.status.value if b2b_user.status else 'N/A',
+            'tier_name': b2b_user.tier.name if b2b_user.tier else 'N/A',
+            'tier_id': b2b_user.tier_id
+        })
+    return jsonify(accounts_data), 200
 
-
-@b2b_management_bp.route('/accounts/<int:account_id>/approve', methods=['PUT'])
-@roles_required ('Admin', 'Manager', 'Support')
-def approve_b2b_account(b2b_user_id):
-    """Approves a B2B account."""
+@b2b_management_bp.route('/<int:b2b_user_id>/status', methods=['PUT'])
+@admin_required
+def update_b2b_account_status(b2b_user_id):
+    """
+    Updates a B2B account's status.
+    Accepts a JSON body with a "status" key (e.g., "approved", "rejected").
+    """
+    data = request.get_json()
+    new_status_str = data.get('status')
+    if not new_status_str:
+        return jsonify({'message': 'Status is required'}), 400
+    
     try:
-        b2b_user = B2BService.approve_b2b_account(b2b_user_id)
-        if not b2b_user:
-            return jsonify({'message': 'B2B account not found'}), 404
-        return jsonify({'message': 'B2B account approved successfully'}), 200
+        # Validate and convert string to B2BStatus enum
+        new_status = B2BStatus(new_status_str.lower())
+    except ValueError:
+        valid_statuses = [s.value for s in B2BStatus]
+        return jsonify({'message': f'Invalid status. Must be one of: {valid_statuses}'}), 400
+
+    try:
+        B2BService.update_b2b_status(b2b_user_id, new_status)
+        return jsonify({'message': f'B2B account status updated to {new_status.value}'}), 200
     except NotFoundException as e:
         return jsonify({'message': str(e)}), 404
     except Exception as e:
         return jsonify({'message': f'An error occurred: {str(e)}'}), 500
-        
-@b2b_management_bp.route('/accounts/<int:account_id>', methods=['PUT'])
-@roles_required ('Admin', 'Manager', 'Support')
-def update_b2b_account(account_id):
-    """
-    Updates details of a B2B account.
-    ---
-    tags:
-      - Admin B2B Management
-    parameters:
-      - in: path
-        name: account_id
-        required: true
-        schema:
-          type: integer
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          properties:
-            status:
-              type: string
-              description: The new status for the account.
-    security:
-      - cookieAuth: []
-    responses:
-      200:
-        description: Account updated successfully.
-      404:
-        description: Account not found.
-    """
-    data = request.get_json()
-    account = B2BService.update_b2b_account(account_id, data)
-    if not account:
-        return jsonify({"error": "Account not found"}), 404
-    return jsonify(account.to_dict())
 
-@b2b_management_bp.route('/accounts/<int:account_id>', methods=['DELETE'])
-@roles_required ('Admin', 'Manager', 'Support')
-def delete_b2b_account(account_id):
-    """
-    Deletes a B2B account.
-    ---
-    tags:
-      - Admin B2B Management
-    parameters:
-      - in: path
-        name: account_id
-        required: true
-        schema:
-          type: integer
-    security:
-      - cookieAuth: []
-    responses:
-      200:
-        description: Account deleted successfully.
-      404:
-        description: Account not found.
-    """
-    if B2BService.delete_b2b_account(account_id):
-        return jsonify({"message": "Account deleted successfully"})
-    return jsonify({"error": "Account not found"}), 404
+# --- Tier Management ---
 
-
-# Tier Management
 @b2b_management_bp.route('/tiers', methods=['POST'])
 @admin_required
 def create_tier():
@@ -159,4 +118,3 @@ def assign_tier_to_user(b2b_user_id):
         return jsonify({'message': f'Tier assigned to {b2b_user.company_name} successfully'}), 200
     except Exception as e:
         return jsonify({'message': f'An error occurred: {str(e)}'}), 500
-
