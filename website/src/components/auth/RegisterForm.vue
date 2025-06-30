@@ -1,23 +1,46 @@
 <template>
-  <div class="bg-gray-50">
-    <div class="max-w-2xl mx-auto py-16 px-4 sm:py-24 sm:px-6 lg:max-w-7xl lg:px-8">
-      <div class="max-w-lg mx-auto">
-        <h1 class="text-3xl font-extrabold text-center text-gray-900">{{ $t('auth.createAccount') }}</h1>
-        <p class="mt-4 text-center text-sm text-gray-600">
-          {{ $t('auth.alreadyHaveAccount') }}
-          <router-link :to="{ name: 'Login' }" class="font-medium text-primary hover:text-primary-dark">
-            {{ $t('auth.login') }}
-          </router-link>
-        </p>
+  <div>
+    <h2 class="text-2xl font-bold leading-9 tracking-tight text-gray-900">Créer un compte</h2>
+  </div>
+  <div class="mt-10">
+    <form class="space-y-6" @submit.prevent="handleRegister">
+      <!-- Using the new generic UserDetailsForm -->
+      <UserDetailsForm v-model="form" :include-password="true" />
 
-        <div class="mt-8 bg-white p-8 shadow rounded-lg">
-          <RegisterForm />
-        </div>
+      <div>
+        <button type="submit"
+          class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+          S'inscrire
+        </button>
       </div>
-    </div>
+    </form>
   </div>
 </template>
 
 <script setup>
-import RegisterForm from '@/components/auth/RegisterForm.vue';
+import { ref } from 'vue';
+import { useUserStore } from '@/stores/user';
+import { useRouter } from 'vue-router';
+import UserDetailsForm from '@/components/forms/UserDetailsForm.vue';
+import { useNotificationStore } from '@/stores/notification';
+
+const userStore = useUserStore();
+const router = useRouter();
+const notificationStore = useNotificationStore();
+
+const form = ref({
+  firstName: '',
+  lastName: '',
+  email: '',
+  password: '',
+});
+
+const handleRegister = async () => {
+  try {
+    await userStore.register(form.value);
+    router.push({ name: 'AccountDashboard' });
+  } catch (error) {
+    notificationStore.addNotification(error.message || 'Registration failed.', 'error');
+  }
+};
 </script>
