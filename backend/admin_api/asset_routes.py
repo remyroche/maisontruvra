@@ -6,18 +6,38 @@ from backend.utils.decorators import staff_required, roles_required, permissions
 
 @admin_api_bp.route('/assets/upload', methods=['POST'])
 @roles_required('Admin', 'Manager', 'Editor')
+@limiter.limit("20 per minute") # Rate limit to prevent resource exhaustion attacks
 def upload_asset():
+    """
+    Handles file uploads from the admin panel.
+    The core security logic (MIME type validation, sanitization) is in the AssetService.
+    This endpoint enforces admin permissions and audits the action.
+    [C]RUD - Create
+    """
     if 'file' not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
     
     file = request.files['file']
-    usage_tag = request.form.get('usage_tag')
+    if file.filename == '':
+        return jsonify({"error": "No file selected for uploading"}), 400
 
     try:
-        asset = AssetService.upload_asset(file, usage_tag)
-        return jsonify(asset.to_dict()), 201
-    except ServiceError as e:
-        return jsonify({"error": e.message}), e.status_code
+        # The service layer performs all necessary validation and sanitization
+        result = AssetService.upload_asset(file, folder='products')
+        
+        # Log the successful upload action
+        AuditLogService.log_action(
+            user_id=current_user.id,
+            action='upload_asset',
+            details=f"Uploaded asset '{file.filename}'. URL: {result.get('url')}"
+        )
+        
+        # The response format provides the URL needed by the frontend editor
+        return jsonify(result), 201
+        
+    except Exception as e:
+        # Catch exceptions from the service layer (e.g., ValidationError)
+        return jsonify({"error": str(e)}), 400
 
 @admin_api_bp.route('/assets', methods=['GET'])
 @roles_required('Admin', 'Manager', 'Editor')
