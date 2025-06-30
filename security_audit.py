@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, asdict
 import logging
+import os
+import ast
 
 
 # --- CONFIGURATION ---
@@ -20,6 +22,8 @@ PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 
 BACKEND_DIR = os.path.join(PROJECT_ROOT, 'backend')
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, 'website')
+
+excluded_dirs = [".venv", "__pycache__", "node_modules", ".git", "migrations"]
 
 # Répertoires à analyser (chemins absolus).
 SCAN_DIRECTORIES = [
