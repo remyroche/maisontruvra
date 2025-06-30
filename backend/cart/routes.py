@@ -1,140 +1,169 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import get_jwt_identity, jwt_required
-from backend.services.cart_service import CartService
+from flask import current_app
+from flask_login import current_user
+from backend.models import db, Cart, CartItem, Product, User
+from backend.services.exceptions import NotFoundException, ServiceError, ValidationException
+from backend.services.b2b_service import B2BService
+from backend.services.inventory_service import InventoryService
+from backend.services.monitoring_service import MonitoringService
 from backend.utils.input_sanitizer import InputSanitizer
-from ..services.loyalty_service import LoyaltyService
-from backend.services.exceptions import NotFoundException, ValidationException
+from backend.models.enums import UserType
+from decimal import Decimal
 
-cart_bp = Blueprint('cart_bp', __name__, url_prefix='/api/cart')
+class CartService:
+    @staticmethod
+    def get_cart(user_id: int) -> dict:
+        """
+        Retrieves the user's cart. If the user is B2B, it applies tiered pricing.
+        """
+        user = db.session.get(User, user_id)
+        if not user:
+            raise NotFoundException("User not found")
 
+        if user.user_type == UserType.B2B:
+            return B2BService.get_cart_with_b2b_pricing(user_id)
 
-@cart_bp.route('/add-reward', methods=['POST'])
-@jwt_required()
-def add_reward_to_cart():
-    """Adds a redeemed loyalty reward product to the cart."""
-    user_id = get_jwt_identity()
-    data = request.get_json()
-    reward_id = data.get('reward_id')
+        # B2C cart logic
+        cart = Cart.query.filter_by(user_id=user_id).first()
+        if not cart:
+            # Optionally create a cart if it doesn't exist
+            cart = Cart(user_id=user_id)
+            db.session.add(cart)
+            db.session.commit()
 
-    try:
-        # First, redeem the points
-        success, message = LoyaltyService.redeem_exclusive_reward(user_id, reward_id)
-        if not success:
-            raise ValidationException(message)
+        subtotal = sum(item.product.price * item.quantity for item in cart.items)
         
-        # If points were successfully redeemed, add the item to the cart
-        cart = CartService.add_reward_to_cart(user_id, reward_id)
-        return jsonify(cart.to_dict())
-    except (ValidationException, NotFoundException) as e:
-        # If adding to cart fails, we should ideally refund the points.
-        # This requires careful transaction management. For now, we return an error.
-        LoyaltyService.refund_points_for_reward(user_id, reward_id) # Assumes this method exists
-        return jsonify(error=str(e)), 400
+        return {
+            'cart': cart,
+            'items_details': [{
+                'item': item,
+                'original_price': item.product.price,
+                'discounted_price': item.product.price, # No discount for B2C from tier
+                'line_total': item.product.price * item.quantity
+            } for item in cart.items],
+            'subtotal': subtotal,
+            'discount_applied': Decimal('0.00'),
+            'total': subtotal,
+            'tier_name': None
+        }
 
+    @staticmethod
+    def add_to_cart(user_id: int, product_id: int, quantity: int) -> Cart:
+        """Adds a product to the cart and reserves stock."""
+        if quantity <= 0:
+            raise ValueError("Quantity must be positive.")
 
-def get_session_id():
-    """
-    Placeholder for getting a unique session ID for anonymous users.
-    In a real app, this would likely come from a session cookie.
-    """
-    # For demonstration, we'll use a header, but a session cookie is better.
-    return request.headers.get('X-Session-ID')
-
-
-
-
-@cart_bp.route('/', methods=['GET'])
-@login_required
-def get_cart_contents():
-    """
-    Gets the contents of the user's cart, with B2B pricing applied if applicable.
-    """
-    try:
-        cart_data = CartService.get_cart(current_user.id)
-        if not cart_data:
-            return jsonify({'message': 'Cart is empty', 'items': [], 'total': 0}), 200
-
-        return jsonify({
-            'items': [{
-                'product_id': detail['item'].product.id,
-                'name': detail['item'].product.name,
-                'quantity': detail['item'].quantity,
-                'original_price': str(detail['original_price']),
-                'discounted_price': str(detail['discounted_price']),
-                'line_total': str(detail['line_total']),
-            } for detail in cart_data['items_details']],
-            'subtotal': str(cart_data['subtotal']),
-            'discount_applied': str(cart_data['discount_applied']),
-            'total': str(cart_data['total']),
-            'tier_name': cart_data['tier_name']
-        }), 200
-    except NotFoundException as e:
-        return jsonify({'message': str(e)}), 404
-
-@cart_bp.route('/add', methods=['POST'])
-@login_required
-def add_to_cart():
-    data = request.get_json()
-    product_id = data.get('product_id')
-    quantity = data.get('quantity', 1)
-    
-    if not product_id:
-        return jsonify({'message': 'Product ID is required'}), 400
+        cart = Cart.query.filter_by(user_id=user_id).first()
+        if not cart:
+            cart = Cart(user_id=user_id)
+            db.session.add(cart)
+            db.session.commit() # Commit to get cart.id
         
-    try:
-        CartService.add_to_cart(current_user.id, product_id, quantity)
-        return jsonify({'message': 'Item added to cart'}), 200
-    except NotFoundException:
-        return jsonify({'message': 'Product not found'}), 404
-    except ValueError as e:
-        return jsonify({'message': str(e)}), 400
+        product = Product.query.get_or_404(product_id)
+        
+        cart_item = CartItem.query.filter_by(cart_id=cart.id, product_id=product_id).first()
+        
+        try:
+            # Reserve stock before making changes
+            InventoryService.reserve_stock(product_id, quantity, user_id)
 
-@cart_bp.route('/remove', methods=['POST'])
-@login_required
-def remove_from_cart():
-    data = request.get_json()
-    product_id = data.get('product_id')
-
-    if not product_id:
-        return jsonify({'message': 'Product ID is required'}), 400
-
-    CartService.remove_from_cart(current_user.id, product_id)
-    return jsonify({'message': 'Item removed from cart'}), 200
-
-@cart_bp.route('/update', methods=['POST'])
-@login_required
-def update_cart_item():
-    data = request.get_json()
-    product_id = data.get('product_id')
-    quantity = data.get('quantity')
-
-    if not product_id or quantity is None:
-        return jsonify({'message': 'Product ID and quantity are required'}), 400
-
-    try:
-        CartService.update_cart_item_quantity(current_user.id, product_id, quantity)
-        return jsonify({'message': 'Cart updated'}), 200
-    except ValueError as e:
-        return jsonify({'message': str(e)}), 400
+            if cart_item:
+                cart_item.quantity += quantity
+            else:
+                price = product.price 
+                cart_item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity, price=price)
+                db.session.add(cart_item)
+            
+            db.session.commit()
+        except ServiceError as e:
+            db.session.rollback()
+            MonitoringService.log_warning(f"Failed to add to cart due to stock issue: {e.message}", "CartService")
+            raise e
+        except Exception as e:
+            db.session.rollback()
+            MonitoringService.log_error(f"Failed to add item to cart: {str(e)}", "CartService", exc_info=True)
+            raise ServiceError(f"Could not add item to cart: {str(e)}")
 
 
+        return cart
 
+    @staticmethod
+    def remove_from_cart(user_id: int, item_id: int) -> Cart:
+        """Removes an item from the cart by its ID and releases inventory."""
+        cart_item = CartItem.query.join(Cart).filter(Cart.user_id == user_id, CartItem.id == item_id).first()
+        if not cart_item:
+            raise NotFoundException("Cart item not found")
 
-@cart_bp.route('/', methods=['DELETE'])
-@jwt_required(optional=True)
-def clear_cart():
-    """
-    Clear all items from the cart.
-    """
-    user_id = get_jwt_identity()
-    session_id = get_session_id() if not user_id else None
-    if not user_id and not session_id:
-        return jsonify(status="error", message="Authentication or session ID is required."), 401
+        cart = cart_item.cart
+        
+        try:
+            # Release the reserved stock
+            InventoryService.release_stock(cart_item.product_id, cart_item.quantity, user_id)
+            
+            db.session.delete(cart_item)
+            db.session.commit()
+            
+            MonitoringService.log_info(f"Cart item removed: Item {item_id}", "CartService")
+        except Exception as e:
+            db.session.rollback()
+            MonitoringService.log_error(f"Failed to remove cart item {item_id}: {str(e)}", "CartService", exc_info=True)
+            raise ServiceError(f"Failed to remove cart item: {str(e)}")
 
-    try:
-        CartService.clear_cart(user_id=user_id, session_id=session_id)
-        return jsonify(status="success", message="Cart cleared successfully."), 200
-    except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An error occurred while clearing the cart."), 500
+        return cart
 
+    @staticmethod
+    def update_cart_item(user_id: int, item_id: int, update_data: dict) -> Cart:
+        """Update cart item quantity with inventory reservation adjustments."""
+        update_data = InputSanitizer.sanitize_json(update_data)
+        
+        cart_item = CartItem.query.join(Cart).filter(Cart.user_id == user_id, CartItem.id == item_id).first()
+        if not cart_item:
+            raise NotFoundException("Cart item not found")
+        
+        if 'quantity' not in update_data:
+            raise ValidationException("Quantity is required")
+            
+        try:
+            new_quantity = int(update_data['quantity'])
+        except (ValueError, TypeError):
+            raise ValidationException("Quantity must be a valid number")
+
+        if new_quantity <= 0:
+            return CartService.remove_from_cart(user_id, item_id)
+
+        old_quantity = cart_item.quantity
+        quantity_diff = new_quantity - old_quantity
+
+        if quantity_diff == 0:
+            return cart_item.cart
+
+        try:
+            # Adjust inventory reservation
+            if quantity_diff > 0:
+                InventoryService.reserve_stock(cart_item.product_id, quantity_diff, user_id)
+            elif quantity_diff < 0:
+                InventoryService.release_stock(cart_item.product_id, -quantity_diff, user_id)
+
+            # Update item quantity in cart
+            cart_item.quantity = new_quantity
+            db.session.commit()
+            MonitoringService.log_info(
+                f"Cart item updated: Item {item_id}, New quantity {new_quantity}",
+                "CartService"
+            )
+            return cart_item.cart
+
+        except ServiceError as e:
+            db.session.rollback()
+            MonitoringService.log_warning(
+                f"Failed to update cart item {item_id} due to stock issue: {e.message}",
+                "CartService"
+            )
+            raise e
+        except Exception as e:
+            db.session.rollback()
+            MonitoringService.log_error(
+                f"Failed to update cart item {item_id}: {str(e)}",
+                "CartService",
+                exc_info=True
+            )
+            raise ServiceError(f"Failed to update cart item: {str(e)}")
