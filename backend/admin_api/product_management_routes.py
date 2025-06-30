@@ -1,5 +1,4 @@
 from flask import Blueprint, request, jsonify
-from backend.services.product_service import ProductService
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import staff_required, roles_required, permissions_required, get_object_or_404
 from backend.models.inventory_models import Inventory
@@ -8,6 +7,8 @@ from backend.services.background_task_service import BackgroundTaskService
 from backend.tasks import send_back_in_stock_email_task
 from backend.schemas import CreateProductSchema
 from marshmallow import ValidationError
+from backend.schemas import CreateProductSchema, CreateProductInputSchema, ProductOutputSchema
+
 
 
 product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
