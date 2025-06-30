@@ -11,6 +11,34 @@ from backend.schemas import OrderSchema
 
 orders_bp = Blueprint('orders_bp', __name__, url_prefix='/api/orders')
 
+@orders_bp.route('/<int:order_id>', methods=['GET'])
+@login_required
+def get_order_details(order_id):
+    """
+    Get details for a specific order.
+    This endpoint is now protected against IDOR by filtering on the current_user's ID.
+    """
+    # By filtering on both order_id and current_user.id, we ensure
+    # users can only see their own orders. An attacker cannot guess order IDs
+    # to view data belonging to other users.
+    order = Order.query.filter_by(id=order_id, user_id=current_user.id).first()
+    
+    if not order:
+        return jsonify({"error": "Order not found or you do not have permission to view it."}), 404
+        
+    # Assuming the Order model has a method to serialize its data
+    return jsonify(order.to_dict())
+
+@orders_bp.route('/', methods=['GET'])
+@login_required
+def get_user_orders():
+    """
+    Get all orders for the currently logged-in user.
+    """
+    orders = Order.query.filter_by(user_id=current_user.id).order_by(Order.created_at.desc()).all()
+    return jsonify([order.to_dict() for order in orders])
+
+
 def get_session_id():
     """
     Placeholder for getting a unique session ID for anonymous users.
