@@ -14,56 +14,91 @@ from backend.utils.input_sanitizer import InputSanitizer
 from decimal import Decimal
 from flask_limiter import Limiter
 from backend.middleware import RBACService
-from backend.extensions import limiter
+from backend.utils.decorators import admin_required, roles_required
+from backend.services.exceptions import UserAlreadyExistsError
+from marshmallow import ValidationError
+from backend.schemas import AdminUserUpdateSchema, UserRegistrationSchema
+
 
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger('security')
 
 user_management_bp = Blueprint('user_management', __name__)
 
-@user_management_bp.route('/users', methods=['GET'])
+
+
+
+
+@user_management_bp.route('/<int:user_id>', methods=['GET'])
 @roles_required ('Admin', 'Manager')
-@sanitize_request_data
-@limiter.limit("30 per minute")
-def get_users():
-    """Get paginated list of users with proper N+1 optimization."""
+def get_user(user_id):
+    user_service = UserService()
+    user = user_service.get_user_profile(user_id)
+    return jsonify(user)
+
+
+@user_management_bp.route('/<int:user_id>', methods=['PUT'])
+@roles_required ('Admin', 'Manager')
+def update_user(user_id):
+    """ Admin endpoint to update a user. """
+    schema = AdminUserUpdateSchema()
     try:
-        # Sanitized request args are already available due to middleware
-        page = int(request.args.get('page', 1))
-        per_page = min(int(request.args.get('per_page', 20)), 100)  # Max 100 per page
-        include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'
+        data = schema.load(request.json, partial=True)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
 
-        filters = {}
-        if request.args.get('role'):
-            filters['role'] = request.args.get('role')
-        if request.args.get('is_active'):
-            filters['is_active'] = request.args.get('is_active').lower() == 'true'
-        if request.args.get('email'):
-            filters['email'] = request.args.get('email')
-
-        result = UserService.get_all_users_paginated(page, per_page, filters, include_deleted)
-
-        # Log admin action
-        logger.info({
-            'event': 'ADMIN_VIEW_USERS',
-            'admin_id': g.user['id'],
-            'filters': filters,
-            'request_id': getattr(g, 'request_id', 'unknown')
-        })
-
-        return jsonify({
-            'users': [user.to_dict(context='admin') for user in result.items],
-            'total': result.total,
-            'pages': result.pages,
-            'current_page': result.page,
-            'per_page': result.per_page
-        })
-
-    except ValidationException as e:
-        return jsonify({'error': str(e)}), 400
+    user_service = UserService()
+    try:
+        updated_user = user_service.admin_update_user(user_id, data)
+        if not updated_user:
+            return jsonify({"error": "User not found."}), 404
+        return jsonify({"message": "User updated successfully.", "user": updated_user.to_dict()})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409
     except Exception as e:
-        logger.error(f"Error fetching users: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({"error": "Failed to update user."}), 500
+
+@user_management_bp.route('/', methods=['POST'])
+@roles_required ('Admin', 'Manager')
+def create_user():
+    """ Admin endpoint to create a new user. """
+    schema = UserRegistrationSchema()
+    try:
+        data = schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+    
+    user_service = UserService()
+    try:
+        user = user_service.admin_create_user(data)
+        return jsonify({"message": "User created successfully", "user": user.to_dict()}), 201
+    except UserAlreadyExistsError as e:
+        return jsonify({"error": str(e)}), 409
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+    @staticmethod
+    def get_all_users_paginated(page, per_page, filters=None):
+        """
+        Retrieves a paginated list of users with filtering and sorting.
+        Optimized to prevent N+1 queries for roles.
+        """
+        query = User.query.options(joinedload(User.roles))
+
+        if filters:
+            if filters.get('role'):
+                query = query.join(User.roles).filter(Role.name == filters['role'])
+            if filters.get('is_active') is not None:
+                query = query.filter(User.is_active == filters['is_active'])
+            if filters.get('email'):
+                query = query.filter(User.email.ilike(f"%{filters['email']}%"))
+
+        # Order by ID for consistent pagination results
+        query = query.order_by(User.id.desc())
+
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        return pagination
 
 @user_management_bp.route('/users/<int:user_id>', methods=['GET'])
 @api_resource_handler(User, check_ownership=False)
