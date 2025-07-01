@@ -10,11 +10,14 @@ from datetime import datetime
 from ..services.exceptions import DiscountInvalidException
 from backend.utils.input_sanitizer import sanitize_plaintext
 
-from backend.models.discount_models import Discount
 from backend.database import db
 from backend.utils.input_sanitizer import sanitize_input
 from flask import current_app
 
+from backend.models import db, Discount, Order
+from sqlalchemy.exc import SQLAlchemyError
+from backend.database import db_session as session
+from datetime import datetime
 
 CACHE_TTL_SECONDS = 600
 
@@ -22,6 +25,9 @@ class DiscountService:
     """
     This service handles all pricing and discount logic for all users (B2C and B2B).
     """
+
+    def __init__(self, logger):
+        self.logger = logger
 
     # --- Tier Management (Now for all users) ---
     
@@ -36,33 +42,89 @@ class DiscountService:
         db.session.commit()
         return new_tier
 
-    @staticmethod
-    def create_discount(data):
-        """ Creates a discount with a sanitized code. """
-        sanitized_code = sanitize_input(data['code']).upper()
-        
-        if Discount.query.filter_by(code=sanitized_code).first():
-            raise ValueError("A discount with this code already exists.")
 
-        new_discount = Discount(
-            code=sanitized_code,
-            discount_type=data['discount_type'],
-            value=data['value'],
-            expires_at=data.get('expires_at'),
-            max_uses=data.get('max_uses'),
-            min_purchase_amount=data.get('min_purchase_amount')
-        )
-        db.session.add(new_discount)
-        db.session.commit()
-        current_app.logger.info(f"New discount created: {sanitized_code}")
-        return new_discount
+    def create_discount(self, discount_data):
+        """Creates a new discount."""
+        try:
+            discount = Discount(**discount_data)
+            session.add(discount)
+            session.commit()
+            self.logger.info(f"Discount '{discount.code}' created successfully.")
+            return discount
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Error creating discount: {e}")
+            raise
 
-
-    @staticmethod
-    def get_discount_by_code(code):
+    def get_discount_by_code(self, code):
         """Retrieves a discount by its code."""
-        sanitized_code = sanitize_plaintext(code).upper()
-        return Discount.query.filter_by(code=sanitized_code).first()
+        return session.query(Discount).filter_by(code=code).first()
+
+    def get_all_discounts(self):
+        """Retrieves all discounts."""
+        return session.query(Discount).all()
+
+    def is_discount_valid(self, discount):
+        """Checks if a discount is active, not expired, and has uses left."""
+        if not discount.is_active:
+            return False
+        if discount.expires_at and discount.expires_at < datetime.utcnow():
+            return False
+        if discount.max_uses is not None and discount.times_used >= discount.max_uses:
+            return False
+        return True
+
+    def record_discount_usage(self, discount_id):
+        """
+        Increments the usage count for a given discount.
+        This should be called after a successful order placement.
+        """
+        try:
+            # Lock the row for update to prevent race conditions
+            discount = session.query(Discount).with_for_update().filter_by(id=discount_id).first()
+            
+            if discount and discount.max_uses is not None:
+                discount.times_used = (discount.times_used or 0) + 1
+                if discount.times_used > discount.max_uses:
+                    self.logger.warning(f"Discount {discount_id} usage has now exceeded its max limit.")
+                session.commit()
+                self.logger.info(f"Usage recorded for discount {discount_id}.")
+            
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Error recording usage for discount {discount_id}: {e}")
+            raise
+
+    def update_discount(self, discount_id, update_data):
+        """Updates an existing discount."""
+        try:
+            discount = session.query(Discount).get(discount_id)
+            if discount:
+                for key, value in update_data.items():
+                    setattr(discount, key, value)
+                session.commit()
+                self.logger.info(f"Discount {discount_id} updated.")
+                return discount
+            return None
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Error updating discount {discount_id}: {e}")
+            raise
+
+    def delete_discount(self, discount_id):
+        """Deletes a discount."""
+        try:
+            discount = session.query(Discount).get(discount_id)
+            if discount:
+                session.delete(discount)
+                session.commit()
+                self.logger.info(f"Discount {discount_id} deleted.")
+                return True
+            return False
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Error deleting discount {discount_id}: {e}")
+            raise
 
     
     @staticmethod
@@ -171,113 +233,4 @@ class DiscountService:
         db.session.commit()
         return user
 
-    # --- Pricing and Order Logic ---
 
-    @staticmethod
-    def get_price(user: User, product: Product) -> Decimal:
-        """
-        Calculates the price for a product for any given user.
-        Priority:
-        1. User's custom discount (if spend limit not exceeded).
-        2. User's tier-based discount.
-        3. Standard product price.
-        """
-        # 1. Check for custom discount
-        if (user.custom_discount_percentage is not None and 
-            user.monthly_spend_limit is not None):
-            
-            if user.current_monthly_spend < user.monthly_spend_limit:
-                discount_multiplier = Decimal('1') - (user.custom_discount_percentage / Decimal('100'))
-                return (product.price * discount_multiplier).quantize(Decimal("0.01"))
-
-        # 2. Fallback to tier-based discount
-        if user.tier_id:
-            cache_key = f"price:tier_{user.tier_id}:product_{product.id}"
-            try:
-                cached_price = redis_client.get(cache_key)
-                if cached_price:
-                    return Decimal(cached_price.decode('utf-8'))
-            except Exception as e:
-                MonitoringService.log_error(f"Redis GET error for key {cache_key}: {e}", "DiscountService", level='WARNING')
-            
-            tier = user.tier
-            if tier and tier.discount_percentage > 0:
-                discount = (product.price * tier.discount_percentage) / Decimal(100)
-                calculated_price = (product.price - discount).quantize(Decimal("0.01"))
-                try:
-                    redis_client.setex(cache_key, CACHE_TTL_SECONDS, str(calculated_price))
-                except Exception as e:
-                    MonitoringService.log_error(f"Redis SETEX error for key {cache_key}: {e}", "DiscountService", level='WARNING')
-                return calculated_price
-        
-        # 3. Standard price
-        return product.price
-
-
-    @staticmethod
-    def update_discount(self, discount_id, data):
-        """ Updates a discount with sanitized fields. """
-        discount = Discount.query.get(discount_id)
-        if not discount:
-            return None
-
-        if 'code' in data:
-            sanitized_code = sanitize_input(data['code']).upper()
-            if Discount.query.filter(Discount.id != discount_id, Discount.code == sanitized_code).first():
-                 raise ValueError("A discount with this code already exists.")
-            discount.code = sanitized_code
-        
-        for field in ['discount_type', 'value', 'expires_at', 'max_uses', 'min_purchase_amount']:
-            if field in data:
-                setattr(discount, field, data[field])
-
-        db.session.commit()
-        current_app.logger.info(f"Discount {discount_id} updated.")
-        return discount
-
-
-    @staticmethod
-    def create_order(user_id: int, shipping_address_id: int, billing_address_id: int) -> Order:
-        """Creates an order and updates the user's monthly spend if applicable."""
-        user = db.session.query(User).options(joinedload(User.tier)).get(user_id)
-        if not user:
-            raise NotFoundException("User not found")
-
-        cart = Cart.query.filter_by(user_id=user_id).first()
-        if not cart or not cart.items:
-            raise ServiceError("Cannot create an order from an empty cart.", 400)
-
-        total_cost = Decimal(0)
-        order_items = []
-        
-        for item in cart.items:
-            # Use the unified get_price method
-            product_price = DiscountService.get_price(user, item.product)
-            line_total = product_price * item.quantity
-            total_cost += line_total
-            order_items.append(OrderItem(
-                product_id=item.product_id,
-                quantity=item.quantity,
-                price_at_purchase=product_price
-            ))
-
-        new_order = Order(
-            user_id=user_id,
-            total_cost=total_cost,
-            items=order_items,
-            shipping_address_id=shipping_address_id,
-            billing_address_id=billing_address_id,
-            user_type=user.user_type
-        )
-
-        # Update monthly spend for users with custom discounts
-        if user.custom_discount_percentage is not None:
-            user.current_monthly_spend += total_cost
-        
-        db.session.add(new_order)
-        CartItem.query.filter_by(cart_id=cart.id).delete()
-        db.session.commit()
-
-        MonitoringService.log_info(f"Order {new_order.id} created for user {user_id}", "DiscountService")
-        # NOTE: A scheduled monthly task should reset `current_monthly_spend`.
-        return new_order
