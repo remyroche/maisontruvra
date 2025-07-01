@@ -1,4 +1,4 @@
-from flask import Flask, request, session
+from flask import Flask, request, session, jsonify
 from celery import Celery
 from flask_talisman import Talisman
 from datetime import datetime
@@ -31,7 +31,15 @@ from .logger_and_error_handler import register_error_handlers
 from flask_login import user_logged_in, user_unauthorized
 from .utils.vite import vite_asset
 from .database import setup_database_security
- 
+
+from flask_cors import CORS
+from backend.extensions import db, migrate, login_manager
+from backend.config import Config
+from backend.database import init_db_command
+from backend.utils.vite import Vite
+import logging
+
+
 # Configure extensions that need it before app context
 login_manager.login_view = 'auth.login'
 login_manager.login_message_category = 'info'
@@ -80,9 +88,24 @@ def create_app(config_class=config.Config):
     mail.init_app(app)
     celery.config_from_object(app.config, namespace='CELERY')
     jwt.init_app(app)
+    Vite(app)
+
 
     # Setup database security options and logging
     setup_database_security(app)
+
+    # Setup logging
+    if not app.debug:
+        # In production, you might want to log to a file
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.INFO)
+        app.logger.addHandler(handler)
+
+    # User loader for Flask-Login
+    from backend.models import User
+    @login_manager.user_loader
+    def load_user(user_id):
+        return User.query.get(int(user_id))
 
     
     @app.context_processor
@@ -206,6 +229,12 @@ def create_app(config_class=config.Config):
     from .b2b.profile_routes import b2b_profile_bp
     app.register_blueprint(b2b_profile_bp, url_prefix='/api/b2b/profile')
 
+    from backend.api.b2b_routes import b2b_bp # New B2B routes
+    app.register_blueprint(b2b_bp)
+
+    from backend.api.referral_routes import referral_bp # New Referral routes
+    app.register_blueprint(referral_bp)
+
     from .b2b.invoice_routes import b2b_invoice_bp
     app.register_blueprint(b2b_invoice_bp, url_prefix='/api/b2b/invoices')
     
@@ -284,6 +313,9 @@ def create_app(config_class=config.Config):
     limiter.init_app(app)
     redis_client.init_app(app)
     socketio.init_app(app, async_mode='eventlet')
+
+    # Add a command to initialize the database
+    app.cli.add_command(init_db_command)
 
     # === JWT Blocklist Implementation ===
     # This callback checks if a JWT has been revoked.
