@@ -122,10 +122,9 @@ class QuoteService:
             self.logger.error(f"Error responding to quote {quote_id}: {e}")
             raise
 
-        def accept_quote_and_create_cart(self, quote_id, user_id):
+    def accept_quote_and_create_cart(self, quote_id, user_id):
         """
-        Allows a B2B user to accept a quote, which then creates a new cart
-        with the special pricing. This is the POS/custom cart creation flow.
+        Accepts a quote and creates a new cart with custom-priced items.
         """
         try:
             quote = self.get_quote_by_id(quote_id)
@@ -144,39 +143,29 @@ class QuoteService:
             session.flush()
 
             for item in quote.items:
-                if not item.response_price:
-                    raise ValueError(f"Cannot accept quote; item {item.product.name} has not been priced.")
+                if item.response_price is None:
+                    raise ValueError(f"Cannot accept quote; item '{item.product.name}' has not been priced by an admin.")
                 
-                # We need to create a temporary custom price for this cart.
-                # A simple way is to create a one-time discount that makes up the difference.
-                # A more robust solution might involve a `custom_price` field on CartItem.
-                # For now, we will add to cart with the special price directly.
-                # NOTE: This assumes product price can be overridden. A better model would be to
-                # link CartItem directly to the QuoteItem to preserve the negotiated price.
-                # Let's create a new Product with the custom price for this order. (Not ideal)
-                # A better approach is to add a price field to CartItem.
-                
-                # Let's assume we add a 'price' to CartItem for this purpose.
-                # (This requires a model change to CartItem)
-                
+                # Create a cart item with the custom price from the quote
                 cart_item = CartItem(
                     cart_id=cart.id,
                     product_id=item.product_id,
                     quantity=item.quantity,
-                    # This assumes CartItem has a price field to store the custom price
-                    price=item.response_price 
+                    price=item.response_price  # Using the custom price
                 )
                 session.add(cart_item)
 
             quote.status = 'accepted'
             session.commit()
-            self.logger.info(f"Quote {quote_id} accepted by user {user_id}. New cart {cart.id} created.")
+            self.logger.info(f"Quote {quote_id} accepted by user {user_id}. New cart {cart.id} created with custom pricing.")
             return cart
 
         except (SQLAlchemyError, ValueError) as e:
             session.rollback()
             self.logger.error(f"Error accepting quote {quote_id}: {e}")
             raise
+
+    
             
     def get_quote_by_id(self, quote_id):
         return session.query(Quote).options(
