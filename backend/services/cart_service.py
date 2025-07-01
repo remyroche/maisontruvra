@@ -141,91 +141,42 @@ class CartService:
         return cart
         
     @staticmethod
-    def add_to_cart(cart_data: dict):
-        """Add item to cart with validation and inventory reservation."""
-        cart_data = InputSanitizer.sanitize_json(cart_data)
-        
-        if not current_user.is_authenticated:
-            raise ServiceError("User must be authenticated", 401)
-        user_id = current_user.id
-        
-        if not cart_data.get('product_id') or not cart_data.get('quantity'):
-            raise ValidationException("product_id and quantity are required")
-            
-        product_id = cart_data['product_id']
-        try:
-            quantity = int(cart_data['quantity'])
-            if quantity <= 0:
-                raise ValidationException("Quantity must be positive")
-        except (ValueError, TypeError):
-            raise ValidationException("Quantity must be a valid number")
-
-        product = Product.query.get(product_id)
+    def add_item_to_cart(self, user_id, product_id, quantity, custom_price=None):
+        """
+        Adds an item to a user's cart. Includes ownership check for exclusive products.
+        """
+        product = session.query(Product).get(product_id)
         if not product:
-            raise NotFoundException(f"Product with ID {product_id} not found")
+            raise ProductNotFoundError("Product not found.")
 
-        # --- Reservation Logic ---
-        try:
-            InventoryService.reserve_stock(product_id, quantity, user_id=user_id)
-        except ServiceError as e:
-            MonitoringService.log_warning(
-                f"Failed to reserve stock for product {product_id} for user {user_id}: {e.message}",
-                "CartService"
-            )
-            raise e # Re-raise to inform the client of the stock issue
-        # --- End Reservation Logic ---
+        # Security Check: Ensure user has permission to order this product
+        if product.owner_id and product.owner_id != user_id:
+            self.logger.warning(f"User {user_id} tried to add exclusive product {product_id} owned by {product.owner_id}.")
+            raise PermissionError("This product is not available.")
 
-        try:
-            cart = CartService.get_cart_for_user(user_id)
-            existing_item = CartItem.query.filter_by(cart_id=cart.id, product_id=product_id).first()
-            
-            if existing_item:
-                existing_item.quantity += quantity
-            else:
-                new_item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity)
-                db.session.add(new_item)
-            
-            db.session.commit()
-            MonitoringService.log_info(
-                f"Item added to cart: User {user_id}, Product {product_id}, Quantity {quantity}",
-                "CartService"
-            )
-            return cart.to_dict() # Return the updated cart
-        except Exception as e:
-            db.session.rollback()
-            # If DB operation fails, we must release the reservation
-            InventoryService.release_stock(product_id, quantity, user_id=user_id)
-            MonitoringService.log_error(
-                f"Failed to add item to cart after reservation: {str(e)}",
-                "CartService",
-                exc_info=True
-            )
-            raise ServiceError(f"Failed to add item to cart: {str(e)}")
-
-    @staticmethod
-
-    def add_to_cart(user_id: int, product_id: int, quantity: int) -> Cart:
-        if quantity <= 0:
-            raise ValueError("Quantity must be positive.")
-
-        cart = Cart.query.filter_by(user_id=user_id).first()
+        cart = session.query(Cart).filter_by(user_id=user_id).first()
         if not cart:
             cart = Cart(user_id=user_id)
-            db.session.add(cart)
-        
-        product = Product.query.get_or_404(product_id)
-        
-        cart_item = CartItem.query.filter_by(cart_id=cart.id, product_id=product_id).first()
-        
+            session.add(cart)
+            session.flush()
+
+        # Check if item is already in cart
+        cart_item = session.query(CartItem).filter_by(cart_id=cart.id, product_id=product_id).first()
         if cart_item:
             cart_item.quantity += quantity
         else:
-            # For B2B, price is calculated on retrieval, for B2C it is the product price
-            price = product.price 
-            cart_item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity, price=price)
-            db.session.add(cart_item)
-            
-        db.session.commit()
+            cart_item = CartItem(
+                cart_id=cart.id,
+                product_id=product_id,
+                quantity=quantity,
+                price=custom_price if custom_price is not None else product.price
+            )
+            session.add(cart_item)
+        
+        session.commit()
+        self.logger.info(f"Added/updated product {product_id} in cart for user {user_id}.")
+        return cart
+
         
     def update_cart_item(item_id: int, update_data: dict):
         """Update cart item quantity with inventory reservation adjustments."""
