@@ -14,7 +14,7 @@ from backend.models.order_models import Order
 orders_bp = Blueprint('orders_bp', __name__, url_prefix='/api/orders')
 
 @orders_bp.route('/<int:order_id>', methods=['GET'])
-@api_resource_handler(Order, check_ownership=True)
+@api_resource_handler(Order, check_ownership=True) # Already using the decorator, just ensure cache_timeout=0
 @login_required
 def get_order_details(order_id):
     """
@@ -143,6 +143,5 @@ def checkout():
         return jsonify(status="error", message=str(e)), 400
     except Exception as e:
         # Log the error e
+        current_app.logger.error(f"An unexpected error occurred during checkout: {str(e)}", exc_info=True)
         return jsonify(status="error", message="An unexpected error occurred during checkout."), 500
-
-
