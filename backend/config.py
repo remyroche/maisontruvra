@@ -20,7 +20,7 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
         'sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'app.db')
-    FRONTEND_URL = os.environ.get('FRONTEND_URL') or 'https://localhost:5173'
+    FRONTEND_URL = os.environ.get('FRONTEND_URL') or 'http://localhost:5173'
 
     # Admin/staff Session Timeout Configuration
     ADMIN_INACTIVITY_TIMEOUT = timedelta(minutes=5)
@@ -86,13 +86,13 @@ class Config:
     WTF_CSRF_ENABLED = True
     
     # Base URL for generating links (like in product passports)
-    BASE_URL = os.environ.get('BASE_URL', 'https://127.0.0.1:5000')
+    BASE_URL = os.environ.get('BASE_URL', 'http://127.0.0.1:5000')
 
     # Encryption Key
     ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY') or Fernet.generate_key().decode()
     
     # Vite Development Server URL
-    VITE_DEV_SERVER = os.environ.get('VITE_DEV_SERVER', 'https://localhost:5173')
+    VITE_DEV_SERVER = os.environ.get('VITE_DEV_SERVER', 'http://localhost:5173')
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -114,6 +114,7 @@ class TestingConfig(Config):
 class ProductionConfig(Config):
     """Production configuration."""
     DEBUG = False
+    TESTING = False
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') # No default for production
     # Enforce secure cookies in production
     SESSION_COOKIE_SECURE = True
