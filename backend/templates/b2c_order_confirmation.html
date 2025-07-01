@@ -1,55 +1,61 @@
-{% extends "general_base_template.html" %}
+{% extends "b2c_base_template.html" %}
 
 {% block content %}
-<table border="0" cellpadding="0" cellspacing="0" width="100%">
-    <tr>
-        <td style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 16px; line-height: 24px;">
-            <h1 style="font-family: 'Playfair Display', Georgia, serif; color: #4A2E2A; font-size: 28px; margin: 0 0 20px 0;">Votre sélection est en préparation</h1>
-            <p style="margin: 0 0 20px 0;">Cher(e) {{ order.user.first_name }},</p>
-            <p style="margin: 0 0 30px 0;">Nous vous remercions pour votre confiance. Nos artisans préparent avec le plus grand soin votre commande n°{{ order.id }}. Chaque création est une promesse de plaisir, et nous sommes ravis que vous ayez choisi de la découvrir.</p>
-        </td>
-    </tr>
-    <tr>
-        <td>
-            <h2 style="font-size: 22px; margin: 0 0 20px 0; border-bottom: 1px solid #E0D6CC; padding-bottom: 10px;">Récapitulatif de votre commande</h2>
-            
-            {% for item in order.items %}
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 15px;">
-                <tr>
-                    <td width="80" valign="top">
-                        <img src="{{ item.product.image_url }}" alt="{{ item.product.name }}" width="70" style="border-radius: 4px;">
-                    </td>
-                    <td valign="top" style="padding-left: 15px; font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 15px;">
-                        <p style="margin: 0 0 5px 0; font-weight: bold;">{{ item.product.name }}</p>
-                        <p style="margin: 0;">Quantité : {{ item.quantity }}</p>
-                    </td>
-                    <td valign="top" align="right" style="font-family: 'Lato', Arial, sans-serif; color: #333333; font-size: 15px; font-weight: bold;">
-                        {{ "%.2f"|format(item.price * item.quantity) }} €
-                    </td>
-                </tr>
-            </table>
-            {% endfor %}
+<p>Dear {{ user.first_name }},</p>
+<p>Thank you for your order! We've received it and are getting it ready for shipment. You can find the details of your purchase below.</p>
 
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 20px; border-top: 1px solid #E0D6CC; padding-top: 20px;">
-                <tr>
-                    <td style="font-family: 'Lato', Arial, sans-serif; font-size: 15px;">Sous-total</td>
-                    <td align="right" style="font-family: 'Lato', Arial, sans-serif; font-size: 15px;">{{ "%.2f"|format(order.subtotal) }} €</td>
-                </tr>
-                <tr>
-                    <td style="padding-top: 5px; font-family: 'Lato', Arial, sans-serif; font-size: 15px;">Livraison</td>
-                    <td align="right" style="padding-top: 5px; font-family: 'Lato', Arial, sans-serif; font-size: 15px;">{{ "%.2f"|format(order.shipping_cost) }} €</td>
-                </tr>
-                 <tr>
-                    <td style="padding-top: 15px; font-family: 'Lato', Arial, sans-serif; font-size: 16px; font-weight: bold;">Total</td>
-                    <td align="right" style="padding-top: 15px; font-family: 'Lato', Arial, sans-serif; font-size: 16px; font-weight: bold; color: #4A2E2A;">{{ "%.2f"|format(order.total) }} €</td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-    <tr>
-        <td style="padding: 40px 0 20px 0;">
-            <p style="margin: 0; font-family: 'Lato', Arial, sans-serif; font-size: 16px;">Nous vous notifierons dès que votre commande quittera nos ateliers. D'ici là, nous vous invitons à rêver à la dégustation qui vous attend.</p>
-        </td>
-    </tr>
+<h3>Order #{{ order.id }} Summary</h3>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+    <thead>
+        <tr>
+            <th style="text-align: left; padding: 8px; border-bottom: 1px solid #dddddd;">Product</th>
+            <th style="text-align: center; padding: 8px; border-bottom: 1px solid #dddddd;">Quantity</th>
+            <th style="text-align: right; padding: 8px; border-bottom: 1px solid #dddddd;">Price (TTC)</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in order.items %}
+        <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #dddddd;">{{ item.product.name }}</td>
+            <td style="text-align: center; padding: 8px; border-bottom: 1px solid #dddddd;">{{ item.quantity }}</td>
+            <td style="text-align: right; padding: 8px; border-bottom: 1px solid #dddddd;">{{ "%.2f"|format(item.price * item.quantity) }} €</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        {% if order.discount %}
+            {% set subtotal = (order.total_price + order.discount.value) if order.discount.discount_type.name == 'FIXED_AMOUNT' else (order.total_price / (1 - order.discount.value / 100)) %}
+            <tr>
+                <td colspan="2" style="text-align: right; padding: 8px; border-top: 2px solid #dddddd;">Subtotal (TTC)</td>
+                <td style="text-align: right; padding: 8px; border-top: 2px solid #dddddd;">{{ "%.2f"|format(subtotal) }} €</td>
+            </tr>
+            <tr>
+                <td colspan="2" style="text-align: right; padding: 8px;">Discount ({{ order.discount.code }})</td>
+                <td style="text-align: right; padding: 8px;">-{{ "%.2f"|format(subtotal - order.total_price) }} €</td>
+            </tr>
+        {% endif %}
+        <tr>
+            <td colspan="2" style="text-align: right; font-weight: bold; padding: 8px; border-top: 2px solid #dddddd;">Total (TTC)</td>
+            <td style="text-align: right; font-weight: bold; padding: 8px; border-top: 2px solid #dddddd;">{{ "%.2f"|format(order.total_price) }} €</td>
+        </tr>
+        <tr>
+            <td colspan="2" style="text-align: right; padding: 2px 8px; font-size: 0.9em; color: #777;">dont Total HT</td>
+            <td style="text-align: right; padding: 2px 8px; font-size: 0.9em; color: #777;">{{ "%.2f"|format(order.total_price / 1.2) }} €</td>
+        </tr>
+        <tr>
+            <td colspan="2" style="text-align: right; padding: 2px 8px; font-size: 0.9em; color: #777;">dont TVA (20%)</td>
+            <td style="text-align: right; padding: 2px 8px; font-size: 0.9em; color: #777;">{{ "%.2f"|format(order.total_price - (order.total_price / 1.2)) }} €</td>
+        </tr>
+    </tfoot>
 </table>
+
+<h3>Shipping Information</h3>
+<p>
+    {{ order.shipping_address.first_name }} {{ order.shipping_address.last_name }}<br>
+    {{ order.shipping_address.address_line_1 }}<br>
+    {% if order.shipping_address.address_line_2 %}{{ order.shipping_address.address_line_2 }}<br>{% endif %}
+    {{ order.shipping_address.city }}, {{ order.shipping_address.postal_code }}<br>
+    {{ order.shipping_address.country }}
+</p>
+<p>We'll notify you again once your order has shipped. Thank you for shopping with Maison Truvra!</p>
 {% endblock %}
