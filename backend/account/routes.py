@@ -24,6 +24,12 @@ from backend.services.dashboard_service import DashboardService
 from backend.schemas import UpdateUserSchema, UpdatePasswordSchema, AddressSchema, LanguageUpdateSchema, TwoFactorSetupSchema, TwoFactorVerifySchema
 from backend.models.address_models import Address
 
+from backend.services.auth_service import AuthService
+from backend.services.exceptions import InvalidCredentialsError
+from backend.schemas import UserProfileUpdateSchema, AddressSchema, ChangePasswordSchema
+from backend.utils.decorators import login_required_json
+
+
 
 
 account_bp = Blueprint('account_bp', __name__)
@@ -159,71 +165,8 @@ def get_order_details(order_id): # This route uses Flask-Login's current_user
     return jsonify({'error': 'Order not found'}), 404
 
 
-# GET current user's profile
-@account_bp.route('/profile', methods=['GET'])
-@jwt_required()
-@login_required
-def get_profile():
-    """
-    Get the profile information for the currently authenticated user.
-    """
-    user_id = get_jwt_identity()
-    user = user_service.get_user_by_id(user_id)
-    if not user:
-        return jsonify(status="error", message="User not found"), 404
-    
-    return jsonify(status="success", data=user.to_dict()), 200
 
-    
-# UPDATE current user's profile
-@account_bp.route('/profile', methods=['PUT'])
-@api_resource_handler(User, schema=UpdateUserSchema(), check_ownership=True)
-@jwt_required()
-@login_required
-def update_profile():
-    """
-    Update the profile information for the currently authenticated user.
-    """
-    user_id = get_jwt_identity()
-    
-    try:
-        # g.validated_data contains the validated input from the schema
-        updated_user = user_service.update_user(user_id, g.validated_data)
-        if not updated_user:
-             return jsonify(status="error", message="User not found or update failed"), 404
-        return jsonify(status="success", data=updated_user.to_dict()), 200
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An internal error occurred while updating the profile."), 500
 
-# UPDATE current user's password
-@account_bp.route('/password', methods=['PUT'])
-@api_resource_handler(User, schema=UpdatePasswordSchema(), check_ownership=True)
-@jwt_required()
-@login_required
-def update_password():
-    """
-    Update the password for the currently authenticated user.
-    Requires the old password for verification.
-    """
-    user_id = get_jwt_identity()
-
-    try:
-        user = user_service.get_user_by_id(user_id)
-        if not user or not user.check_password(g.validated_data['old_password']):
-            return jsonify({'error': 'Invalid old password'}), 400
-        user.set_password(g.validated_data['new_password'])
-        db.session.commit()
-        send_password_change_email(user)
-        return jsonify(status="success", message="Password updated successfully."), 200
-
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An internal error occurred."), 500
 
 # GET current user's order history
 @account_bp.route('/orders', methods=['GET'])
@@ -274,6 +217,55 @@ def setup_2fa():
     return jsonify(status="success", data={"qr_code": qr_code_uri, "secret": secret}), 200
 
 
+@account_bp.route('/profile', methods=['GET'])
+@login_required_json
+def get_profile():
+    user_service = UserService()
+    profile_data = user_service.get_user_profile(current_user.id)
+    return jsonify(profile_data)
+
+@account_bp.route('/profile', methods=['PUT'])
+@login_required_json
+def update_profile():
+    """ Update user profile. """
+    schema = UserProfileUpdateSchema()
+    try:
+        data = schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
+    user_service = UserService()
+    try:
+        updated_user = user_service.update_profile(current_user.id, data)
+        return jsonify({"message": "Profile updated successfully.", "user": updated_user.to_dict()})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409 # Conflict, e.g. email exists
+    except Exception as e:
+        return jsonify({"error": "Failed to update profile."}), 500
+
+@account_bp.route('/change-password', methods=['POST'])
+@login_required_json
+def change_password():
+    """ Change user's password. """
+    schema = ChangePasswordSchema()
+    try:
+        data = schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
+    auth_service = AuthService()
+    try:
+        auth_service.change_password(
+            user_id=current_user.id,
+            old_password=data['old_password'],
+            new_password=data['new_password']
+        )
+        return jsonify({"message": "Password changed successfully."}), 200
+    except InvalidCredentialsError as e:
+        return jsonify({"error": str(e)}), 401
+    except Exception as e:
+        return jsonify({"error": "An error occurred while changing password."}), 500
+
 @account_bp.route('/2fa/verify', methods=['POST'])
 @api_resource_handler(User, schema=TwoFactorVerifySchema(), check_ownership=True)
 @jwt_required()
@@ -315,43 +307,58 @@ def disable_2fa():
     else:
         return jsonify(status="error", message="Invalid 2FA token."), 400
 
-# --- NEW: Address Book Management Routes ---
 
 @account_bp.route('/addresses', methods=['GET'])
-@jwt_required()
-@login_required
+@login_required_json
 def get_addresses():
-    user_id = get_jwt_identity()
-    addresses = Address.query.filter_by(user_id=user_id).all()
+    address_service = AddressService()
+    addresses = address_service.get_user_addresses(current_user.id)
     return jsonify([address.to_dict() for address in addresses])
 
 @account_bp.route('/addresses', methods=['POST'])
-@api_resource_handler(Address, schema=AddressSchema())
-@jwt_required()
-@login_required
+@login_required_json
 def add_address():
-    user_id = get_jwt_identity()
+    """ Add a new address for the user. """
+    schema = AddressSchema()
     try:
-        new_address = address_service.add_address_for_user(user_id, g.validated_data)
-        return jsonify(status="success", data=new_address.to_dict()), 201
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400 # Catches the 4-address limit error
+        data = schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
+    address_service = AddressService()
+    try:
+        address = address_service.create_address(user_id=current_user.id, data=data)
+        return jsonify({"message": "Address added successfully.", "address": address.to_dict()}), 201
+    except Exception as e:
+        return jsonify({"error": "Failed to add address."}), 500
 
 @account_bp.route('/addresses/<int:address_id>', methods=['PUT'])
-@api_resource_handler(Address, schema=AddressSchema(), check_ownership=True)
-@jwt_required()
-@login_required
+@login_required_json
 def update_address(address_id):
-    user_id = get_jwt_identity()
-    updated_address = address_service.update_address(address_id, user_id, g.validated_data)
-    return jsonify(status="success", data=updated_address.to_dict()), 200
+    """ Update an existing address. """
+    schema = AddressSchema()
+    try:
+        data = schema.load(request.json, partial=True)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
+    address_service = AddressService()
+    try:
+        address = address_service.update_address(address_id=address_id, user_id=current_user.id, data=data)
+        if not address:
+            return jsonify({"error": "Address not found or you don't have permission to edit it."}), 404
+        return jsonify({"message": "Address updated successfully.", "address": address.to_dict()})
+    except Exception as e:
+        return jsonify({"error": "Failed to update address."}), 500
 
 @account_bp.route('/addresses/<int:address_id>', methods=['DELETE'])
-@api_resource_handler(Address, check_ownership=True)
-@jwt_required()
-@login_required
+@login_required_json
 def delete_address(address_id):
-    user_id = get_jwt_identity()
-    address_service.delete_address(address_id, user_id)
-    return jsonify(status="success", message="Address deleted successfully."), 200
-
+    address_service = AddressService()
+    try:
+        success = address_service.delete_address(address_id=address_id, user_id=current_user.id)
+        if not success:
+            return jsonify({"error": "Address not found or you don't have permission to delete it."}), 404
+        return jsonify({"message": "Address deleted successfully."})
+    except Exception as e:
+        return jsonify({"error": "Failed to delete address."}), 500
