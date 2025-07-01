@@ -23,13 +23,13 @@ from ..services.exceptions import ValidationError
 from backend.services.exceptions import UserAlreadyExistsError, InvalidCredentialsError
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
 from backend.utils.input_sanitizer import sanitize_input
-from backend.models import db, User, Role, UserRole
-from backend.services.email_service import EmailService
-from backend.services.user_service import UserService
 from backend.utils.encryption import hash_password, check_password
 from sqlalchemy.exc import SQLAlchemyError
 from backend.database import db_session as session
-
+from backend.models import db, User, Role, UserRole
+from backend.services.email_service import EmailService
+from backend.services.user_service import UserService
+from backend.services.referral_service import ReferralService
 
 
 # Instantiate the PasswordHasher. It's thread-safe and can be shared.
@@ -41,11 +41,13 @@ class AuthService:
         self.logger = logger
         self.email_service = EmailService(logger)
         self.user_service = UserService(logger)
+        self.referral_service = ReferralService(logger)
         self.serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
 
     def register_user(self, user_data):
         """
         Registers a new user, hashes their password, and sends a verification email.
+        Also processes any referral code used.
         """
         try:
             if session.query(User).filter_by(email=user_data['email']).first():
@@ -57,10 +59,14 @@ class AuthService:
                 password_hash=hashed_password,
                 first_name=user_data.get('first_name'),
                 last_name=user_data.get('last_name'),
-                is_active=False  # User is inactive until email is verified
+                is_active=False
             )
             session.add(user)
             session.commit()
+
+            # Process referral code if provided
+            if user_data.get('referral_code'):
+                self.referral_service.process_new_user_referral(user, user_data['referral_code'])
 
             # Assign default role
             default_role = session.query(Role).filter_by(name='user').first()
