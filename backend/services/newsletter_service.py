@@ -4,12 +4,72 @@ Newsletter Service for managing newsletter subscriptions and campaigns.
 import logging
 from backend.database import db
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
+from backend.models import db, NewsletterSubscription
+from backend.services.email_service import EmailService
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from backend.database import db_session as session
+
 
 logger = logging.getLogger(__name__)
 
 class NewsletterService:
     """Service for managing newsletter subscriptions and campaigns."""
-    
+    def __init__(self, logger):
+        self.logger = logger
+        self.email_service = EmailService(logger)
+
+    def subscribe(self, email, source='b2c'):
+        """
+        Subscribes an email to the newsletter.
+        """
+        try:
+            # Check if already subscribed
+            if session.query(NewsletterSubscription).filter_by(email=email).first():
+                self.logger.warning(f"Email {email} is already subscribed to the newsletter.")
+                return None, "Email is already subscribed."
+
+            subscription = NewsletterSubscription(email=email, source=source)
+            session.add(subscription)
+            session.commit()
+            
+            # Send confirmation email
+            subject = "Subscription Confirmed"
+            template = "b2c_newsletter_confirmation" if source == 'b2c' else "b2b_newsletter_confirmation"
+            context = {"email": email}
+            self.email_service.send_email(email, subject, template, context)
+
+            self.logger.info(f"Email {email} subscribed to the {source} newsletter.")
+            return subscription, "Successfully subscribed."
+            
+        except IntegrityError:
+            session.rollback()
+            self.logger.warning(f"Attempt to subscribe existing email {email} failed due to constraint.")
+            return None, "Email is already subscribed."
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Database error during newsletter subscription for {email}: {e}")
+            raise
+
+    def unsubscribe(self, email):
+        """
+        Unsubscribes an email from the newsletter.
+        """
+        try:
+            subscription = session.query(NewsletterSubscription).filter_by(email=email).first()
+            if subscription:
+                session.delete(subscription)
+                session.commit()
+                self.logger.info(f"Email {email} unsubscribed from the newsletter.")
+                return True
+            else:
+                self.logger.warning(f"Attempt to unsubscribe non-existent email: {email}")
+                return False
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Error during newsletter unsubscription for {email}: {e}")
+            raise
+
+
     @staticmethod
     def get_all_subscribers(page=1, per_page=20):
         """Get all newsletter subscribers with pagination."""
@@ -21,19 +81,7 @@ class NewsletterService:
             'current_page': page
         }
     
-    @staticmethod
-    def subscribe(email, name=None):
-        """Subscribe an email to the newsletter."""
-        # TODO: Implement newsletter subscription logic
-        logger.info(f"Newsletter subscription requested for {email}")
-        return True
-    
-    @staticmethod
-    def unsubscribe(token):
-        """Unsubscribe using a token."""
-        # TODO: Implement newsletter unsubscription logic
-        logger.info(f"Newsletter unsubscription requested with token {token}")
-        return True
+
     
     @staticmethod
     def send_campaign(subject, content, subscriber_ids=None):
