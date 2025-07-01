@@ -63,6 +63,21 @@ class ProductNotFoundError(ApiServiceError):
     """Raised when a requested product or variant is not found."""
     status_code = 404
 
+class DuplicateProductError(ValidationException):
+    """Raised when trying to create a product that already exists."""
+    pass
+    
+class InvalidAPIRequestError(ValidationException):
+    """Raised for general invalid API requests."""
+    pass
+
+class AuthorizationException(ServiceError):
+    """
+    Raised when a user is not authorized to perform an action or access a resource.
+    This should result in a 403 Forbidden response.
+    """
+    pass
+
 class DuplicateProductError(ApiServiceError):
     """Raised when a product with the same name or SKU already exists."""
     status_code = 409 # 409 Conflict
