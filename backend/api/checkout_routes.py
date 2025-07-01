@@ -6,7 +6,7 @@ from ..services.discount_service import DiscountService
 from ..utils.decorators import admin_required, roles_required
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.exceptions import NotFoundException, ValidationException, DiscountInvalidException
-from flask_login import login_required, current_user
+from flask_login import current_user
 from backend.services.checkout_service import process_user_checkout, process_guest_checkout, process_b2b_checkout
 from backend.services.cart_service import get_cart_by_id_or_session
 from backend.models.enums import UserType
@@ -15,6 +15,9 @@ from backend.services.checkout_service import CheckoutService
 from marshmallow import ValidationError
 from backend.schemas import CheckoutSchema
 from backend.utils.decorators import login_required
+from backend.services.checkout_service import CheckoutService
+from backend.services.exceptions import CheckoutError
+
 
 
 checkout_bp = Blueprint('checkout_bp', __name__, url_prefix='/api')
@@ -47,51 +50,6 @@ def start_checkout():
         # Log the full error for debugging
         # current_app.logger.error(f"Checkout failed: {e}", exc_info=True)
         return jsonify({"error": "An unexpected error occurred during checkout."}), 500
-
-@checkout_bp.route('/session', methods=['GET'])
-def get_checkout_session():
-    """
-    Gets all necessary data for the checkout page, now including available discounts.
-    """
-    user = g.get('user', None)
-    checkout_data = checkout_service.get_checkout_data(user)
-    
-    # --- New Addition: Get available discounts for the logged-in user ---
-    if user:
-        checkout_data['available_discounts'] = discount_service.get_available_discounts_for_user(user)
-    else:
-        checkout_data['available_discounts'] = []
-    
-    return jsonify(checkout_data)
-
-@checkout_bp.route('/apply-discount', methods=['POST'])
-@roles_required('Admin', 'Manager')
-def apply_discount():
-    """Endpoint for the user to apply a discount code to their cart."""
-    user = g.get('user')
-    if not user:
-        return jsonify({"error": "You must be logged in to apply a discount."}), 401
-    
-    json_data = request.get_json()
-    if not json_data:
-        return jsonify({"error": "Invalid JSON data provided."}), 400
-    
-    # Validate input using marshmallow schema
-    try:
-        schema = ApplyDiscountSchema()
-        validated_data = schema.load(json_data)
-    except ValidationError as err:
-        return jsonify({"error": "Validation failed.", "errors": err.messages}), 400
-    
-    cart = checkout_service.get_user_cart(user.id) # Assuming a method to get cart
-    if not cart:
-        return jsonify({"error": "Cart not found."}), 404
-
-    try:
-        result = discount_service.apply_discount_code(cart, user, validated_data['code'])
-        return jsonify(result)
-    except DiscountInvalidException as e:
-        return jsonify({"error": str(e)}), 400
 
 
 @checkout_bp.route('/', methods=['POST'])
@@ -144,7 +102,53 @@ def checkout():
     except Exception as e:
         current_app.logger.error(f"Checkout process failed: {e}", exc_info=True)
         return jsonify({"error": "An unexpected error occurred during checkout. Please try again later."}), 500
-        
+
+
+@checkout_bp.route('/session', methods=['GET'])
+def get_checkout_session():
+    """
+    Gets all necessary data for the checkout page, now including available discounts.
+    """
+    user = g.get('user', None)
+    checkout_data = checkout_service.get_checkout_data(user)
+    
+    # --- New Addition: Get available discounts for the logged-in user ---
+    if user:
+        checkout_data['available_discounts'] = discount_service.get_available_discounts_for_user(user)
+    else:
+        checkout_data['available_discounts'] = []
+    
+    return jsonify(checkout_data)
+
+@checkout_bp.route('/apply-discount', methods=['POST'])
+@roles_required('Admin', 'Manager')
+def apply_discount():
+    """Endpoint for the user to apply a discount code to their cart."""
+    user = g.get('user')
+    if not user:
+        return jsonify({"error": "You must be logged in to apply a discount."}), 401
+    
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided."}), 400
+    
+    # Validate input using marshmallow schema
+    try:
+        schema = ApplyDiscountSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed.", "errors": err.messages}), 400
+    
+    cart = checkout_service.get_user_cart(user.id) # Assuming a method to get cart
+    if not cart:
+        return jsonify({"error": "Cart not found."}), 404
+
+    try:
+        result = discount_service.apply_discount_code(cart, user, validated_data['code'])
+        return jsonify(result)
+    except DiscountInvalidException as e:
+        return jsonify({"error": str(e)}), 400
+
 @checkout_bp.route('/user/addresses', methods=['GET'])
 @jwt_required()
 def get_user_addresses():
