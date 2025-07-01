@@ -19,6 +19,15 @@ echo -e "${YELLOW}==========================================${NC}"
 echo -e "${YELLOW}   Starting Maison Truvra Code Audits     ${NC}"
 echo -e "${YELLOW}==========================================${NC}"
 
+# --- Installation des dépendances d'audit ---
+echo -e "\n${GREEN}--- Installation/Mise à jour des outils d'audit Python ---${NC}"
+pip install --upgrade pip bandit safety pip-audit
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Échec de l'installation des outils d'audit. L'audit ne peut pas continuer.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}Outils d'audit Python prêts.${NC}"
+
 # --- 1. Best Practices & Static Analysis Audit (Backend) ---
 echo -e "\n${GREEN}--- Running Backend Best Practices Audit ---${NC}"
 python3 best_practices_audit.py
