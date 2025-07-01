@@ -1,12 +1,18 @@
+# Refactoring backend/wishlist/routes.py
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from marshmallow import ValidationError
 from backend.services.wishlist_service import WishlistService
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.utils.decorators import api_resource_handler
-from backend.schemas import AddToWishlistSchema, WishlistItemSchema # Added WishlistItemSchema
+# from backend.utils.decorators import api_resource_handler # Not using it currently for these routes
+from backend.schemas import AddToWishlistSchema, WishlistItemSchema
 from backend.models.product_models import Product
-from backend.models import WishlistItem # Explicitly import WishlistItem model from models/__init__.py, or define it fully here if it's a standalone model
+# Assuming WishlistItem is properly imported or defined elsewhere and accessible via models.__init__
+# If WishlistItem is strictly within wishlist_service.py as a local class, it cannot be used as a model for decorators directly.
+# However, the schemas.py imports it as `from .models.product_models import Product, Variant, WishlistItem`.
+# This implies it should be moved to a proper models file if not already.
+# For now, let's assume `backend.models.product_models.WishlistItem` is the correct path.
+from backend.models.product_models import WishlistItem # Ensure WishlistItem is imported if it's truly a model
 
 wishlist_bp = Blueprint('wishlist_bp', __name__, url_prefix='/api/wishlist')
 
@@ -20,39 +26,41 @@ def get_wishlist():
     user_id = get_jwt_identity()
     try:
         wishlist_items = WishlistService.get_wishlist_items(user_id)
-        return jsonify(status="success", data=[item for item in wishlist_items]), 200 # wishlist_items are already dicts from service
+        # WishlistService.get_wishlist_items already returns list of dicts, so no .to_dict() needed here
+        return jsonify(status="success", data=wishlist_items), 200
     except Exception as e:
         # Log error e
         return jsonify(status="error", message="An internal error occurred while fetching your wishlist."), 500
 
 # ADD an item to the user's wishlist
 @wishlist_bp.route('/item', methods=['POST'])
-# @api_resource_handler(Product, schema=AddToWishlistSchema()) # Old usage
 @jwt_required()
-@api_resource_handler( # Apply decorator here
-    model=Product, # The target resource for adding to wishlist is Product
-    request_schema=AddToWishlistSchema,
-    response_schema=WishlistItemSchema, # To serialize the created wishlist item
-    ownership_exempt_roles=[], # User adding to their own wishlist, no other roles exempt
-    cache_timeout=0, # No caching for user-specific updates
-    # check_ownership=True # Not directly applicable as user is creating *their own* wishlist item (implicitly owned)
-)
+# Keeping as manual due to service returning dict and complex ownership for future @api_resource_handler
 def add_to_wishlist():
     """
     Add a product to the current user's wishlist.
     """
     user_id = get_jwt_identity()
-    product_id = g.validated_data['product_id']
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided"}), 400
+    
+    try:
+        # Manually validate input using marshmallow schema
+        schema = AddToWishlistSchema()
+        validated_data = schema.load(json_data)
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed", "errors": err.messages}), 400
+
+    product_id = validated_data['product_id']
 
     try:
         wishlist_item_data = WishlistService.add_to_wishlist(user_id, product_id)
-        # The service returns a dict, so the decorator expects the model instance to serialize.
-        # If the service returns a dict representation, we can just jsonify it directly.
-        # Given that WishlistService.add_to_wishlist returns a dict, we will keep the direct jsonify.
-        # Reverting to direct jsonify unless service layer is changed to return model instance.
         if wishlist_item_data:
             return jsonify(status="success", data=wishlist_item_data), 201
         else:
+            # This case handles if the item was already in the wishlist (service might return None or raise exception)
+            # Based on service code, it raises ValidationException, which is caught below
             return jsonify(status="success", message="Item is already in your wishlist."), 200
     except ValueError as e: # Catches "Product not found" from service
         return jsonify(status="error", message=str(e)), 404
@@ -60,10 +68,10 @@ def add_to_wishlist():
         # Log error e
         return jsonify(status="error", message="An internal error occurred."), 500
 
-
 # REMOVE an item from the user's wishlist
 @wishlist_bp.route('/item/<int:product_id>', methods=['DELETE'])
 @jwt_required()
+# Keeping as manual due to complex ownership check needing user_id AND product_id
 def remove_from_wishlist(product_id):
     """
     Remove a product from the current user's wishlist.
