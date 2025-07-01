@@ -5,19 +5,26 @@ This includes order creation, payment processing, and orchestrating post-order t
 from flask import current_app
 from sqlalchemy.orm import joinedload
 
-from ..extensions import db
-from ..models import (Order, OrderItem, Product, Cart, User, Address, 
-                    DeliveryMethod, PaymentStatus, UserType, OrderStatus, 
-                    NotificationType, CartItem)
-from .cart_service import CartService
-from .product_service import ProductService
-from .inventory_service import InventoryService
-from .b2b_service import B2BService
-from .loyalty_service import add_loyalty_points_for_purchase
-from .notification_service import NotificationService
-from .exceptions import ServiceException, CheckoutValidationError, ResourceNotFound
+from backend.extensions import db
+from backend.models.order_models import Order, OrderItem, PaymentStatus, OrderStatus
+from backend.models.product_models import Product
+from backend.models.user_models import User, UserType
+from backend.models.address_models import Address
+from backend.models.delivery_models import DeliveryMethod
+from backend.models.notification_models import NotificationType
+from backend.models.cart_models import Cart, CartItem
 
-from ..tasks import (
+from backend.services.product_service import ProductService
+from backend.services.inventory_service import InventoryService
+from backend.services.b2b_service import B2BService
+from backend.services.cart_service import CartService
+from backend.services.loyalty_service import add_loyalty_points_for_purchase
+from backend.services.notification_service import NotificationService
+from backend.services.exceptions import ServiceException, CheckoutValidationError, ResourceNotFound
+from backend.services.payment_service import PaymentService # Assuming this service exists
+
+
+from backend.tasks import (
     generate_invoice_for_order_task, 
     generate_invoice_for_b2b_order_task,
     send_order_confirmation_email_task,
@@ -40,17 +47,17 @@ class CheckoutService:
         for item_data in cart_items:
             product = ProductService.get_product_by_id(item_data['product'].id)
             if not product:
-                raise CheckoutValidationError(f"Un produit de votre panier (ID: {item_data['product'].id}) n'est plus disponible.")
+                raise CheckoutValidationError(f"A product in your cart (ID: {item_data['product'].id}) is no longer available.")
             
             # Check for price changes
             if product.price != item_data['product'].price:
-                raise CheckoutValidationError(f"Le prix de '{product.name}' a changé. Veuillez revoir votre panier.")
+                raise CheckoutValidationError(f"The price of '{product.name}' has changed. Please review your cart.")
             
             # Check for stock changes
             if product.stock < item_data['quantity']:
                 if product.stock == 0:
-                     raise CheckoutValidationError(f"'{product.name}' n'est plus en stock.")
-                raise CheckoutValidationError(f"Stock insuffisant pour '{product.name}'. Il ne reste que {product.stock} unité(s).")
+                        raise CheckoutValidationError(f"'{product.name}' is no longer in stock.")
+                raise CheckoutValidationError(f"Insufficient stock for '{product.name}'. Only {product.stock} unit(s) left.")
         current_app.logger.info("Cart validation successful.")
 
     @staticmethod
@@ -112,7 +119,11 @@ class CheckoutService:
             raise ServiceException("Invalid address or delivery method.")
 
         total_price = cart_contents['total'] + delivery_method.price
-        payment_successful = True 
+        
+        # In a real scenario, payment processing would happen here.
+        # For this example, we assume payment is successful.
+        payment_service = PaymentService()
+        payment_successful = payment_service.charge(total_price, payment_method, user.id)
         if not payment_successful:
             raise ServiceException("Payment failed.")
 
@@ -153,15 +164,6 @@ class CheckoutService:
 
         :param user_id: The ID of the user checking out.
         :param checkout_data: A dictionary containing all necessary data for the checkout.
-            For B2C, expects: {
-                "shipping_address_id": int, "billing_address_id": int,
-                "delivery_method_id": int, "payment_method": str,
-                "payment_transaction_id": str | None
-            }
-            For B2B, expects: {
-                "shipping_address_id": int, "billing_address_id": int,
-                "payment_details": dict
-            }
         :return: The created Order object.
         """
         current_app.logger.info(f"Processing checkout for user {user_id}")
