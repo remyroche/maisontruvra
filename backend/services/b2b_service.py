@@ -34,14 +34,13 @@ class B2BService:
     This service handles business logic for B2B users, including account management,
     teams, and B2B-specific commerce features like tiered pricing.
     """
-  
-    def __init__(self):
+      def __init__(self, logger):
+        self.logger = logger
+        self.email_service = EmailService(logger)
         self.order_service = OrderService()
         self.invoice_service = InvoiceService()
         self.loyalty_service = LoyaltyService()
       
-    # --- B2B Account Management ---
-
 
     def get_b2b_user_dashboard(self, user_id):
         """
@@ -113,31 +112,82 @@ class B2BService:
         return dashboard_data
 
 
-    @staticmethod
-    def create_b2b_account(user: User, company_name: str, vat_number: str) -> B2BUser:
-        """Creates a pending B2B account for an existing user."""
-        if B2BUser.query.filter_by(user_id=user.id).first():
-            raise B2BAccountExistsError("B2B account already exists for this user.")
+    def create_b2b_account(self, data):
+        """
+        Creates a B2B user account, which is initially pending approval.
+        """
+        try:
+            if session.query(B2BUser).filter_by(email=data['email']).first():
+                raise ValueError("B2B user with this email already exists.")
 
-        new_b2b_user = B2BUser(
-            user_id=user.id,
-            company_name=company_name,
-            vat_number=vat_number,
-            status=B2BStatus.PENDING
-        )
-        user.user_type = UserType.B2B
-        db.session.add(new_b2b_user)
-        db.session.add(user)
-        db.session.commit()
+            hashed_password = hash_password(data['password'])
+            
+            b2b_user = B2BUser(
+                email=data['email'],
+                password_hash=hashed_password,
+                company_name=data['company_name'],
+                contact_person=data['contact_person'],
+                status='pending'
+            )
+            session.add(b2b_user)
+            session.commit()
 
-        NotificationService.create_notification(
-            user_id=None,
-            message=f"New B2B account application from {company_name}.",
-            notification_type=NotificationType.ADMIN_ALERT
-        )
-        EmailService.send_b2b_account_pending_email(user)
+            # Send email to admin for approval and to user for confirmation
+            subject = "Your B2B Account Application is Pending Approval"
+            template = "b2b_account_pending"
+            context = {"b2b_user": b2b_user}
+            self.email_service.send_email(b2b_user.email, subject, template, context)
+            
+            # TODO: Send notification to admin dashboard
 
-        return new_b2b_user
+            self.logger.info(f"B2B account created for {data['email']} and is pending approval.")
+            return b2b_user
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error creating B2B account: {e}")
+            raise
+
+    def approve_b2b_account(self, b2b_user_id):
+        """
+        Approves a B2B user account and assigns the 'b2b_user' role.
+        """
+        try:
+            b2b_user = session.query(B2BUser).get(b2b_user_id)
+            if not b2b_user:
+                raise ValueError("B2B user not found.")
+
+            b2b_user.status = 'approved'
+            
+            # Assign 'b2b_user' role
+            b2b_role = session.query(Role).filter_by(name='b2b_user').first()
+            if b2b_role:
+                # Check if role is already assigned
+                existing_role = session.query(UserRole).filter_by(user_id=b2b_user.id, role_id=b2b_role.id).first()
+                if not existing_role:
+                    user_role = UserRole(user_id=b2b_user.id, role_id=b2b_role.id)
+                    session.add(user_role)
+            
+            session.commit()
+
+            # Send approval email
+            subject = "Your B2B Account has been Approved!"
+            template = "b2b_account_approved"
+            context = {"b2b_user": b2b_user}
+            self.email_service.send_email(b2b_user.email, subject, template, context)
+
+            self.logger.info(f"B2B account {b2b_user.email} has been approved.")
+            return b2b_user
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error approving B2B account: {e}")
+            raise
+
+
+    def get_all_b2b_users(self):
+        """Retrieves all B2B users."""
+        return session.query(B2BUser).all()
+
+
 
     @staticmethod
     def get_all_b2b_users_with_details():
@@ -171,10 +221,7 @@ class B2BService:
     @staticmethod
     def get_b2b_user(user_id: int) -> B2BUser:
         """Retrieves the B2BUser profile for a given user ID, ensuring the user is B2B."""
-        user = db.session.get(User, user_id)
-        if not user or user.user_type != UserType.B2B or not user.b2b_user:
-            raise NotFoundException("B2B profile not found for this user.")
-        return user.b2b_user
+        return session.query(B2BUser).get(b2b_user_id)
 
     @staticmethod
     def update_company_profile_by_user(user_id: int, data: dict) -> B2BUser:
