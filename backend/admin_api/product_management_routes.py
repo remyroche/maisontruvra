@@ -10,7 +10,7 @@ from marshmallow import ValidationError
 from backend.schemas import CreateProductSchema, CreateProductInputSchema, ProductOutputSchema, InventoryUpdateSchema
 from backend.models.product_models import Product
 from backend.services.product_service import ProductService
-
+from ..services.product_service import ProductService 
 
 product_management_bp = Blueprint('product_management_routes', __name__, url_prefix='/api/admin')
 product_service = ProductService()
