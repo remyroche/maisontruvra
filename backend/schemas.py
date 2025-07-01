@@ -1,6 +1,102 @@
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, fields, validate, ValidationError
+import re
 
 # --- Input Validation Schemas (for 'loading' data into the app) ---
+
+
+def validate_password_complexity(password):
+    """
+    Validates that the password has at least 8 characters, one uppercase, one lowercase, one digit, and one special character.
+    """
+    if len(password) < 8:
+        raise ValidationError("Password must be at least 8 characters long.")
+    if not re.search(r"[A-Z]", password):
+        raise ValidationError("Password must contain at least one uppercase letter.")
+    if not re.search(r"[a-z]", password):
+        raise ValidationError("Password must contain at least one lowercase letter.")
+    if not re.search(r"\d", password):
+        raise ValidationError("Password must contain at least one digit.")
+    if not re.search(r"[\W_]", password): # Non-alphanumeric
+        raise ValidationError("Password must contain at least one special character.")
+
+# --- High-Priority Schemas ---
+
+class UserRegistrationSchema(Schema):
+    first_name = fields.Str(required=True, validate=validate.Length(min=1, max=50, error="First name is required."))
+    last_name = fields.Str(required=True, validate=validate.Length(min=1, max=50, error="Last name is required."))
+    email = fields.Email(required=True, error="A valid email is required.")
+    password = fields.Str(required=True, validate=validate_password_complexity)
+
+class UserProfileUpdateSchema(Schema):
+    first_name = fields.Str(validate=validate.Length(min=1, max=50))
+    last_name = fields.Str(validate=validate.Length(min=1, max=50))
+    email = fields.Email()
+
+class ChangePasswordSchema(Schema):
+    old_password = fields.Str(required=True)
+    new_password = fields.Str(required=True, validate=validate_password_complexity)
+
+class ResetPasswordSchema(Schema):
+    token = fields.Str(required=True)
+    new_password = fields.Str(required=True, validate=validate_password_complexity)
+
+class AddressSchema(Schema):
+    street = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+    city = fields.Str(required=True, validate=validate.Length(min=1, max=50))
+    postal_code = fields.Str(required=True, validate=validate.Length(min=1, max=20))
+    country = fields.Str(required=True, validate=validate.Length(min=1, max=50))
+    address_type = fields.Str(required=True, validate=validate.OneOf(["shipping", "billing"]))
+    is_default = fields.Bool(missing=False)
+
+class AdminUserUpdateSchema(UserProfileUpdateSchema):
+    is_active = fields.Bool()
+    roles = fields.List(fields.Str())
+
+# --- Medium-Priority Schemas ---
+
+class BlogPostSchema(Schema):
+    title = fields.Str(required=True, validate=validate.Length(min=1, max=200))
+    content = fields.Str(required=True)
+    author_id = fields.Int(required=True)
+    category_id = fields.Int(required=True)
+    slug = fields.Str(validate=validate.Length(max=255), allow_none=True)
+    is_published = fields.Bool(missing=False)
+
+class ProductReviewSchema(Schema):
+    rating = fields.Int(required=True, validate=validate.Range(min=1, max=5, error="Rating must be between 1 and 5."))
+    title = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+    comment = fields.Str(required=True, validate=validate.Length(min=1, max=1000))
+
+class ContactFormSchema(Schema):
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+    email = fields.Email(required=True)
+    message = fields.Str(required=True, validate=validate.Length(min=1, max=2000))
+    company_name = fields.Str(validate=validate.Length(max=100), allow_none=True)
+    phone_number = fields.Str(validate=validate.Length(max=20), allow_none=True)
+
+class SiteSettingsSchema(Schema):
+    site_name = fields.Str(validate=validate.Length(min=1, max=100))
+    contact_email = fields.Email()
+    # This can be expanded with more site settings
+    class Meta:
+        unknown = fields.INCLUDE
+
+
+# --- Low-Priority Schemas ---
+
+class CheckoutSchema(Schema):
+    shipping_address_id = fields.Int(required=True)
+    billing_address_id = fields.Int(required=True)
+    payment_method_id = fields.Str(required=True)
+
+class DiscountSchema(Schema):
+    code = fields.Str(required=True, validate=validate.Length(min=1, max=50))
+    discount_type = fields.Str(required=True, validate=validate.OneOf(["percentage", "fixed_amount"]))
+    value = fields.Decimal(required=True, places=2, validate=validate.Range(min=0))
+    expires_at = fields.DateTime(allow_none=True)
+    max_uses = fields.Int(allow_none=True, validate=validate.Range(min=1))
+    min_purchase_amount = fields.Decimal(allow_none=True, places=2, validate=validate.Range(min=0))
+
 
 class ProductVariantInputSchema(Schema):
     """Schema for validating product variants when creating or updating a product."""
@@ -84,31 +180,11 @@ class BlogPostSchema(Schema):
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 
-class UserRegistrationSchema(Schema):
-    firstName = fields.Str(required=True, data_key="first_name")
-    lastName = fields.Str(required=True, data_key="last_name")
-    email = fields.Email(required=True)
-    password = fields.Str(required=True, validate=validate.Length(min=8))
 
 class LoginSchema(Schema):
     email = fields.Email(required=True)
     password = fields.Str(required=True)
 
-class AddressSchema(Schema):
-    first_name = fields.Str(required=True)
-    last_name = fields.Str(required=True)
-    street_line_1 = fields.Str(required=True)
-    street_line_2 = fields.Str(allow_none=True)
-    city = fields.Str(required=True)
-    postal_code = fields.Str(required=True)
-    country = fields.Str(required=True)
-
-class ContactFormSchema(Schema):
-    """Schema for validating contact form submissions."""
-    name = fields.Str(required=True, validate=validate.Length(min=2, error="Name is required."))
-    email = fields.Email(required=True, error_messages={"required": "A valid email is required."})
-    subject = fields.Str(required=True, validate=validate.Length(min=5, error="Subject must be at least 5 characters."))
-    message = fields.Str(required=True, validate=validate.Length(min=10, error="Message must be at least 10 characters."))
 
 # Additional schemas for API resource handler decorator
 class UpdateUserSchema(Schema):
@@ -148,13 +224,6 @@ class BlogCategorySchema(Schema):
     """Schema for blog categories."""
     name = fields.Str(required=True, validate=validate.Length(min=1, max=100))
 
-class BlogPostSchema(Schema):
-    """Schema for blog posts."""
-    title = fields.Str(required=True, validate=validate.Length(min=1, max=200))
-    content = fields.Str(required=True, validate=validate.Length(min=10))
-    category_id = fields.Int(required=True, validate=validate.Range(min=1))
-    is_published = fields.Bool(missing=False)
-
 class LanguageUpdateSchema(Schema):
     """Schema for updating user language."""
     language = fields.Str(required=True, validate=validate.OneOf(['en', 'fr', 'es', 'de']))
@@ -181,12 +250,6 @@ class ApplyDiscountSchema(Schema):
     """Schema for applying discount codes."""
     code = fields.Str(required=True, validate=validate.Length(min=1, max=50))
 
-class CheckoutSchema(Schema):
-    """Schema for checkout process."""
-    cart_id = fields.Str(required=True)
-    payment_token = fields.Str(allow_none=True)
-    payment_details = fields.Dict(allow_none=True)
-    guest_info = fields.Dict(allow_none=True)
 
 class GuestInfoSchema(Schema):
     """Schema for guest checkout information."""
