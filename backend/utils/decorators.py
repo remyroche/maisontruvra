@@ -276,12 +276,16 @@ def login_required(f: Callable) -> Callable:
     """
     A general-purpose decorator to ensure a user is logged in and active.
     It applies all base security checks.
+    If the user is not authenticated, it returns a 401 Unauthorized error     with a JSON payload, which is suitable for API clients.
     """
     @wraps(f)
     @_apply_base_security_checks
-    def decorated_function(*args: Any, **kwargs: Any) -> Any:
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return jsonify({"error": "Authentication required. Please log in."}), 401
         return f(*args, **kwargs)
     return decorated_function
+
 
 def b2b_user_required(f: Callable) -> Callable:
     """
