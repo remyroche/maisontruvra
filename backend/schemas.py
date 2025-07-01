@@ -258,6 +258,22 @@ class GuestInfoSchema(Schema):
     last_name = fields.Str(required=True, validate=validate.Length(min=1, max=50))
     phone = fields.Str(validate=validate.Length(max=20))
 
+class CheckoutSchema(Schema):
+    cart_id = fields.Int(required=True)
+    payment_token = fields.Str(required=True) # Generic token from payment provider
+    guest_info = fields.Nested(GuestInfoSchema)
+    shipping_address_id = fields.Int()
+    billing_address_id = fields.Int()
+
+    # Custom validation to ensure either guest info or address IDs are present
+    def validate_checkout_data(self, data, **kwargs):
+        is_guest = 'guest_info' in data and data['guest_info']
+        is_user = 'shipping_address_id' in data and data['shipping_address_id']
+        if not is_guest and not is_user:
+            raise ValidationError("Either guest_info or shipping_address_id must be provided.")
+        if is_guest and is_user:
+            raise ValidationError("Provide either guest_info or address IDs, not both.")
+            
 # Product Search and Filter Schemas
 class ProductSearchSchema(Schema):
     """Schema for product search parameters."""
