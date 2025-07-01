@@ -1,7 +1,6 @@
 from flask import current_app
 from flask_login import current_user
 from backend.database import db
-from backend.models.cart_models import Cart, CartItem
 from backend.models.product_models import Product, ProductVariant
 from backend.models.inventory_models import InventoryReservation # Added: Import InventoryReservation
 from .exceptions import ServiceError, ValidationException, NotFoundException
@@ -12,8 +11,75 @@ from ..models import ExclusiveReward, Product, User
 from backend.services.b2b_service import B2BService 
 from backend.models import UserType  
 from decimal import Decimal
+from backend.models import db, Cart, CartItem, Product, User, UserType
+from sqlalchemy.orm import joinedload
+from backend.database import db_session as session
+from .exceptions import ProductNotFoundError, InsufficientStockError
 
 class CartService:
+    def __init__(self, logger):
+        self.logger = logger
+
+    def get_cart_details(self, user_id):
+        """
+        Retrieves a user's cart and calculates prices, including B2B tier discounts.
+        """
+        user = session.query(User).options(
+            joinedload(User.tier),
+            joinedload(User.carts).joinedload(Cart.items).joinedload(CartItem.product)
+        ).get(user_id)
+
+        if not user:
+            raise ProductNotFoundError("User not found.")
+
+        cart = user.carts[0] if user.carts else None
+        if not cart:
+            # Create a cart if one doesn't exist
+            cart = Cart(user_id=user.id)
+            session.add(cart)
+            session.commit()
+            return {'cart': cart, 'items_details': [], 'subtotal': 0, 'total': 0, 'tier_discount': 0}
+
+        items_details = []
+        subtotal = Decimal('0.00')
+        
+        # Determine discount multiplier
+        discount_multiplier = Decimal('1.0')
+        tier_name = None
+        if user.user_type == UserType.B2B and user.tier:
+            tier = user.tier
+            tier_name = tier.name
+            discount_multiplier = Decimal('1') - (tier.discount_percentage / Decimal('100'))
+
+        for item in cart.items:
+            original_price = item.product.price
+            # Apply tier discount if applicable
+            final_price = (original_price * discount_multiplier).quantize(Decimal('0.01'))
+            
+            line_total = final_price * item.quantity
+            items_details.append({
+                'item_id': item.id,
+                'product_id': item.product.id,
+                'product_name': item.product.name,
+                'quantity': item.quantity,
+                'original_price': str(original_price),
+                'final_price': str(final_price),
+                'line_total': str(line_total)
+            })
+            subtotal += original_price * item.quantity
+
+        total = sum(Decimal(i['line_total']) for i in items_details)
+        tier_discount = subtotal - total
+
+        return {
+            'cart_id': cart.id,
+            'items_details': items_details,
+            'subtotal': str(subtotal),
+            'tier_discount': str(tier_discount),
+            'total': str(total),
+            'tier_name': tier_name
+        }
+
     @staticmethod
     def get_cart(user_id: int) -> dict:
         """
