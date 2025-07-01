@@ -34,6 +34,14 @@ const routes = [
     ]
   },
 
+
+    {path: '/checkout', name: 'Checkout', component: () => import('../views/public/CheckoutView.vue'), },
+
+    // B2B User Routes
+    { path: '/pro/request-quote', name: 'B2BRequestQuote', component: RequestQuoteView, meta: { requiresAuth: true, requiresB2B: true } },
+    { path: '/admin/quotes', name: 'AdminManageQuotes', component: ManageQuotesView, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/admin/quotes/:id/respond', name: 'AdminRespondToQuote', component: RespondToQuoteView, meta: { requiresAuth: true, requiresAdmin: true } },
+
   // --- Search ---
   { path: '/search', name: 'Search', component: () => import('@/views/public/SearchView.vue'), props: route => ({ query: route.query.q }) },
 
