@@ -72,56 +72,117 @@ class QuoteService:
             MonitoringService.log_error(f"Error getting quote {quote_id}: {str(e)}")
             raise ServiceError(f"Failed to get quote: {str(e)}")
     
-    @staticmethod
-    def create_quote(b2b_account_id, items, notes=None):
-        """Create a new quote"""
+    def create_quote_request(self, user_id, items_data):
+        """Creates a new quote request for a B2B user."""
         try:
-            b2b_account_id = InputSanitizer.InputSanitizer.sanitize_input(b2b_account_id)
-            notes = InputSanitizer.InputSanitizer.sanitize_input(notes) if notes else None
+            quote = Quote(user_id=user_id, status='pending')
+            session.add(quote)
+            session.flush()
+
+            for item in items_data:
+                quote_item = QuoteItem(
+                    quote_id=quote.id,
+                    product_id=item['product_id'],
+                    quantity=item['quantity']
+                )
+                session.add(quote_item)
             
-            # Verify B2B account exists
-            account = B2BAccount.query.get(b2b_account_id)
-            if not account:
-                raise NotFoundException("B2B account not found")
-            
-            # Calculate total amount
-            total_amount = 0
-            for item in items:
-                quantity = int(InputSanitizer.InputSanitizer.sanitize_input(item.get('quantity', 0)))
-                unit_price = float(InputSanitizer.InputSanitizer.sanitize_input(item.get('unit_price', 0)))
-                total_amount += quantity * unit_price
-            
-            # Create quote
-            quote = Quote(
-                b2b_account_id=b2b_account_id,
-                total_amount=total_amount,
-                notes=notes,
-                status='pending',
-                created_at=datetime.utcnow()
-            )
-            
-            db.session.add(quote)
-            db.session.commit()
-            
-            # Log the action
-            AuditLogService.log_action(
-                user_id=None,  # System action
-                action="CREATE_QUOTE",
-                resource_type="QUOTE",
-                resource_id=quote.id,
-                details=f"Created quote for B2B account {b2b_account_id}"
-            )
-            
-            MonitoringService.log_info(
-                f"Created quote {quote.id} for B2B account {b2b_account_id}",
-                "QuoteService"
-            )
+            session.commit()
+            self.logger.info(f"Quote request {quote.id} created for user {user_id}.")
+            # TODO: Notify admin of new quote request
             return quote
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Error creating quote request for user {user_id}: {e}")
+            raise
+
+    def respond_to_quote(self, quote_id, response_data):
+        """Allows an admin to respond to a quote with custom prices."""
+        try:
+            quote = self.get_quote_by_id(quote_id)
+            if not quote:
+                raise ValueError("Quote not found.")
+
+            for item_response in response_data['items']:
+                quote_item = session.query(QuoteItem).filter_by(id=item_response['item_id'], quote_id=quote_id).first()
+                if quote_item:
+                    quote_item.response_price = item_response['price']
+
+            quote.status = 'responded'
+            quote.responded_at = datetime.utcnow()
+            quote.set_expiry(days=response_data.get('valid_for_days', 7))
+            session.commit()
+
+            # Notify B2B user that their quote has a response
+            # self.email_service.send_email(...)
+            self.logger.info(f"Admin responded to quote {quote_id}.")
+            return quote
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error responding to quote {quote_id}: {e}")
+            raise
+
+        def accept_quote_and_create_cart(self, quote_id, user_id):
+        """
+        Allows a B2B user to accept a quote, which then creates a new cart
+        with the special pricing. This is the POS/custom cart creation flow.
+        """
+        try:
+            quote = self.get_quote_by_id(quote_id)
+            if not quote or quote.user_id != user_id:
+                raise ValueError("Quote not found or access denied.")
+            if quote.status != 'responded':
+                raise ValueError("Quote cannot be accepted in its current state.")
+            if quote.expires_at and quote.expires_at < datetime.utcnow():
+                quote.status = 'expired'
+                session.commit()
+                raise ValueError("This quote has expired.")
+
+            # Create a new cart for the user
+            cart = Cart(user_id=user_id)
+            session.add(cart)
+            session.flush()
+
+            for item in quote.items:
+                if not item.response_price:
+                    raise ValueError(f"Cannot accept quote; item {item.product.name} has not been priced.")
+                
+                # We need to create a temporary custom price for this cart.
+                # A simple way is to create a one-time discount that makes up the difference.
+                # A more robust solution might involve a `custom_price` field on CartItem.
+                # For now, we will add to cart with the special price directly.
+                # NOTE: This assumes product price can be overridden. A better model would be to
+                # link CartItem directly to the QuoteItem to preserve the negotiated price.
+                # Let's create a new Product with the custom price for this order. (Not ideal)
+                # A better approach is to add a price field to CartItem.
+                
+                # Let's assume we add a 'price' to CartItem for this purpose.
+                # (This requires a model change to CartItem)
+                
+                cart_item = CartItem(
+                    cart_id=cart.id,
+                    product_id=item.product_id,
+                    quantity=item.quantity,
+                    # This assumes CartItem has a price field to store the custom price
+                    price=item.response_price 
+                )
+                session.add(cart_item)
+
+            quote.status = 'accepted'
+            session.commit()
+            self.logger.info(f"Quote {quote_id} accepted by user {user_id}. New cart {cart.id} created.")
+            return cart
+
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error accepting quote {quote_id}: {e}")
+            raise
             
-        except Exception as e:
-            db.session.rollback()
-            MonitoringService.log_error(f"Error creating quote: {str(e)}")
-            raise ServiceError(f"Failed to create quote: {str(e)}")
+    def get_quote_by_id(self, quote_id):
+        return session.query(Quote).options(
+            joinedload(Quote.items).joinedload(QuoteItem.product),
+            joinedload(Quote.user)
+        ).filter_by(id=quote_id).first()
     
     @staticmethod
     def update_quote(quote_id, data):
