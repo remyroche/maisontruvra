@@ -2,9 +2,6 @@
 Service layer for handling the checkout process.
 This includes order creation, payment processing, and orchestrating post-order tasks.
 """
-from flask import current_app
-from sqlalchemy.orm import joinedload
-
 from backend.extensions import db
 from backend.models.order_models import Order, OrderItem, PaymentStatus, OrderStatus
 from backend.models.product_models import Product
@@ -13,27 +10,10 @@ from backend.models.address_models import Address
 from backend.models.delivery_models import DeliveryMethod
 from backend.models.notification_models import NotificationType
 from backend.models.cart_models import Cart, CartItem
-from backend.models import db, Order, OrderItem, Product, Cart, CartItem, User, Address, Discount, LoyaltyProgram, UserLoyalty, DiscountType
 
 from backend.services.product_service import ProductService
-from backend.services.inventory_service import InventoryService
 from backend.services.b2b_service import B2BService
 from backend.services.cart_service import CartService
-from backend.services.loyalty_service import add_loyalty_points_for_purchase
-from backend.services.notification_service import NotificationService
-from .exceptions import CheckoutError, CartEmptyError, ProductNotFoundError, InsufficientStockError, PaymentError, LoyaltyError
-
-from backend.services.loyalty_service import LoyaltyService
-from backend.services.discount_service import DiscountService
-from backend.services.email_service import EmailService
-from sqlalchemy.orm import sessionmaker, joinedload
-from sqlalchemy.exc import SQLAlchemyError
-
-from backend.services.payment_service import PaymentService
-from backend.services.pdf_service import PDFService
-from backend.services.background_task_service import BackgroundTaskService
-from backend.utils.encryption import encrypt_data
-from backend.database import db_session as session
 
 
 from backend.tasks import (
@@ -44,71 +24,159 @@ from backend.tasks import (
     notify_user_of_loyalty_points_task
 )
 
+from flask import current_app
+from sqlalchemy.orm import sessionmaker, joinedload
+from sqlalchemy.exc import SQLAlchemyError
+from backend.models import db, Order, OrderItem, Product, Cart, CartItem, User, Address, Discount, LoyaltyProgram, UserLoyalty, DiscountType
+from backend.services.email_service import EmailService
+from backend.services.inventory_service import InventoryService
+from backend.services.notification_service import NotificationService
+from backend.services.loyalty_service import LoyaltyService, add_loyalty_points_for_purchase
+from backend.services.discount_service import DiscountService
+from backend.services.payment_service import PaymentService
+from backend.services.pdf_service import PDFService
+from backend.services.background_task_service import BackgroundTaskService
+from backend.services.user_service import UserService
+from backend.services.address_service import AddressService
+from backend.utils.encryption import encrypt_data
+from backend.database import db_session as session
+from .exceptions import CheckoutError, CartEmptyError, ProductNotFoundError, InsufficientStockError, PaymentError, LoyaltyError
+
 class CheckoutService:
-    """
-    Provides methods for processing user checkouts.
-    """
+    def __init__(self, logger):
+        self.logger = logger
+        self.email_service = EmailService(logger)
+        self.inventory_service = InventoryService(logger)
+        self.notification_service = NotificationService(logger)
+        self.loyalty_service = LoyaltyService(logger)
+        self.discount_service = DiscountService(logger)
+        self.payment_service = PaymentService(logger)
+        self.pdf_service = PDFService(logger)
+        self.background_task_service = BackgroundTaskService(logger)
+        self.user_service = UserService(logger)
+        self.address_service = AddressService(logger)
 
-    @staticmethod
-    def _validate_cart_for_checkout(cart_items):
+    def create_guest_order(self, cart_id, guest_data, payment_details):
         """
-        Re-validates cart items against the database to ensure stock and prices are current.
-        Raises CheckoutValidationError if any discrepancy is found.
-        """
-        current_app.logger.info("Validating cart for checkout.")
-        for item_data in cart_items:
-            product = ProductService.get_product_by_id(item_data['product'].id)
-            if not product:
-                raise CheckoutValidationError(f"A product in your cart (ID: {item_data['product'].id}) is no longer available.")
-            
-            # Check for price changes
-            if product.price != item_data['product'].price:
-                raise CheckoutValidationError(f"The price of '{product.name}' has changed. Please review your cart.")
-            
-            # Check for stock changes
-            if product.stock < item_data['quantity']:
-                if product.stock == 0:
-                        raise CheckoutValidationError(f"'{product.name}' is no longer in stock.")
-                raise CheckoutValidationError(f"Insufficient stock for '{product.name}'. Only {product.stock} unit(s) left.")
-        current_app.logger.info("Cart validation successful.")
-
-    @staticmethod
-    def _dispatch_post_order_tasks(order: Order):
-        """
-        Dispatches background tasks based on the order type (B2C or B2B).
-        This centralizes post-order logic to avoid redundancy.
+        Creates an order for a guest user.
         """
         try:
-            current_app.logger.info(f"Dispatching post-order tasks for order {order.id} (type: {order.user_type}).")
-            if order.user_type == UserType.B2C:
-                # --- B2C Post-Order Tasks ---
-                send_order_confirmation_email_task.delay(order.id)
-                generate_invoice_for_order_task.delay(order.id)
-                
-                points_earned = add_loyalty_points_for_purchase(order.user_id, order.total_price)
-                if points_earned > 0:
-                    notify_user_of_loyalty_points_task.delay(order.user_id, points_earned)
+            # Get or create a guest user account
+            guest_user = self.user_service.get_or_create_guest_user(
+                email=guest_data['email'],
+                first_name=guest_data['shipping_address']['first_name'],
+                last_name=guest_data['shipping_address']['last_name']
+            )
 
-                NotificationService.create_notification(
-                    order.user_id, 
-                    f"Your order #{order.id} has been placed successfully.",
-                    NotificationType.ORDER_CONFIRMATION
-                )
-            
-            elif order.user_type == UserType.B2B:
-                # --- B2B Post-Order Tasks ---
-                send_b2b_order_confirmation_email_task.delay(order.id)
-                generate_invoice_for_b2b_order_task.delay(order.id)
+            # Create shipping address for the guest
+            shipping_address_data = guest_data['shipping_address']
+            shipping_address_data['user_id'] = guest_user.id
+            shipping_address = self.address_service.create_address(shipping_address_data)
 
+            # Use shipping address for billing if not provided
+            billing_address_data = guest_data.get('billing_address') or shipping_address_data
+            if 'user_id' not in billing_address_data:
+                billing_address_data['user_id'] = guest_user.id
+            billing_address = self.address_service.create_address(billing_address_data) if billing_address_data != shipping_address_data else shipping_address
+
+            # Now, call the main order creation logic with the new guest user's ID
+            return self.create_order_from_cart(
+                user_id=guest_user.id,
+                cart_id=cart_id,
+                payment_details=payment_details,
+                shipping_address_id=shipping_address.id,
+                billing_address_id=billing_address.id
+            )
         except Exception as e:
-            current_app.logger.error(f"Failed to dispatch one or more post-order tasks for order {order.id}: {e}")
+            self.logger.error(f"Guest checkout process failed: {e}")
+            raise CheckoutError(f"Guest checkout failed: {e}") from e
+
+
+    def create_order_from_cart(self, user_id, cart_id, payment_details, shipping_address_id, billing_address_id=None):
+        """
+        Creates an order from a cart for a given user (registered or guest).
+        """
+        try:
+            # A guest cart won't have a user_id, so we filter by cart_id only
+            cart = session.query(Cart).filter_by(id=cart_id).first()
+            if not cart or not cart.items:
+                raise CartEmptyError("Cannot create an order from an empty cart.")
+
+            # Validate stock before creating the order
+            for item in cart.items:
+                if not self.inventory_service.check_stock(item.product_id, item.quantity):
+                    product = session.query(Product).get(item.product_id)
+                    raise InsufficientStockError(f"Insufficient stock for product: {product.name}")
+
+            # Process payment
+            total_price = self.calculate_total(cart)
+            payment_successful, payment_intent_id = self.payment_service.process_payment(total_price, payment_details)
+
+            if not payment_successful:
+                raise PaymentError("Payment failed.")
+
+            # Create the order
+            order = Order(
+                user_id=user_id,
+                total_price=total_price,
+                status='paid',
+                shipping_address_id=shipping_address_id,
+                billing_address_id=billing_address_id or shipping_address_id,
+                payment_intent_id=payment_intent_id,
+                discount_id=cart.discount_id
+            )
+            session.add(order)
+            session.flush()
+
+            # Create order items and update inventory
+            for item in cart.items:
+                order_item = OrderItem(order_id=order.id, product_id=item.product_id, quantity=item.quantity, price=item.product.price)
+                session.add(order_item)
+                self.inventory_service.decrease_stock(item.product_id, item.quantity)
+
+            if cart.discount_id:
+                self.discount_service.record_discount_usage(cart.discount_id)
+            
+            # Only add loyalty points for non-guest users
+            user = self.user_service.get_user_by_id(user_id)
+            if not user.is_guest:
+                self.loyalty_service.add_points(user_id, total_price)
+
+            # Clear the cart
+            for item in cart.items:
+                session.delete(item)
+            session.delete(cart)
+            
+            session.commit()
+
+            self.background_task_service.submit_task(self.send_order_confirmation, order.id)
+
+            self.logger.info(f"Order {order.id} created successfully for user {user_id}.")
+            return order
+
+        except (SQLAlchemyError, CartEmptyError, InsufficientStockError, PaymentError, LoyaltyError) as e:
+            session.rollback()
+            self.logger.error(f"Error during checkout for user {user_id}: {e}")
+            raise CheckoutError(f"Checkout failed: {e}") from e
+
+    def calculate_total(self, cart):
+        """
+        Calculates the total price of the cart, including discounts.
+        """
+        subtotal = sum(item.product.price * item.quantity for item in cart.items)
+        if cart.discount and self.discount_service.is_discount_valid(cart.discount):
+            if cart.discount.discount_type == DiscountType.PERCENTAGE:
+                discount_amount = (subtotal * cart.discount.value) / 100
+                return max(0, subtotal - discount_amount)
+            elif cart.discount.discount_type == DiscountType.FIXED_AMOUNT:
+                return max(0, subtotal - cart.discount.value)
+        return subtotal
 
     def send_order_confirmation(self, order_id):
         """
         Sends an order confirmation email to the user.
         """
         try:
-            # Eagerly load all relationships needed for the email and invoice templates
             order = session.query(Order).options(
                 joinedload(Order.user),
                 joinedload(Order.items).joinedload(OrderItem.product),
@@ -120,16 +188,13 @@ class CheckoutService:
                 self.logger.error(f"Order with id {order_id} not found for sending confirmation.")
                 return
 
-            # The user is now available via order.user
             user = order.user
             if not user:
                 self.logger.error(f"User not found for order {order_id}.")
                 return
 
-            # Generate invoice PDF
             invoice_pdf_path = self.pdf_service.generate_invoice(order)
 
-            # Send email
             subject = "Your Maison Truvra Order Confirmation"
             template = "b2b_order_confirmation" if user.is_b2b else "b2c_order_confirmation"
             context = {"order": order, "user": user}
