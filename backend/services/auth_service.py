@@ -6,7 +6,7 @@ from backend.database import db
 from backend.services.exceptions import ServiceError, ValidationException, UnauthorizedException, NotFoundException, InvalidPasswordException
 from backend.services.mfa_service import MfaService
 # generate_tokens is defined as a method in this class
-from backend.services.email_service import EmailService # Added: For EmailService
+from backend.services.email_service import EmailService
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature # Added: For token serialization
 import logging
 from flask import current_app, session # Added: For session
@@ -20,6 +20,11 @@ from typing import Optional, Dict, Any
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHash
 from ..services.exceptions import ValidationError
+from backend.services.exceptions import UserAlreadyExistsError, InvalidCredentialsError
+from flask import current_app
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
+from backend.utils.input_sanitizer import sanitize_input
+
 
 
 # Instantiate the PasswordHasher. It's thread-safe and can be shared.
@@ -30,6 +35,87 @@ class AuthService:
     def __init__(self):
         self.sessions = {}  # In production, use Redis or similar
 
+    def register_user(self, first_name, last_name, email, password):
+        """ Creates and registers a new user after sanitizing inputs. """
+        if User.query.filter_by(email=email).first():
+            raise UserAlreadyExistsError("User with this email already exists.")
+
+        # Sanitize inputs
+        sanitized_first_name = sanitize_input(first_name)
+        sanitized_last_name = sanitize_input(last_name)
+
+        new_user = User(
+            email=email.lower(),  # Store email in lowercase for consistency
+            first_name=sanitized_first_name,
+            last_name=sanitized_last_name
+        )
+        new_user.set_password(password)
+        
+        db.session.add(new_user)
+        db.session.commit()
+
+        # Send verification email
+        # self.send_verification_email(new_user)
+        
+        current_app.logger.info(f"New user registered: {email}")
+        return new_user
+
+    def authenticate_user(self, email, password):
+        """ Authenticates a user. """
+        if not email or not password:
+            raise InvalidCredentialsError("Email and password are required.")
+            
+        user = User.query.filter_by(email=email.lower()).first()
+        if user and user.check_password(password):
+            if not user.is_active:
+                raise InvalidCredentialsError("Account is not active.")
+            current_app.logger.info(f"User authenticated successfully: {email}")
+            return user
+        
+        current_app.logger.warning(f"Failed login attempt for email: {email}")
+        raise InvalidCredentialsError("Invalid email or password.")
+
+    def change_password(self, user_id, old_password, new_password):
+        """ Changes a user's password. """
+        user = User.query.get(user_id)
+        if not user or not user.check_password(old_password):
+            raise InvalidCredentialsError("Invalid old password.")
+        
+        user.set_password(new_password)
+        db.session.commit()
+        current_app.logger.info(f"User {user.email} changed their password.")
+        # Optionally, send a confirmation email
+        EmailService.send_password_change_confirmation(user.email)
+
+    def get_reset_token(self, user, expires_sec=1800):
+        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        return s.dumps(user.email, salt=current_app.config.get('SECURITY_PASSWORD_SALT', 'password-salt'))
+
+    def verify_reset_token(self, token):
+        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        try:
+            email = s.loads(token, salt=current_app.config.get('SECURITY_PASSWORD_SALT', 'password-salt'), max_age=1800)
+        except (SignatureExpired, BadTimeSignature):
+            return None
+        return User.query.filter_by(email=email).first()
+
+    def send_password_reset_email(self, email):
+        user = User.query.filter_by(email=email.lower()).first()
+        if user:
+            token = self.get_reset_token(user)
+            EmailService.send_password_reset_email(user.email, token)
+            current_app.logger.info(f"Password reset email sent to {email}")
+
+    def reset_password_with_token(self, token, new_password):
+        user = self.verify_reset_token(token)
+        if not user:
+            raise ValueError("The password reset link is invalid or has expired.")
+        
+        user.set_password(new_password)
+        db.session.commit()
+        current_app.logger.info(f"Password reset for user {user.email}")
+        EmailService.send_password_change_confirmation(user.email)
+        
     @staticmethod
     def verify_password(hashed_password: str, password: str) -> bool:
         """
@@ -219,50 +305,6 @@ class AuthService:
         except (SignatureExpired, BadTimeSignature):
             return None
 
-    def register_user(self, username: str, email: str, password: str) -> Dict[str, Any]:
-        """Register a new user"""
-        try:
-            # Check if user already exists
-            existing_user = self.db.get_user_by_email(email)
-            if existing_user:
-                MonitoringService.log_security_event(
-                    f"Registration attempt with existing email: {email}",
-                    "AuthService",
-                    level='WARNING'
-                )
-                return {"success": False, "message": "User already exists"}
-            
-            # Hash password
-            hashed_password = ph.hash(password)
-            
-            # Create user
-            user_data = {
-                "username": username,
-                "email": email,
-                "password_hash": hashed_password,
-                "created_at": datetime.now().isoformat(),
-                "is_active": True
-            }
-            
-            user_id = self.db.create_user(user_data)
-            MonitoringService.log_security_event(
-                f"New user registered: {username} ({email})",
-                "AuthService"
-            )
-            
-            return {
-                "success": True, 
-                "message": "User registered successfully",
-                "user_id": user_id
-            }
-            
-        except Exception as e:
-            MonitoringService.log_security_event(
-                f"Registration error: {str(e)}",
-                "AuthService",
-                level='ERROR'
-            )
-            return {"success": False, "message": "Registration failed"}
     
     @staticmethod
     def find_user_by_email(email):
