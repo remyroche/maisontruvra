@@ -12,6 +12,11 @@ from backend.models.invoice_models import Invoice
 from backend.models.order_models import Order
 from backend.services.monitoring_service import MonitoringService
 
+from .services.order_service import OrderService
+from .services.b2b_service import B2BService
+from .services.invoice_service import InvoiceService
+from .services.inventory_service import InventoryService
+
 from backend.services.invoice_service import generate_invoice_pdf_for_order, generate_invoice_pdf_for_b2b_order
 from backend.services.email_service import EmailService
 from backend.services.notification_service import notify_user_of_loyalty_points
@@ -31,6 +36,156 @@ def resilient_task(**kwargs):
         'time_limit': 600        # 10 minutes
     }
     return celery.task(**default_options, **kwargs)
+
+@celery_app.task(name='tasks.process_order_payment')
+def process_order_payment(order_id):
+    """
+    Tâche Celery pour traiter le paiement d'une commande de manière asynchrone.
+    """
+    try:
+        # La logique de traitement du paiement irait ici
+        logger.info(f"Processing payment for order {order_id}...")
+        # Simuler le traitement
+        import time
+        time.sleep(10) 
+        # Mettre à jour le statut de la commande
+        order = OrderService.get_order_by_id(order_id)
+        if order:
+            OrderService.update_order_status(order_id, 'PAID')
+            logger.info(f"Payment for order {order_id} processed successfully.")
+            # Envoyer la confirmation de paiement
+            send_async_email.delay(order.user.email, "Payment Confirmation", "payment_confirmation.html", order=order)
+        else:
+            logger.error(f"Order {order_id} not found for payment processing.")
+    except Exception as e:
+        logger.error(f"Failed to process payment for order {order_id}: {e}", exc_info=True)
+
+
+@celery_app.task(name='tasks.process_b2b_quick_order_task', bind=True, max_retries=3, default_retry_delay=60)
+def process_b2b_quick_order_task(self, b2b_user_id, file_content):
+    """
+    Tâche Celery pour traiter une commande rapide B2B à partir d'un contenu de fichier CSV.
+    """
+    logger.info(f"Starting B2B quick order processing for user {b2b_user_id}.")
+    b2b_user = B2BService.get_b2b_user_by_id(b2b_user_id)
+    if not b2b_user:
+        logger.error(f"B2B User with ID {b2b_user_id} not found. Aborting task.")
+        return
+
+    items_to_order = []
+    errors = []
+    try:
+        # Utiliser io.StringIO pour lire la chaîne de contenu comme un fichier
+        csv_file = io.StringIO(file_content)
+        # Ignorer l'en-tête s'il y en a un
+        next(csv_file, None)
+        reader = csv.reader(csv_file)
+        
+        for i, row in enumerate(reader):
+            line_num = i + 2  # +1 pour l'index 0, +1 pour l'en-tête
+            if not row or len(row) < 2:
+                errors.append(f"Ligne {line_num}: Ligne vide ou mal formatée.")
+                continue
+            
+            sku, quantity_str = row[0].strip(), row[1].strip()
+            
+            try:
+                quantity = int(quantity_str)
+                if quantity <= 0:
+                    raise ValueError()
+                items_to_order.append({'sku': sku, 'quantity': quantity})
+            except (ValueError, TypeError):
+                errors.append(f"Ligne {line_num}: Quantité invalide '{quantity_str}' pour le SKU '{sku}'.")
+
+        if errors:
+            # Si des erreurs de formatage sont trouvées, notifier l'utilisateur et arrêter.
+            raise ValueError("Erreurs de validation dans le fichier CSV.")
+
+        # Appeler la logique de service pour créer la commande
+        order = B2BService.create_order_from_items(b2b_user_id, items_to_order)
+        
+        # Envoyer un email de succès
+        send_async_email.delay(
+            recipient=b2b_user.user.email,
+            subject="Votre commande rapide B2B a été créée avec succès",
+            template="b2b_quick_order_success.html",
+            order_id=order.id,
+            total=order.total
+        )
+        logger.info(f"B2B quick order {order.id} processed successfully for user {b2b_user_id}.")
+
+    except ValueError as e:
+        # Gérer les erreurs de validation (CSV mal formaté, etc.)
+        logger.error(f"Validation error in B2B quick order for user {b2b_user_id}: {e}. Errors: {errors}", exc_info=True)
+        send_async_email.delay(
+            recipient=b2b_user.user.email,
+            subject="Échec du traitement de votre commande rapide B2B",
+            template="b2b_quick_order_failure.html",
+            error_list=errors,
+            error_message=str(e)
+        )
+    except Exception as e:
+        # Gérer les autres erreurs (ex: base de données, indisponibilité du service)
+        logger.error(f"Failed to process B2B quick order for user {b2b_user_id}: {e}", exc_info=True)
+        try:
+            # Tenter une nouvelle exécution
+            raise self.retry(exc=e)
+        except self.MaxRetriesExceededError:
+            # Si toutes les tentatives échouent, notifier l'utilisateur
+            send_async_email.delay(
+                recipient=b2b_user.user.email,
+                subject="Échec du traitement de votre commande rapide B2B",
+                template="b2b_quick_order_failure.html",
+                error_message="Une erreur interne nous a empêchés de traiter votre commande. Veuillez réessayer plus tard ou contacter le support."
+            )
+            
+@celery_app.task(name='tasks.fulfill_order', bind=True, max_retries=3, default_retry_delay=300)
+def fulfill_order_task(self, order_id):
+    """
+    Tâche Celery pour exécuter une commande : alloue les articles, génère une facture,
+    met à jour le statut et notifie le client.
+    """
+    logger.info(f"Starting fulfillment for order {order_id}...")
+    try:
+        # 1. Récupérer la commande
+        order = OrderService.get_order_by_id(order_id)
+        if not order:
+            logger.error(f"Fulfillment failed: Order {order_id} not found.")
+            return  # Tâche terminée, pas de nouvelle tentative
+
+        # 2. Vérifier si la commande peut être traitée (par exemple, si elle est payée)
+        if order.status not in ['PAID', 'PROCESSING']:
+            logger.warning(f"Skipping fulfillment for order {order_id} with status '{order.status}'.")
+            return
+
+        # 3. Allouer l'inventaire
+        logger.info(f"Allocating inventory for order {order_id}...")
+        InventoryService.allocate_items_for_order(order_id)
+        logger.info(f"Inventory allocated for order {order_id}.")
+
+        # 4. Générer la facture
+        logger.info(f"Generating invoice for order {order_id}...")
+        invoice = InvoiceService.generate_invoice_for_order(order_id)
+        logger.info(f"Invoice {invoice.id} generated for order {order_id}.")
+
+        # 5. Mettre à jour le statut de la commande à 'Expédiée'
+        OrderService.update_order_status(order_id, 'SHIPPED')
+        logger.info(f"Order {order_id} status updated to SHIPPED.")
+
+        # 6. Envoyer une notification d'expédition au client
+        send_async_email.delay(
+            recipient=order.user.email,
+            subject=f"Votre commande Maison Truvra #{order.id} a été expédiée !",
+            template="order_shipped.html",  # Assumer que ce template existe
+            order=order.to_dict(),  # Passer les données de la commande au template
+            tracking_number="XYZ123456789"  # Un numéro de suivi factice
+        )
+        logger.info(f"Shipping notification enqueued for order {order_id}.")
+
+    except Exception as e:
+        logger.error(f"An error occurred during fulfillment for order {order_id}: {e}", exc_info=True)
+        # Tenter une nouvelle exécution en cas d'erreur (ex: verrouillage de la base de données, service externe indisponible)
+        raise self.retry(exc=e)
 
 # A standard decorator for scheduled (beat) tasks
 def scheduled_task(**kwargs):
