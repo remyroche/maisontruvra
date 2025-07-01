@@ -1,17 +1,23 @@
-# backend/services/blog_service.py
-
-from sqlalchemy.orm import Session
-from backend.database import db
-from backend.models.blog_models import BlogPost, BlogCategory # Assuming BlogPost has a backref to BlogCategory named 'blog_posts'
-from ..services.exceptions import NotFoundException, ValidationException
-import bleach
+"""
+Service layer for managing blog posts and categories.
+This service provides methods to interact with the blog-related
+database models, encapsulating the business logic away from the API endpoints.
+"""
 import re
-from .monitoring_service import MonitoringService
-from .exceptions import ServiceError
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.utils.slug_utility import create_slug
+import bleach
+from sqlalchemy.orm import Session
 from flask import current_app
 
+from ..extensions import db, cache
+from ..models import BlogPost, BlogCategory
+from ..services.exceptions import NotFoundException, ValidationException
+from ..utils.input_sanitizer import InputSanitizer
+from ..utils.slug_utility import create_slug
+from ..utils.cache_helpers import (
+    get_blog_post_list_key,
+    get_blog_post_by_slug_key,
+    clear_blog_cache
+)
 
 
 ALLOWED_TAGS = ['p', 'a', 'strong', 'em', 'u', 'ol', 'ul', 'li', 'br', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote']
@@ -77,31 +83,38 @@ class BlogService:
 
     def create_article(self, article_data: dict) -> BlogPost:
         """ Creates a blog post with sanitized title and content. """
-        sanitized_title = InputSanitizer.sanitize_string(data['title'])
+        sanitized_title = InputSanitizer.sanitize_string(article_data['title'])
         # Use sanitize_html for content, allowing some tags
-        sanitized_content = InputSanitizer.sanitize_html(data['content'], allow_tags=True)
+        sanitized_content = InputSanitizer.sanitize_html(article_data['content'], allow_tags=True)
         
-        slug = data.get('slug') or create_slug(sanitized_title)
+        slug = article_data.get('slug') or create_slug(sanitized_title)
         if BlogPost.query.filter_by(slug=slug).first():
-            slug = f"{slug}-{db.session.query(BlogPost).count() + 1}"
+            slug = f"{slug}-{self.session.query(BlogPost).count() + 1}"
 
         new_post = BlogPost(
             title=sanitized_title,
             content=sanitized_content,
-            author_id=data['author_id'],
-            category_id=data['category_id'],
+            author_id=article_data['author_id'],
+            category_id=article_data['category_id'],
             slug=slug,
-            is_published=data.get('is_published', False)
+            is_published=article_data.get('is_published', False)
         )
-        db.session.add(new_post)
-        db.session.commit()
+        self.session.add(new_post)
+        self.session.commit()
+        
+        clear_blog_cache() # Invalidate cache
+        
         current_app.logger.info(f"New blog post created: '{sanitized_title}'")
         return new_post
 
-
     def get_all_articles(self):
-        """Retrieves all blog posts."""
-        return self.session.query(BlogPost).order_by(BlogPost.created_at.desc()).all()
+        """Retrieves all blog posts, using cache."""
+        cache_key = get_blog_post_list_key()
+        posts = cache.get(cache_key)
+        if posts is None:
+            posts = self.session.query(BlogPost).order_by(BlogPost.created_at.desc()).all()
+            cache.set(cache_key, posts, timeout=3600)
+        return posts
 
     def get_article_by_id(self, article_id: int) -> BlogPost:
         """
@@ -115,44 +128,58 @@ class BlogService:
 
     def get_article_by_slug(self, slug: str) -> BlogPost:
         """
-        Retrieves a single blog post by its slug.
+        Retrieves a single blog post by its slug, using cache.
         Raises NotFoundException if not found.
         """
-        article = self.session.query(BlogPost).filter_by(slug=slug).first()
+        cache_key = get_blog_post_by_slug_key(slug)
+        article = cache.get(cache_key)
         if not article:
-            raise NotFoundException(f"Article with slug '{slug}' not found.")
+            article = self.session.query(BlogPost).filter_by(slug=slug).first()
+            if not article:
+                raise NotFoundException(f"Article with slug '{slug}' not found.")
+            cache.set(cache_key, article, timeout=3600)
         return article
 
     def update_article(self, article_id: int, article_data: dict) -> BlogPost:
         """ Updates a blog post with sanitized fields. """
-        post = BlogPost.query.get(post_id)
+        post = self.session.query(BlogPost).get(article_id)
         if not post:
-            return None
+            raise NotFoundException(f"Article with id {article_id} not found.")
 
-        if 'title' in data:
-            post.title = InputSanitizer.sanitize_string(data['title'])
+        original_slug = post.slug
+
+        if 'title' in article_data:
+            post.title = InputSanitizer.sanitize_string(article_data['title'])
             # Also update slug if title changes and no new slug is provided
-            if 'slug' not in data:
+            if 'slug' not in article_data:
                 post.slug = create_slug(post.title)
-        if 'content' in data:
-            post.content = InputSanitizer.sanitize_html(data['content'], allow_tags=True)
-        if 'slug' in data:
-            post.slug = InputSanitizer.sanitize_string(data['slug'])
-        if 'category_id' in data:
-            post.category_id = data['category_id']
-        if 'is_published' in data:
-            post.is_published = data['is_published']
+        if 'content' in article_data:
+            post.content = InputSanitizer.sanitize_html(article_data['content'], allow_tags=True)
+        if 'slug' in article_data:
+            post.slug = InputSanitizer.sanitize_string(article_data['slug'])
+        if 'category_id' in article_data:
+            post.category_id = article_data['category_id']
+        if 'is_published' in article_data:
+            post.is_published = article_data['is_published']
         
-        db.session.commit()
-        current_app.logger.info(f"Blog post {post_id} updated.")
-        return post
+        self.session.commit()
 
+        # Invalidate cache
+        clear_blog_cache(slug=original_slug)
+        if original_slug != post.slug:
+            clear_blog_cache(slug=post.slug)
+        
+        current_app.logger.info(f"Blog post {article_id} updated.")
+        return post
 
     def delete_article(self, article_id: int):
         """Deletes a blog post."""
         article = self.get_article_by_id(article_id)
+        article_slug = article.slug
         self.session.delete(article)
         self.session.commit()
+        # Invalidate cache
+        clear_blog_cache(slug=article_slug)
 
     def create_category(self, category_data: dict) -> BlogCategory:
         """Creates a new blog category."""
@@ -204,9 +231,7 @@ class BlogService:
         """Deletes a blog category."""
         category = self.get_category_by_id(category_id)
         # Check if any blog posts are linked to this category
-        if category.blog_posts.count() > 0: # Assuming a backref 'blog_posts' from BlogPost to BlogCategory
+        if category.blog_posts and len(category.blog_posts) > 0:
             raise ValidationException(f"Cannot delete category '{category.name}' because it has associated blog posts.")
-        self.session.delete(category) # Corrected: Use self.session
-        self.session.commit() # Corrected: Use self.session
-
-        
+        self.session.delete(category)
+        self.session.commit()
