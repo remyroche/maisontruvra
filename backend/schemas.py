@@ -1,9 +1,55 @@
 from marshmallow import Schema, fields, validate, ValidationError
 import re
+from .extensions import ma
 
 # --- Input Validation Schemas (for 'loading' data into the app) ---
 
+class BaseSchema(ma.Schema):
+    class Meta:
+        # Include unknown fields to avoid validation errors on extra data,
+        # but they won't be loaded into the object.
+        unknown = 'EXCLUDE'
 
+class CategorySchema(BaseSchema):
+    id = fields.Int(dump_only=True)
+    name = fields.Str(required=True)
+
+class TagSchema(BaseSchema):
+    id = fields.Int(dump_only=True)
+    name = fields.Str(required=True)
+
+class VariantSchema(BaseSchema):
+    id = fields.Int(dump_only=True)
+    sku = fields.Str(required=True)
+    price_offset = fields.Decimal(as_string=True, required=True)
+    # Assuming stock is represented as a simple integer for the variant
+    stock = fields.Int(required=True, validate=validate.Range(min=0))
+
+class ProductSchema(BaseSchema):
+    """
+    Schema for validating and serializing Product data.
+    """
+    id = fields.Int(dump_only=True)
+    name = fields.Str(required=True, validate=validate.Length(min=3, max=255))
+    description = fields.Str(required=True)
+    price = fields.Decimal(as_string=True, required=True, validate=validate.Range(min=0))
+    is_active = fields.Bool(required=True, default=True)
+    is_featured = fields.Bool(required=True, default=False)
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
+
+    # --- Relationships ---
+    # For loading, we expect IDs
+    category_id = fields.Int(required=True, load_only=True)
+    tag_ids = fields.List(fields.Int(), load_only=True, required=False)
+    
+    # For dumping, we want the nested objects
+    category = fields.Nested(CategorySchema, dump_only=True)
+    tags = fields.List(fields.Nested(TagSchema), dump_only=True)
+    
+    # Variants are part of the main object for both loading and dumping
+    variants = fields.List(fields.Nested(VariantSchema), required=True, validate=validate.Length(min=1))
+    
 def validate_password_complexity(password):
     """
     Validates that the password has at least 8 characters, one uppercase, one lowercase, one digit, and one special character.
