@@ -1,5 +1,5 @@
-from flask import Blueprint, request, jsonify, g
-from flask_login import current_user 
+from flask import Blueprint, request, jsonify, g, current_app
+from flask_login import current_user
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from marshmallow import ValidationError
 from backend.services.order_service import OrderService
@@ -14,15 +14,21 @@ from backend.models.order_models import Order
 orders_bp = Blueprint('orders_bp', __name__, url_prefix='/api/orders')
 
 @orders_bp.route('/<int:order_id>', methods=['GET'])
-@api_resource_handler(Order, check_ownership=True) # Already using the decorator, just ensure cache_timeout=0
 @login_required
+@api_resource_handler(
+    model=Order,
+    response_schema=OrderSchema, # Use OrderSchema for consistent serialization
+    check_ownership=True,
+    cache_timeout=0 # Ensure no caching for user-specific orders
+)
 def get_order_details(order_id):
     """
     Get details for a specific order.
     This endpoint is now protected against IDOR by the api_resource_handler decorator.
     """
-    # The order is now available as g.order, already validated for ownership
-    return jsonify(g.order.to_dict())
+    # The order is now available as g.target_object, already validated for ownership.
+    # The decorator will handle serialization using OrderSchema.
+    return g.target_object
 
 @orders_bp.route('/', methods=['GET'])
 @login_required
@@ -64,6 +70,7 @@ def create_guest_order():
         return jsonify({"error": e.message}), e.status_code
     except Exception as e:
         # Proper logging should be here
+        current_app.logger.error(f"Error creating guest order: {str(e)}", exc_info=True)
         return jsonify({"error": "An internal error occurred"}), 500
 
 @orders_bp.route('/create', methods=['POST'])
@@ -89,6 +96,10 @@ def create_authenticated_order():
         return jsonify(OrderSchema().dump(order)), 201
     except ServiceError as e:
         return jsonify({"error": e.message}), e.status_code
+    except Exception as e:
+        current_app.logger.error(f"Error creating authenticated order for user {current_user.id}: {str(e)}", exc_info=True)
+        return jsonify({"error": "An internal error occurred"}), 500
+
 
 @orders_bp.route('/checkout', methods=['POST'])
 @jwt_required(optional=True)
