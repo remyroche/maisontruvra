@@ -105,56 +105,38 @@ class InventoryService:
 
     
     @staticmethod
-    def increase_stock(inventory_id: int, quantity_to_add: int):
+    def increase_stock(self, product_id, quantity):
         """
-        Adds a specific quantity of stock to an inventory item and generates
-        a new product passport for each individual item added.
-        This entire process is a single atomic transaction.
+        Increases stock for a product, e.g., for a return or cancellation.
+        Triggers back-in-stock notifications if the product was previously out of stock.
         """
-        if quantity_to_add <= 0:
-            raise ServiceError("Quantity to add must be positive.", 400)
-
-        inventory_item = Inventory.query.with_for_update().get(inventory_id)
-        if not inventory_item:
-            raise NotFoundException("Inventory item not found.")
-        product_id = inventory_item.product_id
-            
         try:
-            # 1. Update the total stock quantity
-            inventory_item.quantity += quantity_to_add
-
-            # 2. Loop to create a passport for each new item
-            for _ in range(quantity_to_add):
-                PassportService.create_and_render_passport(inventory_item.product_id)
-
-            # 3. Commit the entire transaction
-            db.session.commit()
-            MonitoringService.log_info(
-                f"Added {quantity_to_add} units to inventory for product {inventory_item.product_id}. {quantity_to_add} passports created.",
-                "InventoryService"
-            )
-
-            # 4. Notifications
+            inventory = session.query(Inventory).filter_by(product_id=product_id).first()
+            if not inventory:
+                # This case might happen if a product was created without an inventory record
+                inventory = Inventory(product_id=product_id, quantity=0)
+                session.add(inventory)
+            
+            was_out_of_stock = inventory.quantity <= 0
+            inventory.quantity += quantity
+            
+            # If the product is now back in stock, process notifications
             if was_out_of_stock and inventory.quantity > 0:
                 self.logger.info(f"Product {product_id} is back in stock. Triggering notifications.")
                 self.background_task_service.submit_task(self.process_stock_notifications, product_id)
 
-            # Invalidate cache for the specific product and the general product list
-            cache.delete('view//api/products/{}'.format(product_id)) 
-            cache.delete('view//api/products')
-            NotificationService.trigger_back_in_stock_notifications.delay(inventory_item.product_id)
+            for _ in range(quantity_to_add):
+                PassportService.create_and_render_passport(inventory_item.product_id)
 
-            
-        except Exception as e:
-            # If any part fails (e.g., file write error), roll back everything.
-            # No quantity will be updated, and no passports will be saved.
-            db.session.rollback()
-            MonitoringService.log_error(
-                f"Failed to add stock for inventory {inventory_id}: {e}",
-                "InventoryService",
-                exc_info=True
-            )
-            raise ServiceError("Failed to add stock and create passports.")
+            session.commit()
+            self.logger.info(f"Increased stock for product {product_id} by {quantity}.")
+            return inventory
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Error increasing stock for product {product_id}: {e}")
+            raise
+
+    
 
     @staticmethod
     def reserve_stock(product_id: int, quantity_to_reserve: int, user_id: int = None):
