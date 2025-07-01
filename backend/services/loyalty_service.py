@@ -1,7 +1,7 @@
 import secrets
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
-from ..models import User, LoyaltyTier, UserLoyalty, Referral, ReferralRewardTier, PointVoucher, ExclusiveReward, LoyaltyPointLog, LoyaltyAccount, LoyaltyTier, LoyaltyTransaction, User, db, LoyaltyProgram, Discount, DiscountType
+from ..models import User, LoyaltyTier, UserLoyalty, Referral, ReferralRewardTier, PointVoucher, ExclusiveReward, LoyaltyPointLog, LoyaltyAccount, LoyaltyTier, LoyaltyTransaction, User, db, LoyaltyProgram, Discount, DiscountType, LoyaltyLedger
 from ..models.order_models import Order
 import datetime
 from decimal import Decimal
@@ -11,10 +11,14 @@ from backend.database import db_session as session
 from backend.services.notification_service import NotificationService
 from datetime import datetime, timedelta
 
+
+
+
 class LoyaltyService:
     def __init__(self, logger):
         self.logger = logger
         self.notification_service = NotificationService(logger)
+
 
     def get_user_loyalty_status(self, user_id):
         """Retrieves the loyalty status for a user."""
@@ -23,37 +27,58 @@ class LoyaltyService:
     def add_points(self, user_id, purchase_amount):
         """Adds loyalty points to a user's account based on their purchase."""
         try:
-            # Assuming one active loyalty program
             program = session.query(LoyaltyProgram).filter_by(is_active=True).first()
             if not program:
                 self.logger.info("No active loyalty program. No points awarded.")
                 return
 
             points_earned = int(purchase_amount * program.points_per_dollar)
-            
-            user_loyalty = self.get_user_loyalty_status(user_id)
-            if not user_loyalty:
-                user_loyalty = UserLoyalty(user_id=user_id, program_id=program.id, points=0)
-                session.add(user_loyalty)
-            
-            user_loyalty.points += points_earned
-            session.commit()
-            
-            self.logger.info(f"Awarded {points_earned} loyalty points to user {user_id}.")
-            self.notification_service.send_notification(user_id, f"You've earned {points_earned} points!")
+            if points_earned > 0:
+                self.add_points_for_event(user_id, points_earned, f"Purchase of {purchase_amount}€")
 
         except SQLAlchemyError as e:
             session.rollback()
             self.logger.error(f"Error adding loyalty points for user {user_id}: {e}")
             raise
 
-    def redeem_points(self, user_id, points_to_redeem):
-        """
-        Redeems a user's loyalty points for a discount voucher.
-        """
+    def add_points_for_event(self, user_id, points, reason):
+        """Generic function to add points for a specific event (e.g., referral, birthday)."""
         try:
-            user_loyalty = session.query(UserLoyalty).filter_by(user_id=user_id).first()
-            program = session.query(LoyaltyProgram).filter_by(id=user_loyalty.program_id).first() if user_loyalty else None
+            user_loyalty = self.get_user_loyalty_status(user_id)
+            program = session.query(LoyaltyProgram).filter_by(is_active=True).first()
+            
+            if not user_loyalty and program:
+                user_loyalty = UserLoyalty(user_id=user_id, program_id=program.id, points=0)
+                session.add(user_loyalty)
+                session.flush() # Get ID for ledger
+
+            if user_loyalty:
+                user_loyalty.points += points
+                
+                # Create a ledger entry for traceability
+                ledger_entry = LoyaltyLedger(
+                    user_loyalty_id=user_loyalty.id,
+                    points_change=points,
+                    reason=reason
+                )
+                session.add(ledger_entry)
+                session.commit()
+                
+                self.logger.info(f"Awarded {points} loyalty points to user {user_id} for: {reason}.")
+                self.notification_service.send_notification(user_id, f"You've earned {points} points! Reason: {reason}")
+            else:
+                self.logger.warning(f"Could not award points to user {user_id}; no active loyalty program.")
+
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Error adding points for event for user {user_id}: {e}")
+            raise
+
+    def redeem_points(self, user_id, points_to_redeem):
+        """Redeems a user's loyalty points for a discount voucher."""
+        try:
+            user_loyalty = self.get_user_loyalty_status(user_id)
+            program = session.query(LoyaltyProgram).get(user_loyalty.program_id) if user_loyalty else None
 
             if not user_loyalty or user_loyalty.points < points_to_redeem:
                 raise ValueError("Insufficient points to redeem.")
@@ -61,17 +86,12 @@ class LoyaltyService:
             if not program or not program.is_active:
                 raise ValueError("Loyalty program is not active.")
 
-            # Using the program's conversion rate
-            redemption_rate = program.redemption_rate  # e.g., 100 points per dollar
+            redemption_rate = program.redemption_rate
             if not redemption_rate or redemption_rate <= 0:
                  raise ValueError("Invalid redemption rate in loyalty program.")
 
             discount_value = points_to_redeem / redemption_rate
 
-            if discount_value <= 0:
-                raise ValueError("Invalid number of points to redeem.")
-
-            # Create a new one-time use discount code for the user
             new_discount = Discount(
                 code=f"LOYALTY_{user_id}_{int(datetime.now().timestamp())}",
                 discount_type=DiscountType.FIXED_AMOUNT,
@@ -79,23 +99,22 @@ class LoyaltyService:
                 is_active=True,
                 expires_at=datetime.utcnow() + timedelta(days=program.reward_validity_days or 30),
                 max_uses=1,
-                times_used=0,
                 description=f"Redeemed from {points_to_redeem} loyalty points."
             )
             
-            # Deduct points
             user_loyalty.points -= points_to_redeem
             
-            session.add(new_discount)
-            session.commit()
-            
-            self.logger.info(f"User {user_id} redeemed {points_to_redeem} points for a discount of {discount_value}.")
-            
-            self.notification_service.send_notification(
-                user_id, 
-                f"You've redeemed {points_to_redeem} points! Your new discount code is: {new_discount.code}"
+            ledger_entry = LoyaltyLedger(
+                user_loyalty_id=user_loyalty.id,
+                points_change=-points_to_redeem,
+                reason=f"Redeemed for {discount_value}€ discount."
             )
 
+            session.add(new_discount)
+            session.add(ledger_entry)
+            session.commit()
+            
+            self.logger.info(f"User {user_id} redeemed {points_to_redeem} points.")
             return new_discount
 
         except (SQLAlchemyError, ValueError) as e:
