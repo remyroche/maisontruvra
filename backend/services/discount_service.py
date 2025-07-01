@@ -8,6 +8,8 @@ from ..services.monitoring_service import MonitoringService
 from ..extensions import redis_client
 from datetime import datetime
 from ..services.exceptions import DiscountInvalidException
+from backend.models import Discount, db
+from backend.utils.input_sanitizer import sanitize_plaintext
 
 
 CACHE_TTL_SECONDS = 600
@@ -29,6 +31,34 @@ class DiscountService:
         db.session.add(new_tier)
         db.session.commit()
         return new_tier
+
+    @staticmethod
+    def create_discount(data):
+        """Creates a new discount, sanitizing the code."""
+        
+        sanitized_code = sanitize_plaintext(data['code']).upper()
+        
+        if Discount.query.filter_by(code=sanitized_code).first():
+            raise ValueError("A discount with this code already exists.")
+            
+        discount = Discount(
+            code=sanitized_code,
+            discount_type=data['discount_type'],
+            value=data['value'],
+            expires_at=data.get('expires_at'),
+            max_uses=data.get('max_uses'),
+            min_purchase_amount=data.get('min_purchase_amount')
+        )
+        
+        db.session.add(discount)
+        db.session.commit()
+        return discount
+
+    @staticmethod
+    def get_discount_by_code(code):
+        """Retrieves a discount by its code."""
+        sanitized_code = sanitize_plaintext(code).upper()
+        return Discount.query.filter_by(code=sanitized_code).first()
 
     
     @staticmethod
