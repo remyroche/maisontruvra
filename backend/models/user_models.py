@@ -9,7 +9,8 @@ from sqlalchemy.ext.hybrid import hybrid_property
 
 class UserType(enum.Enum):
     B2C = "B2C"
-    B2B = "B2B
+    B2B = "B2B"
+    Staff = "Staff"
     
 class User(Base):
     """
