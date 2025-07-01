@@ -1,27 +1,32 @@
-from backend.database import db
 from .base import BaseModel
 from datetime import datetime
+from backend.models.base import Base
+from backend.extensions import db
 
 
 class Referral(db.Model):
-    __tablename__ = 'referral'
+    __tablename__ = 'referrals'
     id = db.Column(db.Integer, primary_key=True)
+    # The user who made the referral
+    referrer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    referred_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
     
-    # The B2B user who made the referral
-    referrer_id = db.Column(db.Integer, db.ForeignKey('b2b_user.id'), nullable=False)
-    
-    # The new B2B user who was referred
-    referee_id = db.Column(db.Integer, db.ForeignKey('b2b_user.id'), nullable=False, unique=True)
-    
-    # Simplified status: 'active' once the link is made. No more 'pending' or 'completed'.
+    reward_points_awarded = db.Column(db.Integer, default=0)
     status = db.Column(db.String(50), default='active', nullable=False) 
-    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    referrer = db.relationship('User', foreign_keys=[referrer_id], back_populates='referrals_made')
+    referred = db.relationship('User', foreign_keys=[referred_id])
 
-    # Relationships
-    referrer = db.relationship('B2BUser', foreign_keys=[referrer_id])
-    referee = db.relationship('B2BUser', foreign_keys=[referee_id])
+class ReferralTier(Base):
+    __tablename__ = 'referral_tiers'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    min_referrals = db.Column(db.Integer, nullable=False)
+    points_multiplier = db.Column(db.Float, default=1.0)
+    description = db.Column(db.Text, nullable=True)
 
+    users = db.relationship('User', back_populates='referral_tier')
 
 class ReferralReward(db.Model):
     """
