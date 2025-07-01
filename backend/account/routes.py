@@ -27,7 +27,7 @@ from backend.models.address_models import Address
 from backend.services.auth_service import AuthService
 from backend.services.exceptions import InvalidCredentialsError
 from backend.schemas import UserProfileUpdateSchema, AddressSchema, ChangePasswordSchema
-from backend.utils.decorators import login_required_json
+from backend.utils.decorators import login_required
 
 
 
@@ -218,14 +218,14 @@ def setup_2fa():
 
 
 @account_bp.route('/profile', methods=['GET'])
-@login_required_json
+@login_required
 def get_profile():
     user_service = UserService()
     profile_data = user_service.get_user_profile(current_user.id)
     return jsonify(profile_data)
 
 @account_bp.route('/profile', methods=['PUT'])
-@login_required_json
+@login_required
 def update_profile():
     """ Update user profile. """
     schema = UserProfileUpdateSchema()
@@ -244,7 +244,7 @@ def update_profile():
         return jsonify({"error": "Failed to update profile."}), 500
 
 @account_bp.route('/change-password', methods=['POST'])
-@login_required_json
+@login_required
 def change_password():
     """ Change user's password. """
     schema = ChangePasswordSchema()
@@ -309,14 +309,14 @@ def disable_2fa():
 
 
 @account_bp.route('/addresses', methods=['GET'])
-@login_required_json
+@login_required
 def get_addresses():
     address_service = AddressService()
     addresses = address_service.get_user_addresses(current_user.id)
     return jsonify([address.to_dict() for address in addresses])
 
 @account_bp.route('/addresses', methods=['POST'])
-@login_required_json
+@login_required
 def add_address():
     """ Add a new address for the user. """
     schema = AddressSchema()
@@ -333,7 +333,7 @@ def add_address():
         return jsonify({"error": "Failed to add address."}), 500
 
 @account_bp.route('/addresses/<int:address_id>', methods=['PUT'])
-@login_required_json
+@login_required
 def update_address(address_id):
     """ Update an existing address. """
     schema = AddressSchema()
@@ -352,7 +352,7 @@ def update_address(address_id):
         return jsonify({"error": "Failed to update address."}), 500
 
 @account_bp.route('/addresses/<int:address_id>', methods=['DELETE'])
-@login_required_json
+@login_required
 def delete_address(address_id):
     address_service = AddressService()
     try:
