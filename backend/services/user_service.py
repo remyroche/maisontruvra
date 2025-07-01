@@ -8,28 +8,91 @@ from flask import current_app, request, g  # Ensure request is imported
 from flask_jwt_extended import get_jwt_identity
 from backend.models.b2b_models import B2BUser  # Add this import
 from backend.services.audit_log_service import AuditLogService
+from backend.utils.input_sanitizer import sanitize_input
+
 
 class UserService:
 
     def __init__(self, audit_log_service: AuditLogService):
         self.audit_log_service = audit_log_service
 
+
+    @staticmethod
+    def get_user_profile(self, user_id):
+        user = User.query.get_or_404(user_id)
+        return user.to_dict()
+
+    @staticmethod
+    def update_profile(self, user_id, data):
+        """ Updates a user's profile after sanitizing inputs. """
+        user = User.query.get(user_id)
+        if not user:
+            raise ValueError("User not found")
+
+        if 'first_name' in data:
+            user.first_name = sanitize_input(data['first_name'])
+        if 'last_name' in data:
+            user.last_name = sanitize_input(data['last_name'])
+        if 'email' in data:
+            new_email = data['email'].lower()
+            if new_email != user.email:
+                if User.query.filter_by(email=new_email).first():
+                    raise ValueError("Email already in use.")
+                user.email = new_email
+
+        db.session.commit()
+        current_app.logger.info(f"User profile updated for {user.email}")
+        return user
+
+    @staticmethod
+    def admin_update_user(self, user_id, data):
+        """ Allows an admin to update user details. """
+        user = User.query.get(user_id)
+        if not user:
+            return None
+
+        # Use the regular profile update logic for common fields
+        self.update_profile(user_id, data)
+
+        # Admin-specific fields
+        if 'is_active' in data:
+            user.is_active = data['is_active']
+        if 'roles' in data:
+            # This requires logic to fetch Role objects from the DB
+            # and assign them to the user.roles relationship.
+            # Example: user.roles = Role.query.filter(Role.name.in_(data['roles'])).all()
+            pass
+
+        db.session.commit()
+        current_app.logger.info(f"Admin updated profile for {user.email}")
+        return user
+
+    @staticmethod
+    def admin_create_user(self, data):
+        """ Allows an admin to create a new user. """
+        from backend.services.auth_service import AuthService
+        # Reusing the registration logic is better to keep things DRY
+        auth_service = AuthService()
+        user = auth_service.register_user(
+            first_name=data['first_name'],
+            last_name=data['last_name'],
+            email=data['email'],
+            password=data['password']
+        )
+        
+        # Admins might set additional properties upon creation
+        if 'is_active' in data:
+            user.is_active = data['is_active']
+        
+        db.session.commit()
+        current_app.logger.info(f"Admin created new user: {user.email}")
+        return user
+        
     @staticmethod
     def get_user_by_id(user_id: int, context: str = 'basic'):
-        """Get user by ID with different serialization contexts."""
-        user = User.query.get(user_id)
+        user = User.query.get_or_404(user_id)
+        return user.to_dict()
 
-        # Recommendation Implemented: Log read-access to sensitive user data.
-        if user:
-            actor_id = g.user.id if g.user else 'system'
-            UserService.audit_log_service.log_admin_action(
-                user_id=actor_id,
-                action=f"Viewed user profile",
-                target_id=user.id,
-                target_type="User"
-            )
-        
-        return user
         
     @staticmethod
     def get_all_users_paginated(page: int, per_page: int, filters: dict = None):
