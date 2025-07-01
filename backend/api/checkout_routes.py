@@ -14,7 +14,7 @@ from backend.schemas import ApplyDiscountSchema, CheckoutSchema, AddressSchema
 from backend.services.checkout_service import CheckoutService
 from marshmallow import ValidationError
 from backend.schemas import CheckoutSchema
-from backend.utils.decorators import login_required_json
+from backend.utils.decorators import login_required
 
 
 checkout_bp = Blueprint('checkout_bp', __name__, url_prefix='/api')
@@ -22,7 +22,7 @@ checkout_service = CheckoutService()
 discount_service = DiscountService()
 
 @checkout_bp.route('/start', methods=['POST'])
-@login_required_json
+@login_required
 def start_checkout():
     """
     Validates the structure of the checkout request and initiates the process.
