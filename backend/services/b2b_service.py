@@ -13,53 +13,81 @@ class B2BService:
         self.email_service = EmailService(logger)
         self.user_service = UserService(logger)
 
-    def apply_for_b2b_account(self, data):
-        # This function remains the same as the previous refactored version
+    def create_b2b_account(self, data):
+        """
+        Creates a B2B user account, which is initially pending approval.
+        """
         try:
-            if self.user_service.get_user_by_email(data['email']):
-                raise ValueError("An account with this email already exists.")
+            if session.query(B2BUser).filter_by(email=data['email']).first():
+                raise ValueError("B2B user with this email already exists.")
+
             hashed_password = hash_password(data['password'])
-            b2b_user = User(
-                email=data['email'], password_hash=hashed_password,
-                first_name=data['first_name'], last_name=data['last_name'],
-                company_name=data['company_name'], is_b2b=True,
-                user_type='B2B', b2b_status='pending', is_active=False
+            
+            b2b_user = B2BUser(
+                email=data['email'],
+                password_hash=hashed_password,
+                company_name=data['company_name'],
+                contact_person=data['contact_person'],
+                status='pending'
             )
             session.add(b2b_user)
             session.commit()
+
+            # Send email to admin for approval and to user for confirmation
             subject = "Your B2B Account Application is Pending Approval"
             template = "b2b_account_pending"
-            context = {"user": b2b_user}
+            context = {"b2b_user": b2b_user}
             self.email_service.send_email(b2b_user.email, subject, template, context)
-            self.logger.info(f"B2B account application submitted for {data['email']}.")
+            
+            # TODO: Send notification to admin dashboard
+
+            self.logger.info(f"B2B account created for {data['email']} and is pending approval.")
             return b2b_user
         except (SQLAlchemyError, ValueError) as e:
             session.rollback()
-            self.logger.error(f"Error creating B2B application: {e}")
+            self.logger.error(f"Error creating B2B account: {e}")
             raise
 
-    def approve_b2b_account(self, user_id):
-        # This function remains the same as the previous refactored version
+    def approve_b2b_account(self, b2b_user_id):
+        """
+        Approves a B2B user account and assigns the 'b2b_user' role.
+        """
         try:
-            b2b_user = self.user_service.get_user_by_id(user_id)
-            if not b2b_user or not b2b_user.is_b2b:
+            b2b_user = session.query(B2BUser).get(b2b_user_id)
+            if not b2b_user:
                 raise ValueError("B2B user not found.")
-            b2b_user.b2b_status = 'approved'
-            b2b_user.is_active = True
+
+            b2b_user.status = 'approved'
+            
+            # Assign 'b2b_user' role
             b2b_role = session.query(Role).filter_by(name='b2b_user').first()
-            if b2b_role and b2b_role not in b2b_user.roles:
-                b2b_user.roles.append(b2b_role)
+            if b2b_role:
+                # Check if role is already assigned
+                existing_role = session.query(UserRole).filter_by(user_id=b2b_user.id, role_id=b2b_role.id).first()
+                if not existing_role:
+                    user_role = UserRole(user_id=b2b_user.id, role_id=b2b_role.id)
+                    session.add(user_role)
+            
             session.commit()
+
+            # Send approval email
             subject = "Your B2B Account has been Approved!"
             template = "b2b_account_approved"
-            context = {"user": b2b_user}
+            context = {"b2b_user": b2b_user}
             self.email_service.send_email(b2b_user.email, subject, template, context)
-            self.logger.info(f"B2B account for {b2b_user.email} has been approved.")
+
+            self.logger.info(f"B2B account {b2b_user.email} has been approved.")
             return b2b_user
         except (SQLAlchemyError, ValueError) as e:
             session.rollback()
-            self.logger.error(f"Error approving B2B account for user {user_id}: {e}")
+            self.logger.error(f"Error approving B2B account: {e}")
             raise
+
+
+    def get_all_b2b_users(self):
+        """Retrieves all B2B users."""
+        return session.query(B2BUser).all()
+
 
     # --- Tier Management Logic ---
 
