@@ -122,47 +122,59 @@ class QuoteService:
             self.logger.error(f"Error responding to quote {quote_id}: {e}")
             raise
 
-    def accept_quote_and_create_cart(self, quote_id, user_id):
+    def respond_and_add_to_cart(self, quote_id, response_data):
         """
-        Accepts a quote and creates a new cart with custom-priced items.
+        Admin responds to a quote. For custom items, it creates an exclusive
+        product and adds it directly to the B2B user's cart.
         """
         try:
             quote = self.get_quote_by_id(quote_id)
-            if not quote or quote.user_id != user_id:
-                raise ValueError("Quote not found or access denied.")
-            if quote.status != 'responded':
-                raise ValueError("Quote cannot be accepted in its current state.")
-            if quote.expires_at and quote.expires_at < datetime.utcnow():
-                quote.status = 'expired'
-                session.commit()
-                raise ValueError("This quote has expired.")
+            if not quote:
+                raise ValueError("Quote not found.")
+            
+            user_id = quote.user_id
 
-            # Create a new cart for the user
-            cart = Cart(user_id=user_id)
-            session.add(cart)
-            session.flush()
+            for item_response in response_data['items']:
+                quote_item = session.query(QuoteItem).filter_by(id=item_response['item_id'], quote_id=quote_id).first()
+                if not quote_item:
+                    continue
 
-            for item in quote.items:
-                if item.response_price is None:
-                    raise ValueError(f"Cannot accept quote; item '{item.product.name}' has not been priced by an admin.")
+                price = item_response['price']
+                quote_item.response_price = price
                 
-                # Create a cart item with the custom price from the quote
-                cart_item = CartItem(
-                    cart_id=cart.id,
-                    product_id=item.product_id,
-                    quantity=item.quantity,
-                    price=item.response_price  # Using the custom price
+                product_id_to_add = quote_item.product_id
+
+                # If it's a custom item, create the exclusive product now
+                if quote_item.custom_item_name:
+                    exclusive_product = self.product_service.create_exclusive_product_for_quote(
+                        name=quote_item.custom_item_name,
+                        description=quote_item.custom_item_description,
+                        price=price,
+                        owner_id=user_id
+                    )
+                    product_id_to_add = exclusive_product.id
+                
+                # Add the item (existing or new) directly to the user's cart
+                self.cart_service.add_item_to_cart(
+                    user_id=user_id,
+                    product_id=product_id_to_add,
+                    quantity=quote_item.quantity,
+                    custom_price=price
                 )
-                session.add(cart_item)
 
-            quote.status = 'accepted'
+            quote.status = 'accepted' # The quote is now considered fulfilled
+            quote.responded_at = datetime.utcnow()
             session.commit()
-            self.logger.info(f"Quote {quote_id} accepted by user {user_id}. New cart {cart.id} created with custom pricing.")
-            return cart
 
-        except (SQLAlchemyError, ValueError) as e:
+            # TODO: Notify B2B user that items have been added to their cart
+            # self.email_service.send_email(...)
+            
+            self.logger.info(f"Admin responded to quote {quote_id} and added items directly to cart for user {user_id}.")
+            return quote
+
+        except (SQLAlchemyError, ValueError, PermissionError) as e:
             session.rollback()
-            self.logger.error(f"Error accepting quote {quote_id}: {e}")
+            self.logger.error(f"Error in respond_and_add_to_cart for quote {quote_id}: {e}")
             raise
 
     
