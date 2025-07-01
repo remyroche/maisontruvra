@@ -14,6 +14,96 @@ RESERVATION_LIFETIME_MINUTES = 60
 
 class InventoryService:
 
+
+    def __init__(self, logger):
+        self.logger = logger
+        self.background_task_service = BackgroundTaskService(logger)
+        self.email_service = EmailService(logger)
+
+    def get_stock_level(self, product_id):
+        """Gets the current stock level for a product."""
+        inventory = session.query(Inventory).filter_by(product_id=product_id).first()
+        return inventory.quantity if inventory else 0
+
+    def check_stock(self, product_id, quantity_needed):
+        """Checks if there is enough stock for a product."""
+        return self.get_stock_level(product_id) >= quantity_needed
+
+
+    def decrease_stock(self, product_id, quantity):
+        """Decreases stock for a product."""
+        try:
+            inventory = session.query(Inventory).filter_by(product_id=product_id).first()
+            if inventory and inventory.quantity >= quantity:
+                inventory.quantity -= quantity
+                session.commit()
+                self.logger.info(f"Decreased stock for product {product_id} by {quantity}.")
+                return inventory
+            else:
+                raise ValueError("Insufficient stock to decrease.")
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error decreasing stock for product {product_id}: {e}")
+            raise
+
+    def request_stock_notification(self, product_id, email):
+        """Creates a request for a back-in-stock notification."""
+        try:
+            # Check if product exists
+            product = session.query(Product).get(product_id)
+            if not product:
+                raise ValueError("Product not found.")
+
+            # Check if already in stock
+            if self.get_stock_level(product_id) > 0:
+                return None, "Product is already in stock."
+
+            notification_request = StockNotificationRequest(product_id=product_id, email=email)
+            session.add(notification_request)
+            session.commit()
+            self.logger.info(f"Stock notification request created for product {product_id} by {email}.")
+            return notification_request, "You will be notified when the product is back in stock."
+        except IntegrityError:
+            session.rollback()
+            self.logger.warning(f"Duplicate stock notification request for product {product_id} by {email}.")
+            return None, "You have already requested a notification for this product."
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error creating stock notification request: {e}")
+            raise
+
+    def process_stock_notifications(self, product_id):
+        """Sends out back-in-stock emails for a given product."""
+        try:
+            requests = session.query(StockNotificationRequest).filter_by(product_id=product_id, notified_at=None).all()
+            if not requests:
+                self.logger.info(f"No pending stock notifications to process for product {product_id}.")
+                return
+
+            product = session.query(Product).get(product_id)
+            if not product:
+                self.logger.error(f"Cannot process stock notifications for non-existent product {product_id}.")
+                return
+
+            self.logger.info(f"Processing {len(requests)} stock notifications for product '{product.name}'.")
+            
+            subject = f"'{product.name}' is Back in Stock!"
+            template = "back_in_stock_notification"
+            
+            for req in requests:
+                context = {"product": product, "user_email": req.email}
+                self.email_service.send_email(req.email, subject, template, context)
+                req.notified_at = datetime.utcnow()
+            
+            session.commit()
+            self.logger.info(f"Finished processing stock notifications for product {product_id}.")
+
+        except Exception as e:
+            session.rollback()
+            self.logger.error(f"An error occurred during stock notification processing for product {product_id}: {e}")
+
+
+    
     @staticmethod
     def increase_stock(inventory_id: int, quantity_to_add: int):
         """
@@ -43,6 +133,11 @@ class InventoryService:
                 f"Added {quantity_to_add} units to inventory for product {inventory_item.product_id}. {quantity_to_add} passports created.",
                 "InventoryService"
             )
+
+            # 4. Notifications
+            if was_out_of_stock and inventory.quantity > 0:
+                self.logger.info(f"Product {product_id} is back in stock. Triggering notifications.")
+                self.background_task_service.submit_task(self.process_stock_notifications, product_id)
 
             # Invalidate cache for the specific product and the general product list
             cache.delete('view//api/products/{}'.format(product_id)) 
