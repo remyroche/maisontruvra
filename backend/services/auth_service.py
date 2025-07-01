@@ -47,7 +47,6 @@ class AuthService:
     def register_user(self, user_data):
         """
         Registers a new user, hashes their password, and sends a verification email.
-        Also processes any referral code used.
         """
         try:
             if session.query(User).filter_by(email=user_data['email']).first():
@@ -59,14 +58,10 @@ class AuthService:
                 password_hash=hashed_password,
                 first_name=user_data.get('first_name'),
                 last_name=user_data.get('last_name'),
-                is_active=False
+                is_active=False  # User is inactive until email is verified
             )
             session.add(user)
             session.commit()
-
-            # Process referral code if provided
-            if user_data.get('referral_code'):
-                self.referral_service.process_new_user_referral(user, user_data['referral_code'])
 
             # Assign default role
             default_role = session.query(Role).filter_by(name='user').first()
@@ -89,7 +84,6 @@ class AuthService:
             session.rollback()
             self.logger.error(f"Error during user registration: {e}")
             raise
-
     def authenticate_user(self, email, password):
         """
         Authenticates a user by checking their email and password.
