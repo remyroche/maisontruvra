@@ -36,6 +36,7 @@ class Product(BaseModel, SoftDeleteMixin):
 
     # POS / B2B Quotes
     is_quotable_only = db.Column(db.Boolean, default=False, nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
     # Use back_populates for explicit relationship management
     variants = db.relationship('ProductVariant', back_populates='product', cascade="all, delete-orphan", lazy='joined')
