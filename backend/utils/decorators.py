@@ -129,7 +129,7 @@ def get_object_or_404(model):
 
 def api_resource_handler(model, request_schema=None, response_schema=None, 
                          ownership_exempt_roles=None, eager_loads=None, 
-                         log_action=False, cache_timeout=3600, allow_hard_delete=False):
+                         log_action=True, cache_timeout=3600, allow_hard_delete=False):
     """
     An all-in-one decorator for API endpoints that handles:
     1.  Eager loading for performance.
