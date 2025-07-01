@@ -92,70 +92,71 @@ class CheckoutService:
             current_app.logger.error(f"Failed to dispatch one or more post-order tasks for order {order.id}: {e}")
 
     @staticmethod
-    def create_order_from_cart(user_id: int, shipping_address_id: int, billing_address_id: int, delivery_method_id: int, payment_method: str, payment_transaction_id: str = None):
+    def create_order_from_cart(self, user_id, cart_id, payment_details, shipping_address_id, billing_address_id=None):
         """
-        Creates a B2C order from the user's cart after validation.
-        This is a core function that handles the transaction and database changes.
+        Creates an order from the user's cart.
         """
-        current_app.logger.info(f"Attempting to create B2C order for user {user_id}.")
-        user = User.query.get(user_id)
-        if not user:
-            raise ResourceNotFound("User", user_id)
+        try:
+            cart = session.query(Cart).filter_by(id=cart_id, user_id=user_id).first()
+            if not cart or not cart.items:
+                raise CartEmptyError("Cannot create an order from an empty cart.")
 
-        if user.user_type == UserType.B2B:
-            raise ServiceException("B2B users should use the professional checkout flow.")
+            # Validate stock before creating the order
+            for item in cart.items:
+                if not self.inventory_service.check_stock(item.product_id, item.quantity):
+                    product = session.query(Product).get(item.product_id)
+                    raise InsufficientStockError(f"Insufficient stock for product: {product.name}")
 
-        cart_contents = CartService.get_cart_contents(user_id)
-        if not cart_contents or not cart_contents['items']:
-            raise ServiceException("Cannot create an order from an empty cart.")
-        
-        CheckoutService._validate_cart_for_checkout(cart_contents['items'])
+            # Process payment
+            total_price = self.calculate_total(cart)
+            payment_successful, payment_intent_id = self.payment_service.process_payment(total_price, payment_details)
 
-        shipping_address = Address.query.get(shipping_address_id)
-        billing_address = Address.query.get(billing_address_id)
-        delivery_method = DeliveryMethod.query.get(delivery_method_id)
+            if not payment_successful:
+                raise PaymentError("Payment failed.")
 
-        if not all([shipping_address, billing_address, delivery_method]) or shipping_address.user_id != user_id or billing_address.user_id != user_id:
-            raise ServiceException("Invalid address or delivery method.")
-
-        total_price = cart_contents['total'] + delivery_method.price
-        
-        # In a real scenario, payment processing would happen here.
-        # For this example, we assume payment is successful.
-        payment_service = PaymentService()
-        payment_successful = payment_service.charge(total_price, payment_method, user.id)
-        if not payment_successful:
-            raise ServiceException("Payment failed.")
-
-        new_order = Order(
-            user_id=user_id, total_price=total_price, status=OrderStatus.PENDING,
-            shipping_address_id=shipping_address_id, billing_address_id=billing_address_id,
-            delivery_method_id=delivery_method_id, payment_method=payment_method,
-            payment_status=PaymentStatus.PAID, transaction_id=payment_transaction_id,
-            user_type=UserType.B2C
-        )
-        db.session.add(new_order)
-        db.session.flush()
-
-        for item_data in cart_contents['items']:
-            product = item_data['product']
-            quantity = item_data['quantity']
-            order_item = OrderItem(
-                order_id=new_order.id, product_id=product.id,
-                quantity=quantity, price=product.price
+            # Create the order
+            order = Order(
+                user_id=user_id,
+                total_price=total_price,
+                status='paid',
+                shipping_address_id=shipping_address_id,
+                billing_address_id=billing_address_id or shipping_address_id,
+                payment_intent_id=payment_intent_id
             )
-            db.session.add(order_item)
-            InventoryService.decrease_stock(product.id, quantity)
+            session.add(order)
+            session.flush()  # Flush to get the order ID
 
-        CartService.clear_cart(cart_contents['cart'].id)
-        db.session.commit()
-        
-        current_app.logger.info(f"Successfully created order {new_order.id} for user {user_id}.")
+            # Create order items and update inventory
+            for item in cart.items:
+                order_item = OrderItem(
+                    order_id=order.id,
+                    product_id=item.product_id,
+                    quantity=item.quantity,
+                    price=item.product.price
+                )
+                session.add(order_item)
+                self.inventory_service.decrease_stock(item.product_id, item.quantity)
 
-        # --- Trigger post-order background tasks using the centralized helper ---
-        CheckoutService._dispatch_post_order_tasks(new_order)
+            # Apply discounts and loyalty points
+            if cart.discount_id:
+                self.discount_service.apply_discount_to_order(order.id, cart.discount_id)
+            
+            self.loyalty_service.add_points(user_id, total_price)
 
-        return new_order
+            # Clear the cart
+            session.delete(cart)
+            session.commit()
+
+            # Send order confirmation email
+            self.background_task_service.submit_task(self.send_order_confirmation, order.id)
+
+            self.logger.info(f"Order {order.id} created successfully for user {user_id}.")
+            return order
+
+        except (SQLAlchemyError, CartEmptyError, InsufficientStockError, PaymentError, LoyaltyError) as e:
+            session.rollback()
+            self.logger.error(f"Error during checkout for user {user_id}: {e}")
+            raise CheckoutError(f"Checkout failed: {e}") from e
 
     @staticmethod
     def process_user_checkout(user_id: int, checkout_data: dict):
