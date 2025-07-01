@@ -14,7 +14,7 @@ from .exceptions import InsufficientStockException
 
 logger = logging.getLogger(__name__)
 
-class PosService:
+class POSService:
     """Service for handling Point of Sale transactions."""
     def __init__(self, logger):
         self.logger = logger
