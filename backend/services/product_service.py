@@ -23,20 +23,16 @@ class ProductService:
     def __init__(self, logger):
         self.logger = logger
 
-    def get_all_products_paginated(self, page: int, per_page: int, user=None, filters: dict = None):
+    def get_all_products(self):
         """
-        Gets a paginated list of all products, with comprehensive filtering and N+1 optimization.
-
-        - Optimizes queries using eager loading.
-        - Filters based on the user's role (B2B/B2C) and loyalty tier.
-        - Filters based on search, category, active status, etc.
+        Retrieves all public, shoppable products.
+        Filters out quote-only and owned products.
         """
-        # Eagerly load related data to prevent N+1 queries
-        query = Product.query.options(
-            selectinload(Product.variants).selectinload(ProductVariant.stock),
-            joinedload(Product.category),
-            selectinload(Product.tags)
-        )
+        try:
+            return session.query(Product).filter_by(is_active=True, is_quotable_only=False, owner_id=None).all()
+        except SQLAlchemyError as e:
+            self.logger.error(f"Error retrieving all products: {e}")
+            raise
 
         # --- User-based Filtering (Visibility & Tier Restrictions) ---
         if user:
@@ -283,6 +279,7 @@ class ProductService:
                 sku=unique_sku,
                 is_active=True, # Active so it can be ordered
                 is_quotable_only=True # Hidden from public shop
+                owner_id=owner_id # Assign ownership
             )
             session.add(quote_product)
             session.commit()
