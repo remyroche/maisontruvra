@@ -9,7 +9,7 @@ from backend.services.mfa_service import MfaService
 from backend.services.email_service import EmailService
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature # Added: For token serialization
 import logging
-from flask import current_app, session # Added: For session
+from flask import current_app, session, url_for
 from flask_login import login_user # Added: For login_user
 from ..extensions import socketio
 from .monitoring_service import MonitoringService
@@ -21,9 +21,14 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHash
 from ..services.exceptions import ValidationError
 from backend.services.exceptions import UserAlreadyExistsError, InvalidCredentialsError
-from flask import current_app
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
 from backend.utils.input_sanitizer import sanitize_input
+from backend.models import db, User, Role, UserRole
+from backend.services.email_service import EmailService
+from backend.services.user_service import UserService
+from backend.utils.encryption import hash_password, check_password
+from sqlalchemy.exc import SQLAlchemyError
+from backend.database import db_session as session
 
 
 
