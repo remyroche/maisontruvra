@@ -24,7 +24,10 @@ class User(Base):
     last_name = Column(String(50), nullable=False)
     email = Column(String(120), unique=True, nullable=False)
     password_hash = Column(String(256), nullable=False)
-
+    is_active = db.Column(db.Boolean, default=True)
+    is_guest = db.Column(db.Boolean, default=False, nullable=False)
+    email_verified_at = db.Column(db.DateTime, nullable=True)
+    
     # User Type and Status
     user_type = Column(SQLAlchemyEnum(UserType), default=UserType.B2C)
     status = Column(SQLAlchemyEnum(UserStatus), default=UserStatus.PENDING_VERIFICATION)
@@ -56,6 +59,17 @@ class User(Base):
     _b2b_user = relationship("B2BUser", back_populates="user", uselist=False, cascade="all, delete-orphan")
     user_type = db.Column(db.Enum(UserType), default=UserType.B2C, nullable=False)
 
+    # B2B Specific Fields
+    company_name = db.Column(db.String(100), nullable=True)
+    b2b_status = db.Column(db.String(50), default='none')
+
+    # Referral Program Fields
+    referral_code = db.Column(db.String(20), unique=True, nullable=True)
+    referred_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    referral_tier = db.Column(db.Integer, db.ForeignKey('referral_tiers.id'), nullable=True)
+    referrals_made = db.relationship('Referral', foreign_keys='Referral.referrer_id', back_populates='referrer')
+
+    
     # Passport relationship
     passport = relationship("ProductPassport", back_populates="owner", uselist=False)
 
