@@ -47,7 +47,6 @@ class CheckoutService:
         self.logger = logger
         self.email_service = EmailService(logger)
         self.inventory_service = InventoryService(logger)
-        self.notification_service = NotificationService(logger)
         self.loyalty_service = LoyaltyService(logger)
         self.discount_service = DiscountService(logger)
         self.payment_service = PaymentService(logger)
@@ -55,7 +54,121 @@ class CheckoutService:
         self.background_task_service = BackgroundTaskService(logger)
         self.user_service = UserService(logger)
         self.address_service = AddressService(logger)
+        self.referral_service = ReferralService(logger)
 
+    def process_checkout(self, validated_data, current_user=None):
+        """
+        Processes a checkout request for any user type (guest, B2C, B2B).
+        """
+        cart_id = validated_data['cart_id']
+        cart = session.query(Cart).options(joinedload(Cart.items).joinedload(CartItem.product)).get(cart_id)
+        if not cart or not cart.items:
+            raise CartEmptyError("Your cart is empty or could not be found.")
+
+        user = current_user
+        shipping_address_id = validated_data.get('shipping_address_id')
+        billing_address_id = validated_data.get('billing_address_id')
+
+        # Handle Guest Checkout
+        if not user:
+            guest_data = validated_data['guest_info']
+            user = self.user_service.get_or_create_guest_user(
+                email=guest_data['email'],
+                first_name=guest_data['shipping_address']['first_name'],
+                last_name=guest_data['shipping_address']['last_name']
+            )
+            
+            shipping_address_data = guest_data['shipping_address']
+            shipping_address_data['user_id'] = user.id
+            shipping_address = self.address_service.create_address(shipping_address_data)
+            shipping_address_id = shipping_address.id
+            
+            billing_address = shipping_address
+            if 'billing_address' in guest_data:
+                billing_address_data = guest_data['billing_address']
+                billing_address_data['user_id'] = user.id
+                billing_address = self.address_service.create_address(billing_address_data)
+            billing_address_id = billing_address.id
+
+        # Core order creation logic
+        try:
+            # Stock Validation
+            for item in cart.items:
+                if not self.inventory_service.check_stock(item.product_id, item.quantity):
+                    raise InsufficientStockError(f"Insufficient stock for product: {item.product.name}")
+
+            # Payment Processing
+            total_price = self.loyalty_service.calculate_total(cart)
+            payment_successful, payment_intent_id = self.payment_service.process_payment(total_price, validated_data['payment_token'])
+            if not payment_successful:
+                raise PaymentError("Payment processing failed.")
+            
+            is_first_order = not session.query(Order).filter_by(user_id=user.id).first()
+
+            # Create the Order
+            order = Order(
+                user_id=user.id,
+                total_price=total_price,
+                status='paid',
+                shipping_address_id=shipping_address_id,
+                billing_address_id=billing_address_id or shipping_address_id,
+                payment_intent_id=payment_intent_id,
+                discount_id=cart.discount_id
+            )
+            session.add(order)
+            session.flush()
+
+            for item in cart.items:
+                price = item.price if item.price is not None else item.product.price
+                order_item = OrderItem(order_id=order.id, product_id=item.product_id, quantity=item.quantity, price=price)
+                session.add(order_item)
+                self.inventory_service.decrease_stock(item.product_id, item.quantity)
+
+            if cart.discount_id:
+                self.discount_service.record_discount_usage(cart.discount_id)
+            
+            if not user.is_guest:
+                self.loyalty_service.add_points(user.id, total_price)
+                if is_first_order:
+                    self.background_task_service.submit_task(self.referral_service.complete_referral_after_first_order, user.id)
+
+            # Clear the cart
+            session.delete(cart)
+            session.commit()
+
+            self.background_task_service.submit_task(self.send_order_confirmation, order.id)
+            self.logger.info(f"Order {order.id} created successfully for user {user.id}.")
+            return order
+
+        except (SQLAlchemyError, CartEmptyError, InsufficientStockError, PaymentError) as e:
+            session.rollback()
+            self.logger.error(f"Checkout failed for user {user.id}: {e}")
+            raise CheckoutError(f"Checkout failed: {e}") from e
+
+    def send_order_confirmation(self, order_id):
+        # This method remains largely the same, but now correctly handles all user types
+        try:
+            order = session.query(Order).options(
+                joinedload(Order.user),
+                joinedload(Order.items).joinedload(OrderItem.product),
+                joinedload(Order.shipping_address),
+                joinedload(Order.billing_address)
+            ).get(order_id)
+
+            if not order:
+                self.logger.error(f"Order with id {order_id} not found for sending confirmation.")
+                return
+
+            user = order.user
+            invoice_pdf_path = self.pdf_service.generate_invoice(order)
+            subject = "Your Maison Truvra Order Confirmation"
+            template = "b2b_order_confirmation" if user.user_type == UserType.B2B else "b2c_order_confirmation"
+            context = {"order": order, "user": user}
+            attachments = [invoice_pdf_path] if invoice_pdf_path else []
+
+            self.email_service.send_email(user.email, subject, template, context, attachments)
+        except Exception as e:
+            self.logger.error(f"Failed to send order confirmation for order {order_id}: {e}")
     def create_guest_order(self, cart_id, guest_data, payment_details):
         """
         Creates an order for a guest user.
@@ -171,40 +284,7 @@ class CheckoutService:
             elif cart.discount.discount_type == DiscountType.FIXED_AMOUNT:
                 return max(0, subtotal - cart.discount.value)
         return subtotal
-
-    def send_order_confirmation(self, order_id):
-        """
-        Sends an order confirmation email to the user.
-        """
-        try:
-            order = session.query(Order).options(
-                joinedload(Order.user),
-                joinedload(Order.items).joinedload(OrderItem.product),
-                joinedload(Order.shipping_address),
-                joinedload(Order.billing_address)
-            ).filter_by(id=order_id).first()
-
-            if not order:
-                self.logger.error(f"Order with id {order_id} not found for sending confirmation.")
-                return
-
-            user = order.user
-            if not user:
-                self.logger.error(f"User not found for order {order_id}.")
-                return
-
-            invoice_pdf_path = self.pdf_service.generate_invoice(order)
-
-            subject = "Your Maison Truvra Order Confirmation"
-            template = "b2b_order_confirmation" if user.is_b2b else "b2c_order_confirmation"
-            context = {"order": order, "user": user}
-            attachments = [invoice_pdf_path] if invoice_pdf_path else []
-
-            self.email_service.send_email(user.email, subject, template, context, attachments)
-            self.logger.info(f"Order confirmation email sent for order {order_id}.")
-
-        except Exception as e:
-            self.logger.error(f"Failed to send order confirmation for order {order_id}: {e}")
+    
 
     @staticmethod
     def create_order_from_cart(self, user_id, cart_id, payment_details, shipping_address_id, billing_address_id=None):
@@ -340,55 +420,8 @@ class CheckoutService:
                 return max(0, subtotal - cart.discount.value)
         return subtotal
         
-    @staticmethod
-    def process_user_checkout(user_id: int, checkout_data: dict):
-        """
-        Processes checkout for a given user, routing to B2C or B2B flow based on user type.
 
-        :param user_id: The ID of the user checking out.
-        :param checkout_data: A dictionary containing all necessary data for the checkout.
-        :return: The created Order object.
-        """
-        current_app.logger.info(f"Processing checkout for user {user_id}")
-        user = User.query.get(user_id)
-        if not user:
-            raise ResourceNotFound("User", user_id)
-
-        if user.user_type == UserType.B2C:
-            current_app.logger.info(f"Routing user {user_id} to B2C checkout flow.")
-            try:
-                order = CheckoutService.create_order_from_cart(
-                    user_id=user_id,
-                    shipping_address_id=checkout_data['shipping_address_id'],
-                    billing_address_id=checkout_data['billing_address_id'],
-                    delivery_method_id=checkout_data['delivery_method_id'],
-                    payment_method=checkout_data['payment_method'],
-                    payment_transaction_id=checkout_data.get('payment_transaction_id')
-                )
-                return order
-            except KeyError as e:
-                raise ServiceException(f"Missing required checkout data for B2C user: {e}")
-
-        elif user.user_type == UserType.B2B:
-            current_app.logger.info(f"Routing user {user_id} to B2B checkout flow.")
-            try:
-                b2b_order = B2BService.create_b2b_order(
-                    user_id=user_id,
-                    shipping_address_id=checkout_data['shipping_address_id'],
-                    billing_address_id=checkout_data['billing_address_id'],
-                    payment_details=checkout_data['payment_details']
-                )
-
-                if b2b_order:
-                    CheckoutService._dispatch_post_order_tasks(b2b_order)
-                    return b2b_order
-                return None
-            except KeyError as e:
-                raise ServiceException(f"Missing required checkout data for B2B user: {e}")
-
-        else:
-            raise ServiceException(f"Unknown user type '{user.user_type}' for user {user_id}.")
-
+    
 
     @staticmethod
     def get_available_delivery_methods(address: dict = None, cart_total: float = 0.0):
