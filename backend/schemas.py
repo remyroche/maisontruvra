@@ -6,6 +6,11 @@ separating input validation from output serialization.
 import re
 from marshmallow import Schema, fields, validate, ValidationError
 from .extensions import ma
+from .models.b2b_models import B2BPartnershipRequest, B2BTier, B2BAccount
+from .models.user_models import User
+from .models.enums import B2BStatus, OrderStatus, PaymentStatus
+from .models.order_models import Order, OrderItem, Payment, ShippingAddress, BillingAddress
+from .models.product_models import Product, Variant, WishlistItem # Import WishlistItem and Product/Variant for nesting
 
 # --- Base Schema & Custom Validators ---
 
@@ -117,6 +122,7 @@ class UserProfileUpdateSchema(BaseSchema):
     """Schema for users updating their own profile."""
     first_name = fields.Str(validate=validate.Length(min=1, max=50))
     last_name = fields.Str(validate=validate.Length(min=1, max=50))
+    language = fields.Str(validate=validate.Length(min=2, max=10))
 
 class ChangePasswordSchema(BaseSchema):
     """Schema for changing a password."""
@@ -132,6 +138,18 @@ class PasswordResetConfirmSchema(BaseSchema):
     token = fields.Str(required=True)
     new_password = fields.Str(required=True, validate=validate_password_complexity)
 
+class LanguageUpdateSchema(BaseSchema):
+    """Schema for updating user language preference."""
+    language = fields.Str(required=True, validate=validate.Length(min=2, max=10))
+
+class TwoFactorSetupSchema(BaseSchema):
+    """Schema for initiating 2FA setup."""
+    pass
+
+class TwoFactorVerifySchema(BaseSchema):
+    """Schema for verifying 2FA token."""
+    totp_code = fields.Str(required=True, validate=validate.Length(equal=6))
+
 # --- Cart & Checkout Schemas ---
 
 class AddToCartSchema(BaseSchema):
@@ -141,7 +159,7 @@ class AddToCartSchema(BaseSchema):
 
 class UpdateCartItemSchema(BaseSchema):
     """Schema for updating an item's quantity in the cart."""
-    quantity = fields.Int(required=True, validate=validate.Range(min=0)) # 0 to remove
+    quantity = fields.Int(required=True, validate=validate.Range(min=0))
 
 class ApplyDiscountSchema(BaseSchema):
     """Schema for applying a discount code to the cart."""
@@ -152,7 +170,7 @@ class CheckoutSchema(BaseSchema):
     shipping_address_id = fields.Int(required=True)
     billing_address_id = fields.Int(required=True)
     delivery_method_id = fields.Int(required=True)
-    payment_token = fields.Str(required=True) # From payment provider
+    payment_token = fields.Str(required=True)
     notes = fields.Str(allow_none=True)
 
 # --- Blog Schemas ---
@@ -210,6 +228,176 @@ class DeliveryMethodSchema(BaseSchema):
     price = fields.Decimal(as_string=True, required=True, validate=validate.Range(min=0))
     is_active = fields.Bool(default=True)
     tier_ids = fields.List(fields.Int(), load_only=True, required=False)
+
+# --- B2B Schemas ---
+class B2BPartnershipRequestSchema(BaseSchema):
+    """Schema for B2B partnership requests."""
+    id = fields.Int(dump_only=True)
+    company_name = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+    contact_person = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+    contact_email = fields.Email(required=True)
+    phone_number = fields.Str(required=True, validate=validate.Length(min=1, max=20))
+    message = fields.Str(allow_none=True, validate=validate.Length(max=1000))
+    status = fields.Str(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+
+class B2BTierSchema(BaseSchema):
+    """Schema for B2B pricing tiers."""
+    id = fields.Int(dump_only=True)
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=50))
+    discount_percentage = fields.Decimal(as_string=True, required=True, validate=validate.Range(min=0, max=100))
+    minimum_spend = fields.Decimal(as_string=True, allow_none=True, validate=validate.Range(min=0))
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
+
+class B2BAccountSchema(BaseSchema):
+    """Schema for B2B accounts."""
+    id = fields.Int(dump_only=True)
+    company_name = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+    contact_email = fields.Email(required=True)
+    phone_number = fields.Str(required=True, validate=validate.Length(min=1, max=20))
+    status = fields.Str(dump_only=True)
+    tier_id = fields.Int(allow_none=True)
+    user_id = fields.Int(required=True)
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
+    tier = fields.Nested(B2BTierSchema, dump_only=True)
+    user = fields.Nested(UserSchema, dump_only=True, only=('id', 'email', 'first_name', 'last_name'))
+
+class B2BAccountStatusUpdateSchema(BaseSchema):
+    """Schema for updating a B2B account's status."""
+    status = fields.Str(required=True, validate=validate.OneOf([s.value for s in B2BStatus]))
+
+class B2BApplicationRejectSchema(BaseSchema):
+    """Schema for rejecting a B2B application."""
+    reason = fields.Str(required=True, validate=validate.Length(min=1, max=500))
+
+class B2BTierCreateSchema(BaseSchema):
+    """Schema for creating a B2B pricing tier."""
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=50))
+    discount_percentage = fields.Decimal(as_string=True, required=True, validate=validate.Range(min=0, max=100))
+    minimum_spend = fields.Decimal(as_string=True, allow_none=True, validate=validate.Range(min=0))
+
+class B2BTierUpdateSchema(BaseSchema):
+    """Schema for updating an existing B2B pricing tier."""
+    name = fields.Str(validate=validate.Length(min=1, max=50))
+    discount_percentage = fields.Decimal(as_string=True, validate=validate.Range(min=0, max=100))
+    minimum_spend = fields.Decimal(as_string=True, allow_none=True, validate=validate.Range(min=0))
+
+class B2BUserAssignTierSchema(BaseSchema):
+    """Schema for assigning a tier to a B2B user."""
+    tier_id = fields.Int(required=True)
+
+# --- Order Schemas ---
+class OrderItemSchema(BaseSchema):
+    """Schema for items within an order."""
+    id = fields.Int(dump_only=True)
+    product_id = fields.Int(required=True)
+    variant_id = fields.Int(required=True)
+    quantity = fields.Int(required=True, validate=validate.Range(min=1))
+    price_at_purchase = fields.Decimal(as_string=True, required=True)
+    product = fields.Nested(ProductSchema, dump_only=True, only=('id', 'name', 'price', 'image_url')) # Added image_url
+    variant = fields.Nested(VariantSchema, dump_only=True, only=('id', 'sku', 'price_offset'))
+
+class PaymentSchema(BaseSchema):
+    """Schema for payment details of an order."""
+    id = fields.Int(dump_only=True)
+    amount = fields.Decimal(as_string=True, required=True)
+    currency = fields.Str(required=True, validate=validate.Length(equal=3))
+    payment_method = fields.Str(required=True)
+    transaction_id = fields.Str(required=True)
+    status = fields.Str(required=True, validate=validate.OneOf([s.value for s in PaymentStatus]))
+    created_at = fields.DateTime(dump_only=True)
+
+class OrderSchema(BaseSchema):
+    """Comprehensive schema for an Order, including nested details."""
+    id = fields.Int(dump_only=True)
+    user_id = fields.Int(allow_none=True)
+    session_id = fields.Str(allow_none=True)
+    total_amount = fields.Decimal(as_string=True, dump_only=True)
+    status = fields.Str(dump_only=True, validate=validate.OneOf([s.value for s in OrderStatus]))
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
+    tracking_number = fields.Str(allow_none=True)
+    
+    items = fields.List(fields.Nested(OrderItemSchema), dump_only=True)
+    payments = fields.List(fields.Nested(PaymentSchema), dump_only=True)
+    shipping_address = fields.Nested(AddressSchema, dump_only=True)
+    billing_address = fields.Nested(AddressSchema, dump_only=True)
+    
+    shipping_address_id = fields.Int(load_only=True, required=False)
+    billing_address_id = fields.Int(load_only=True, required=False)
+    delivery_method_id = fields.Int(load_only=True, required=False)
+    payment_token = fields.Str(load_only=True, required=False)
+    notes = fields.Str(load_only=True, allow_none=True)
+
+
+class GuestOrderSchema(BaseSchema):
+    """Schema for creating a guest order."""
+    session_id = fields.Str(required=True)
+    email = fields.Email(required=True)
+    shipping_address = fields.Nested(AddressSchema, required=True)
+    billing_address = fields.Nested(AddressSchema, required=True)
+    delivery_method_id = fields.Int(required=True)
+    payment_token = fields.Str(required=True)
+    notes = fields.Str(allow_none=True)
+
+class AuthenticatedOrderSchema(BaseSchema):
+    """Schema for creating an order for an authenticated user."""
+    shipping_address_id = fields.Int(required=True)
+    billing_address_id = fields.Int(required=True)
+    delivery_method_id = fields.Int(required=True)
+    payment_token = fields.Str(required=True)
+    notes = fields.Str(allow_none=True)
+
+class CheckoutOrderSchema(BaseSchema):
+    """
+    Combined schema for checkout, handling both guest and authenticated user fields.
+    Fields are optional based on whether user_id or session_id is present.
+    """
+    user_id = fields.Int(load_only=True, allow_none=True)
+    session_id = fields.Str(load_only=True, allow_none=True)
+    email = fields.Email(load_only=True, allow_none=True)
+    
+    shipping_address_id = fields.Int(load_only=True, allow_none=True)
+    billing_address_id = fields.Int(load_only=True, allow_none=True)
+    shipping_address = fields.Nested(AddressSchema, load_only=True, allow_none=True)
+    billing_address = fields.Nested(AddressSchema, load_only=True, allow_none=True)
+    
+    delivery_method_id = fields.Int(required=True)
+    payment_token = fields.Str(required=True)
+    notes = fields.Str(allow_none=True)
+
+    @validate.post_load
+    def validate_user_or_guest_info(self, data, **kwargs):
+        if data.get('user_id') is None:
+            if not data.get('session_id'):
+                raise ValidationError("session_id is required for guest checkout.", "session_id")
+            if not data.get('email'):
+                raise ValidationError("email is required for guest checkout.", "email")
+            if not data.get('shipping_address'):
+                raise ValidationError("shipping_address is required for guest checkout.", "shipping_address")
+            if not data.get('billing_address'):
+                raise ValidationError("billing_address is required for guest checkout.", "billing_address")
+        else:
+            if not data.get('shipping_address_id'):
+                raise ValidationError("shipping_address_id is required for authenticated checkout.", "shipping_address_id")
+            if not data.get('billing_address_id'):
+                raise ValidationError("billing_address_id is required for authenticated checkout.", "billing_address_id")
+        return data
+
+# --- Wishlist Schemas ---
+class WishlistItemSchema(BaseSchema):
+    """Schema for a WishlistItem."""
+    id = fields.Int(dump_only=True)
+    user_id = fields.Int(dump_only=True)
+    product_id = fields.Int(required=True) # For adding/removing
+    created_at = fields.DateTime(dump_only=True)
+    product = fields.Nested(ProductSchema, dump_only=True, only=('id', 'name', 'price', 'image_url', 'slug')) # Include relevant product details
+
+class AddToWishlistSchema(BaseSchema):
+    """Schema for adding an item to the wishlist (input)."""
+    product_id = fields.Int(required=True)
 
 # --- Miscellaneous Schemas ---
 
