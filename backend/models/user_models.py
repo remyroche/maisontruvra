@@ -7,6 +7,10 @@ import datetime
 from backend.utils.encryption import decrypt_data, encrypt_data
 from sqlalchemy.ext.hybrid import hybrid_property
 
+class UserType(enum.Enum):
+    B2C = "B2C"
+    B2B = "B2B
+    
 class User(Base):
     """
     Represents a user of the application.
@@ -19,7 +23,7 @@ class User(Base):
     last_name = Column(String(50), nullable=False)
     email = Column(String(120), unique=True, nullable=False)
     password_hash = Column(String(256), nullable=False)
-    
+
     # User Type and Status
     user_type = Column(SQLAlchemyEnum(UserType), default=UserType.B2C)
     status = Column(SQLAlchemyEnum(UserStatus), default=UserStatus.PENDING_VERIFICATION)
@@ -48,7 +52,8 @@ class User(Base):
     
     # B2B specific relationship - one-to-one
     b2b_user = relationship("B2BUser", back_populates="user", uselist=False, cascade="all, delete-orphan")
-    
+    user_type = db.Column(db.Enum(UserType), default=UserType.B2C, nullable=False)
+
     # Passport relationship
     passport = relationship("ProductPassport", back_populates="owner", uselist=False)
 
