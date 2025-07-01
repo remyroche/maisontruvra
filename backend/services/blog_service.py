@@ -4,12 +4,15 @@ from sqlalchemy.orm import Session
 from backend.database import db
 from backend.models.blog_models import BlogPost, BlogCategory # Assuming BlogPost has a backref to BlogCategory named 'blog_posts'
 from ..services.exceptions import NotFoundException, ValidationException
-from backend.utils.input_sanitizer import InputSanitizer # Corrected: Use InputSanitizer
 import bleach
 import re
 from .monitoring_service import MonitoringService
 from .exceptions import ServiceError
-from flask import current_app # Added: Import current_app
+from backend.utils.input_sanitizer import InputSanitizer
+from backend.utils.slug_utility import create_slug
+from flask import current_app
+
+
 
 ALLOWED_TAGS = ['p', 'a', 'strong', 'em', 'u', 'ol', 'ul', 'li', 'br', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote']
 ALLOWED_ATTRIBUTES = {'a': ['href', 'title']}
@@ -73,43 +76,28 @@ class BlogService:
         return s
 
     def create_article(self, article_data: dict) -> BlogPost:
-        """
-        Creates a new blog post after sanitizing its content.
-        """
-        try:
-            sanitized_data = self._sanitize_article_data(article_data)
+        """ Creates a blog post with sanitized title and content. """
+        sanitized_title = InputSanitizer.sanitize_string(data['title'])
+        # Use sanitize_html for content, allowing some tags
+        sanitized_content = InputSanitizer.sanitize_html(data['content'], allow_tags=True)
+        
+        slug = data.get('slug') or create_slug(sanitized_title)
+        if BlogPost.query.filter_by(slug=slug).first():
+            slug = f"{slug}-{db.session.query(BlogPost).count() + 1}"
 
-            # Validate required fields for creation
-            if not sanitized_data.get('title'):
-                raise ValidationException("Article title is required.")
-            
-            # Generate slug if not provided
-            if not sanitized_data.get('slug'):
-                sanitized_data['slug'] = self._generate_slug(sanitized_data['title'])
-            
-            # Check for slug uniqueness
-            if self.session.query(BlogPost).filter_by(slug=sanitized_data['slug']).first():
-                raise ValidationException(f"Article with slug '{sanitized_data['slug']}' already exists.")
+        new_post = BlogPost(
+            title=sanitized_title,
+            content=sanitized_content,
+            author_id=data['author_id'],
+            category_id=data['category_id'],
+            slug=slug,
+            is_published=data.get('is_published', False)
+        )
+        db.session.add(new_post)
+        db.session.commit()
+        current_app.logger.info(f"New blog post created: '{sanitized_title}'")
+        return new_post
 
-            new_post = BlogPost(
-                title=sanitized_data['title'],
-                slug=sanitized_data['slug'],
-                content=sanitized_data.get('content'),
-                excerpt=sanitized_data.get('excerpt'),
-                image_url=sanitized_data.get('image_url'),
-                author_id=sanitized_data.get('author_id'),
-                category_id=sanitized_data.get('category_id'),
-                is_published=sanitized_data.get('is_published', False) # Default to False if not provided
-            )
-            db.session.add(new_post)
-            db.session.commit()
-            return new_post
-        except Exception as e:
-            db.session.rollback()
-            MonitoringService.log_error(
-                f"Database error creating blog post: {e}", "BlogService", exc_info=True
-            )
-            raise ServiceError("Could not create blog post.")
 
     def get_all_articles(self):
         """Retrieves all blog posts."""
@@ -136,46 +124,29 @@ class BlogService:
         return article
 
     def update_article(self, article_id: int, article_data: dict) -> BlogPost:
-        """
-        Updates an existing blog post after sanitizing its content.
-        """
-        post = self.session.query(BlogPost).get(article_id) # Corrected: Use self.session and article_id
+        """ Updates a blog post with sanitized fields. """
+        post = BlogPost.query.get(post_id)
         if not post:
-            raise NotFoundException("Blog post not found.") # Corrected: Use NotFoundException
+            return None
 
-        try:
-            sanitized_data = self._sanitize_article_data(article_data)
+        if 'title' in data:
+            post.title = InputSanitizer.sanitize_string(data['title'])
+            # Also update slug if title changes and no new slug is provided
+            if 'slug' not in data:
+                post.slug = create_slug(post.title)
+        if 'content' in data:
+            post.content = InputSanitizer.sanitize_html(data['content'], allow_tags=True)
+        if 'slug' in data:
+            post.slug = InputSanitizer.sanitize_string(data['slug'])
+        if 'category_id' in data:
+            post.category_id = data['category_id']
+        if 'is_published' in data:
+            post.is_published = data['is_published']
+        
+        db.session.commit()
+        current_app.logger.info(f"Blog post {post_id} updated.")
+        return post
 
-            # Update fields only if they are provided in the sanitized data
-            if 'title' in sanitized_data:
-                post.title = sanitized_data['title']
-            if 'slug' in sanitized_data:
-                # Check for slug uniqueness if it's being changed
-                if sanitized_data['slug'] != post.slug and \
-                   self.session.query(BlogPost).filter_by(slug=sanitized_data['slug']).first():
-                    raise ValidationException(f"Article with slug '{sanitized_data['slug']}' already exists.")
-                post.slug = sanitized_data['slug']
-            if 'content' in sanitized_data:
-                post.content = sanitized_data['content']
-            if 'excerpt' in sanitized_data:
-                post.excerpt = sanitized_data['excerpt']
-            if 'image_url' in sanitized_data:
-                post.image_url = sanitized_data['image_url']
-            if 'author_id' in sanitized_data:
-                post.author_id = sanitized_data['author_id']
-            if 'category_id' in sanitized_data:
-                post.category_id = sanitized_data['category_id']
-            if 'is_published' in sanitized_data:
-                post.is_published = sanitized_data['is_published']
-            
-            self.session.commit() # Corrected: Use self.session
-            return post
-        except Exception as e:
-            self.session.rollback() # Corrected: Use self.session
-            MonitoringService.log_error(
-                f"Database error updating blog post: {e}", "BlogService", exc_info=True
-            )
-            raise ServiceError("Could not update blog post.")
 
     def delete_article(self, article_id: int):
         """Deletes a blog post."""
