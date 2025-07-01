@@ -8,8 +8,12 @@ from ..services.monitoring_service import MonitoringService
 from ..extensions import redis_client
 from datetime import datetime
 from ..services.exceptions import DiscountInvalidException
-from backend.models import Discount, db
 from backend.utils.input_sanitizer import sanitize_plaintext
+
+from backend.models.discount_models import Discount
+from backend.database import db
+from backend.utils.input_sanitizer import sanitize_input
+from flask import current_app
 
 
 CACHE_TTL_SECONDS = 600
@@ -34,14 +38,13 @@ class DiscountService:
 
     @staticmethod
     def create_discount(data):
-        """Creates a new discount, sanitizing the code."""
-        
-        sanitized_code = sanitize_plaintext(data['code']).upper()
+        """ Creates a discount with a sanitized code. """
+        sanitized_code = sanitize_input(data['code']).upper()
         
         if Discount.query.filter_by(code=sanitized_code).first():
             raise ValueError("A discount with this code already exists.")
-            
-        discount = Discount(
+
+        new_discount = Discount(
             code=sanitized_code,
             discount_type=data['discount_type'],
             value=data['value'],
@@ -49,10 +52,11 @@ class DiscountService:
             max_uses=data.get('max_uses'),
             min_purchase_amount=data.get('min_purchase_amount')
         )
-        
-        db.session.add(discount)
+        db.session.add(new_discount)
         db.session.commit()
-        return discount
+        current_app.logger.info(f"New discount created: {sanitized_code}")
+        return new_discount
+
 
     @staticmethod
     def get_discount_by_code(code):
@@ -208,6 +212,29 @@ class DiscountService:
         
         # 3. Standard price
         return product.price
+
+
+    @staticmethod
+    def update_discount(self, discount_id, data):
+        """ Updates a discount with sanitized fields. """
+        discount = Discount.query.get(discount_id)
+        if not discount:
+            return None
+
+        if 'code' in data:
+            sanitized_code = sanitize_input(data['code']).upper()
+            if Discount.query.filter(Discount.id != discount_id, Discount.code == sanitized_code).first():
+                 raise ValueError("A discount with this code already exists.")
+            discount.code = sanitized_code
+        
+        for field in ['discount_type', 'value', 'expires_at', 'max_uses', 'min_purchase_amount']:
+            if field in data:
+                setattr(discount, field, data[field])
+
+        db.session.commit()
+        current_app.logger.info(f"Discount {discount_id} updated.")
+        return discount
+
 
     @staticmethod
     def create_order(user_id: int, shipping_address_id: int, billing_address_id: int) -> Order:
