@@ -13,6 +13,7 @@ from backend.models.address_models import Address
 from backend.models.delivery_models import DeliveryMethod
 from backend.models.notification_models import NotificationType
 from backend.models.cart_models import Cart, CartItem
+from backend.models import db, Order, OrderItem, Product, Cart, CartItem, User, Address, Discount, LoyaltyProgram, UserLoyalty, DiscountType
 
 from backend.services.product_service import ProductService
 from backend.services.inventory_service import InventoryService
@@ -20,8 +21,19 @@ from backend.services.b2b_service import B2BService
 from backend.services.cart_service import CartService
 from backend.services.loyalty_service import add_loyalty_points_for_purchase
 from backend.services.notification_service import NotificationService
-from backend.services.exceptions import ServiceException, CheckoutValidationError, ResourceNotFound
-from backend.services.payment_service import PaymentService # Assuming this service exists
+from .exceptions import CheckoutError, CartEmptyError, ProductNotFoundError, InsufficientStockError, PaymentError, LoyaltyError
+
+from backend.services.loyalty_service import LoyaltyService
+from backend.services.discount_service import DiscountService
+from backend.services.email_service import EmailService
+from sqlalchemy.orm import sessionmaker, joinedload
+from sqlalchemy.exc import SQLAlchemyError
+
+from backend.services.payment_service import PaymentService
+from backend.services.pdf_service import PDFService
+from backend.services.background_task_service import BackgroundTaskService
+from backend.utils.encryption import encrypt_data
+from backend.database import db_session as session
 
 
 from backend.tasks import (
