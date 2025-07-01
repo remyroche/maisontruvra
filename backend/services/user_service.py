@@ -70,7 +70,7 @@ class UserService:
         try:
             user = self.get_user_by_id(user_id)
             if user:
-                user.email_address = profile_data.get('email_address', user.email_address)
+                user.email = profile_data.get('email', user.email)
                 user.first_name = profile_data.get('first_name', user.first_name)
                 user.last_name = profile_data.get('last_name', user.last_name)
                 session.commit()
