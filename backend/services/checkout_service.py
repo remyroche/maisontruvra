@@ -14,7 +14,7 @@ from backend.models.cart_models import Cart, CartItem
 from backend.services.product_service import ProductService
 from backend.services.b2b_service import B2BService
 from backend.services.cart_service import CartService
-
+from backend.services.referral_service import ReferralService
 
 from backend.tasks import (
     generate_invoice_for_order_task, 
@@ -55,7 +55,8 @@ class CheckoutService:
         self.user_service = UserService(logger)
         self.address_service = AddressService(logger)
         self.referral_service = ReferralService(logger)
-
+        self.referral_service = ReferralService(logger)
+        
     def process_checkout(self, validated_data, current_user=None):
         """
         Processes a checkout request for any user type (guest, B2C, B2B).
