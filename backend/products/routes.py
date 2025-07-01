@@ -1,4 +1,3 @@
-from flask import Blueprint, request, jsonify
 from marshmallow import ValidationError
 from backend.services.product_service import ProductService
 from backend.utils.input_sanitizer import InputSanitizer
@@ -8,9 +7,14 @@ from backend.extensions import cache
 import logging
 from backend.services.review_service import ReviewService
 from backend.schemas import ProductSearchSchema, ReviewSchema
+from flask import Blueprint, request, jsonify, current_app
+from backend.services.inventory_service import InventoryService
+from backend.schemas import ProductSchema
 
-products_bp = Blueprint('products_bp', __name__, url_prefix='/api/products')
-logger = logging.getLogger(__name__)
+products_bp = Blueprint('products', __name__, url_prefix='/api/products')
+product_schema = ProductSchema()
+products_schema = ProductSchema(many=True)
+
 
 
 @products_bp.route('/<uuid:product_id>/recommendations', methods=['GET'])
@@ -89,6 +93,37 @@ def get_product_by_slug(slug):
         
     return jsonify(status="success", data=product.to_dict_for_public()), 200
 
+@products_bp.route('/<int:product_id>', methods=['GET'])
+def get_product(product_id):
+    logger = current_app.logger
+    product_service = ProductService(logger)
+    product = product_service.get_product_by_id(product_id)
+    if product:
+        return jsonify(product_schema.dump(product)), 200
+    return jsonify({"error": "Product not found"}), 404
+
+@products_bp.route('/<int:product_id>/notify-me', methods=['POST'])
+def request_stock_notification(product_id):
+    """
+    Endpoint for users to request notification when a product is back in stock.
+    """
+    data = request.get_json()
+    email = data.get('email')
+    if not email:
+        return jsonify({"error": "Email is required."}), 400
+
+    logger = current_app.logger
+    inventory_service = InventoryService(logger)
+    
+    try:
+        _, message = inventory_service.request_stock_notification(product_id, email)
+        return jsonify({"message": message}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.exception(f"Failed to create stock notification request for product {product_id}")
+        return jsonify({"error": "An internal error occurred."}), 500
+        
 # READ all product categories
 @products_bp.route('/categories', methods=['GET'])
 @cache.cached(timeout=21600)
