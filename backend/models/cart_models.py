@@ -1,54 +1,29 @@
-from backend.database import db
-from backend.models.base import BaseModel
+from backend.models.base import Base
+from backend.extensions import db
 
-class Cart(BaseModel):
-    """
-    Represents a user's shopping cart.
-    """
+class Cart(Base):
     __tablename__ = 'carts'
-
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True, nullable=False)
-    session_id = db.Column(db.String(255), unique=True, nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) # Can be null for guest carts
+    discount_id = db.Column(db.Integer, db.ForeignKey('discounts.id'), nullable=True)
 
-    b2b_account_id = db.Column(db.Integer, db.ForeignKey('b2b_accounts.id'), nullable=True)
-    b2b_account = db.relationship('B2BAccount', backref='carts')
-
+    user = db.relationship('User')
     items = db.relationship('CartItem', back_populates='cart', cascade="all, delete-orphan")
-    user = db.relationship('User', back_populates='cart')
+    discount = db.relationship('Discount')
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'items': [item.to_dict() for item in self.items]
-        }
-
-class CartItem(BaseModel):
-    """
-    Represents a single item within a shopping cart.
-    """
+class CartItem(Base):
     __tablename__ = 'cart_items'
-    
     id = db.Column(db.Integer, primary_key=True)
     cart_id = db.Column(db.Integer, db.ForeignKey('carts.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    quantity = db.Column(db.Integer, nullable=False, default=1)
+    quantity = db.Column(db.Integer, default=1)
+    
+    # This price field will store the standard product price or a custom price from a quote.
+    price = db.Column(db.Numeric(10, 2), nullable=True)
 
     cart = db.relationship('Cart', back_populates='items')
     product = db.relationship('Product')
-    is_reward = db.Column(db.Boolean, default=False, nullable=False)
 
-        
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'product_id': self.product_id,
-            'quantity': self.quantity,
-            'product_name': self.product.name,
-            'price': self.product.price,
-            'data': self.is_reward
-        }
 
 # Add the one-to-one relationship from User to Cart
 from backend.models.user_models import User
