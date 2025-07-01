@@ -1,125 +1,103 @@
-<!--------------------------------------------------------------------------------
--- File: backend/templates/non-email/b2c_invoice.html
--- Change: Implemented stylistic refinements for a more luxurious feel.
--------------------------------------------------------------------------------->
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Facture</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;500&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+    <title>Invoice</title>
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f9f5f0; /* brand-cream */
-        }
-        .font-serif {
-            font-family: 'Playfair Display', serif;
-        }
-        .font-signature {
-            font-family: 'Dancing Script', cursive;
-        }
-        /* Define brand colors from tailwind.config.js */
-        .text-brand-dark-brown { color: #3a322f; }
-        .bg-brand-cream { background-color: #f9f5f0; }
-        .text-brand-burgundy { color: #800020; }
-        .border-brand-burgundy { border-color: #800020; }
-        .text-brand-dark-gray { color: #5a5a5a; }
-        .border-brand-cream { border-color: #f9f5f0; }
+        body { font-family: 'Helvetica Neue', 'Helvetica', Helvetica, Arial, sans-serif; color: #555; }
+        .wrapper { width: 100%; max-width: 800px; margin: auto; padding: 30px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); font-size: 16px; line-height: 24px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+        .header .company-details { text-align: right; }
+        .invoice-details { display: flex; justify-content: space-between; margin-bottom: 40px; }
+        .invoice-details .billing-to { text-align: left; }
+        .items-table { width: 100%; line-height: inherit; text-align: left; border-collapse: collapse; }
+        .items-table th { background: #eee; padding: 5px; }
+        .items-table td { padding: 10px 5px; border-bottom: 1px solid #eee; }
+        .items-table .item-heading { font-weight: bold; }
+        .totals { text-align: right; margin-top: 20px; }
+        .totals p { margin: 5px 0; }
+        .grand-total { font-weight: bold; font-size: 1.1em; }
+        .vat-breakdown { font-size: 0.9em; color: #777; }
     </style>
 </head>
-<body class="bg-brand-cream">
-    <div class="max-w-3xl mx-auto my-16 p-16 bg-white shadow-sm">
-        <!-- Header -->
-        <header class="grid grid-cols-2 gap-4 items-start pb-8">
+<body>
+    <div class="wrapper">
+        <div class="header">
             <div>
-                <h1 class="font-signature text-5xl font-bold text-brand-dark-brown">Maison Trüvra</h1>
-                <p class="text-sm text-brand-dark-gray mt-1">123 Rue de la République, 75001 Paris, France</p>
+                <img src="{{ url_for('static', filename='assets/logo.png', _external=True) }}" alt="Maison Truvra Logo" style="width:100%; max-width:150px;">
             </div>
-            <div class="text-right">
-                <h2 class="font-serif text-2xl font-normal tracking-widest text-brand-dark-gray">FACTURE</h2>
-                <p class="text-sm text-brand-dark-gray mt-2">Invoice <span class="text-brand-burgundy">#{{ invoice.invoice_number }}</span></p>
+            <div class="company-details">
+                Maison Truvra<br>
+                123 Rue de la Soie<br>
+                Paris, 75001, France
             </div>
-        </header>
+        </div>
 
-        <!-- Customer and Order Info -->
-        <section class="grid grid-cols-2 gap-12 mt-10 pb-10 border-b border-gray-100">
+        <div class="invoice-details">
+            <div class="billing-to">
+                <strong>Bill To:</strong><br>
+                {{ order.shipping_address.first_name }} {{ order.shipping_address.last_name }}<br>
+                {{ order.shipping_address.address_line_1 }}<br>
+                {% if order.shipping_address.address_line_2 %}{{ order.shipping_address.address_line_2 }}<br>{% endif %}
+                {{ order.shipping_address.city }}, {{ order.shipping_address.postal_code }}<br>
+                {{ order.shipping_address.country }}
+            </div>
             <div>
-                <p class="text-sm font-semibold text-brand-dark-gray uppercase tracking-wider">Facturé à</p>
-                <p class="font-semibold text-brand-dark-brown mt-2 text-lg">{{ customer_name }}</p>
-                <p class="text-brand-dark-gray text-sm mt-1">{{ billing_address.street }}</p>
-                <p class="text-brand-dark-gray text-sm">{{ billing_address.city }}, {{ billing_address.postal_code }}</p>
-                <p class="text-brand-dark-gray text-sm">{{ billing_address.country }}</p>
+                <strong>Invoice #:</strong> {{ order.id }}<br>
+                <strong>Created:</strong> {{ order.created_at.strftime('%B %d, %Y') }}<br>
+                <strong>Status:</strong> Paid
             </div>
-            <div class="text-right">
-                <p class="text-sm font-semibold text-brand-dark-gray uppercase tracking-wider">Date de facturation</p>
-                <p class="font-medium text-brand-dark-brown mt-2">{{ invoice.issue_date.strftime('%d %B %Y') }}</p>
-                <p class="text-sm font-semibold text-brand-dark-gray uppercase tracking-wider mt-4">N° de commande</p>
-                <p class="font-medium text-brand-dark-brown mt-2">{{ order.id }}</p>
-            </div>
-        </section>
+        </div>
 
-        <!-- Items Table -->
-        <section class="mt-10">
-            <table class="w-full text-left">
-                <thead class="border-b-2 border-brand-cream">
-                    <tr>
-                        <th class="py-4 px-3 text-sm font-semibold text-brand-dark-gray uppercase tracking-wider">Description</th>
-                        <th class="py-4 px-3 text-sm font-semibold text-brand-dark-gray uppercase tracking-wider text-center">Qté</th>
-                        <th class="py-4 px-3 text-sm font-semibold text-brand-dark-gray uppercase tracking-wider text-right">Prix Unitaire</th>
-                        <th class="py-4 px-3 text-sm font-semibold text-brand-dark-gray uppercase tracking-wider text-right">Montant</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in order.items %}
-                    <tr class="border-b border-gray-100">
-                        <td class="py-4 px-3 text-brand-dark-brown">{{ item.product.name }}</td>
-                        <td class="py-4 px-3 text-brand-dark-gray text-center">{{ item.quantity }}</td>
-                        <td class="py-4 px-3 text-brand-dark-gray text-right">€{{ "%.2f"|format(item.price) }}</td>
-                        <td class="py-4 px-3 text-brand-dark-gray text-right">€{{ "%.2f"|format(item.price * item.quantity) }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </section>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th class="item-heading">Product</th>
+                    <th class="item-heading" style="text-align: center;">Quantity</th>
+                    <th class="item-heading" style="text-align: right;">Price (TTC)</th>
+                    <th class="item-heading" style="text-align: right;">Total (TTC)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in order.items %}
+                <tr>
+                    <td>{{ item.product.name }}</td>
+                    <td style="text-align: center;">{{ item.quantity }}</td>
+                    <td style="text-align: right;">{{ "%.2f"|format(item.price) }} €</td>
+                    <td style="text-align: right;">{{ "%.2f"|format(item.price * item.quantity) }} €</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
 
-        <!-- Totals -->
-        <section class="flex justify-end mt-10">
-            <div class="w-full max-w-sm">
-                <div class="flex justify-between py-2 text-brand-dark-gray">
-                    <span>Sous-total</span>
-                    <span>€{{ "%.2f"|format(order.subtotal) }}</span>
-                </div>
-                <div class="flex justify-between py-2 text-brand-dark-gray">
-                    <span>Livraison</span>
-                    <span>€{{ "%.2f"|format(order.shipping_cost) }}</span>
-                </div>
-                 <div class="flex justify-between py-2 text-brand-dark-gray">
-                    <span>TVA</span>
-                    <span>€{{ "%.2f"|format(order.taxes) }}</span>
-                </div>
-                <div class="flex justify-between py-4 mt-2 text-brand-dark-brown border-t-2 border-brand-cream">
-                    <span class="font-serif font-bold text-xl">Total</span>
-                    <span class="font-bold text-xl">€{{ "%.2f"|format(order.total_amount) }}</span>
-                </div>
-            </div>
-        </section>
-        
-        <!-- Traceability Info -->
-        <section class="mt-16 pt-8 border-t border-gray-100">
-            <h3 class="font-serif text-lg text-brand-dark-brown mb-2">Fraîcheur et Traçabilité</h3>
-            <p class="text-sm text-brand-dark-gray leading-relaxed">
-                Chez Maison Trüvra, la fraîcheur, l'authenticité et la traçabilité de nos produits est primordiale. C'est dans cet esprit que chaque produit a son propre numéro d'identification. En prenant en photo le QR code imprimé sur l'étiquette de votre produit, vous serez redirigé vers une page web unique associée à votre produit. Vous trouverez sur cette page la date de récolte et de traitement associées à votre achat.        </section>
+        <div class="totals">
+            {% if order.discount %}
+                {% set subtotal = (order.total_price + order.discount.value) if order.discount.discount_type.name == 'FIXED_AMOUNT' else (order.total_price / (1 - order.discount.value / 100)) %}
+                <p><strong>Subtotal (TTC):</strong> {{ "%.2f"|format(subtotal) }} €</p>
+                <p><strong>Discount ({{ order.discount.code }}):</strong> -{{ order.discount.value }}{{ ' €' if order.discount.discount_type.name == 'FIXED_AMOUNT' else '%' }}</p>
+            {% endif %}
+            <p class="grand-total"><strong>Total (TTC):</strong> {{ "%.2f"|format(order.total_price) }} €</p>
+            <p class="vat-breakdown">dont Total HT: {{ "%.2f"|format(order.total_price / 1.2) }} €</p>
+            <p class="vat-breakdown">dont TVA (20%): {{ "%.2f"|format(order.total_price - (order.total_price / 1.2)) }} €</p>
+        </div>
 
-        <!-- Footer -->
-        <footer class="mt-10 pt-6 border-t border-gray-100 text-center text-xs text-brand-dark-gray">
-            <p>{{ company.legal_status }} Maison Trüvra - SIRET {{ company.siret }} - Capital social de {{ company.capital }}€ - Siège social {{ company.address }} - Numéro d'Identification à la TVA {{ company.vat_number }}</p>
-            <p>Contactez-nous à <a href="mailto:{{ company.email }}" class="text-brand-burgundy hover:underline">{{ company.email }}</a> ou sur Instagram @maisontruvra</p>
-        </footer>
+    <!-- Traceability Info -->
+    <section class="mt-16 pt-8 border-t border-gray-100">
+        <h3 class="font-serif text-lg text-brand-dark-brown mb-2">Fraîcheur et Traçabilité</h3>
+        <p class="text-sm text-brand-dark-gray leading-relaxed">
+            Chez Maison Trüvra, la fraîcheur, l'authenticité et la traçabilité de nos produits est primordiale.
+            C'est dans cet esprit que chaque produit a son propre numéro d'identification. En prenant en photo le QR code imprimé sur l'étiquette de votre produit, vous serez redirigé vers une page web unique associée à votre produit.
+            Vous trouverez sur cette page la date de récolte et de traitement associées à votre achat.
+        </p>
+    </section>
+
+    <!-- Footer -->
+    <footer class="mt-10 pt-6 border-t border-gray-100 text-center text-xs text-brand-dark-gray">
+        <p>{{ company.legal_status }} Maison Trüvra - SIRET {{ company.siret }} - Capital social de {{ company.capital }}€ - Siège social {{ company.address }} - Numéro d'Identification à la TVA {{ company.vat_number }}</p>
+        <p>Contactez-nous à <a href="mailto:{{ company.email }}" class="text-brand-burgundy hover:underline">{{ company.email }}</a> ou sur Instagram @maisontruvra</p>
+    </footer>
     </div>
+
 </body>
 </html>
