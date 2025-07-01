@@ -32,60 +32,130 @@ ph = PasswordHasher()
 
 
 class AuthService:
-    def __init__(self):
-        self.sessions = {}  # In production, use Redis or similar
+    def __init__(self, logger):
+        self.logger = logger
+        self.email_service = EmailService(logger)
+        self.user_service = UserService(logger)
+        self.serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
 
-    def register_user(self, first_name, last_name, email, password):
-        """ Creates and registers a new user after sanitizing inputs. """
-        if User.query.filter_by(email=email).first():
-            raise UserAlreadyExistsError("User with this email already exists.")
+    def register_user(self, user_data):
+        """
+        Registers a new user, hashes their password, and sends a verification email.
+        """
+        try:
+            if session.query(User).filter_by(email=user_data['email']).first():
+                raise ValueError("User with this email already exists.")
 
-        # Sanitize inputs
-        sanitized_first_name = sanitize_input(first_name)
-        sanitized_last_name = sanitize_input(last_name)
+            hashed_password = hash_password(user_data['password'])
+            user = User(
+                email=user_data['email'],
+                password_hash=hashed_password,
+                first_name=user_data.get('first_name'),
+                last_name=user_data.get('last_name'),
+                is_active=False  # User is inactive until email is verified
+            )
+            session.add(user)
+            session.commit()
 
-        new_user = User(
-            email=email.lower(),  # Store email in lowercase for consistency
-            first_name=sanitized_first_name,
-            last_name=sanitized_last_name
-        )
-        new_user.set_password(password)
-        
-        db.session.add(new_user)
-        db.session.commit()
+            # Assign default role
+            default_role = session.query(Role).filter_by(name='user').first()
+            if default_role:
+                user_role = UserRole(user_id=user.id, role_id=default_role.id)
+                session.add(user_role)
+                session.commit()
 
-        # Send verification email
-        # self.send_verification_email(new_user)
-        
-        current_app.logger.info(f"New user registered: {email}")
-        return new_user
+            # Send verification email
+            token = self.generate_verification_token(user.email)
+            verification_url = url_for('auth.verify_email', token=token, _external=True)
+            subject = "Welcome to Maison Truvra! Please Verify Your Email"
+            template = "welcome_and_verify"
+            context = {"user": user, "verification_url": verification_url}
+            self.email_service.send_email(user.email, subject, template, context)
+
+            self.logger.info(f"User {user.email} registered successfully. Verification email sent.")
+            return user
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error during user registration: {e}")
+            raise
 
     def authenticate_user(self, email, password):
-        """ Authenticates a user. """
-        if not email or not password:
-            raise InvalidCredentialsError("Email and password are required.")
-            
-        user = User.query.filter_by(email=email.lower()).first()
-        if user and user.check_password(password):
+        """
+        Authenticates a user by checking their email and password.
+        """
+        user = self.user_service.get_user_by_email(email)
+        if user and check_password(password, user.password_hash):
             if not user.is_active:
-                raise InvalidCredentialsError("Account is not active.")
-            current_app.logger.info(f"User authenticated successfully: {email}")
+                self.logger.warning(f"Authentication attempt for inactive user: {email}")
+                return None  # Or raise an exception for unverified email
+            self.logger.info(f"User {email} authenticated successfully.")
             return user
-        
-        current_app.logger.warning(f"Failed login attempt for email: {email}")
-        raise InvalidCredentialsError("Invalid email or password.")
+        self.logger.warning(f"Failed authentication attempt for email: {email}")
+        return None
+
+    def generate_verification_token(self, email):
+        """Generates a time-sensitive verification token."""
+        return self.serializer.dumps(email, salt=current_app.config['SECURITY_PASSWORD_SALT'])
+
+    def verify_email(self, token, max_age=3600):
+        """Verifies an email using the provided token."""
+        try:
+            email = self.serializer.loads(
+                token,
+                salt=current_app.config['SECURITY_PASSWORD_SALT'],
+                max_age=max_age
+            )
+            user = self.user_service.get_user_by_email(email)
+            if user:
+                user.is_active = True
+                user.email_verified_at = db.func.now()
+                session.commit()
+                self.logger.info(f"Email verified successfully for user: {email}")
+                return user
+            return None
+        except (SignatureExpired, BadTimeSignature) as e:
+            self.logger.error(f"Email verification failed: {e}")
+            return None
 
     def change_password(self, user_id, old_password, new_password):
-        """ Changes a user's password. """
-        user = User.query.get(user_id)
-        if not user or not user.check_password(old_password):
-            raise InvalidCredentialsError("Invalid old password.")
-        
-        user.set_password(new_password)
-        db.session.commit()
-        current_app.logger.info(f"User {user.email} changed their password.")
-        # Optionally, send a confirmation email
-        EmailService.send_password_change_confirmation(user.email)
+        """Changes a user's password after verifying the old one."""
+        user = self.user_service.get_user_by_id(user_id)
+        if user and check_password(old_password, user.password_hash):
+            user.password_hash = hash_password(new_password)
+            session.commit()
+            self.logger.info(f"Password changed for user {user_id}.")
+            return True
+        self.logger.warning(f"Failed password change attempt for user {user_id}.")
+        return False
+
+    def send_password_reset_email(self, email):
+        """Sends a password reset email to the user."""
+        user = self.user_service.get_user_by_email(email)
+        if user:
+            token = self.generate_verification_token(email)
+            reset_url = url_for('auth.reset_password', token=token, _external=True)
+            subject = "Password Reset Request"
+            template = "password_reset_request"
+            context = {"user": user, "reset_url": reset_url}
+            self.email_service.send_email(email, subject, template, context)
+            self.logger.info(f"Password reset email sent to {email}.")
+
+    def reset_password(self, token, new_password):
+        """Resets a user's password using a token."""
+        try:
+            email = self.serializer.loads(token, salt=current_app.config['SECURITY_PASSWORD_SALT'], max_age=3600)
+            user = self.user_service.get_user_by_email(email)
+            if user:
+                user.password_hash = hash_password(new_password)
+                session.commit()
+                self.logger.info(f"Password has been reset for {email}.")
+                return True
+            return False
+        except (SignatureExpired, BadTimeSignature):
+            self.logger.error("Password reset token is invalid or has expired.")
+            return False
+
+
 
     def get_reset_token(self, user, expires_sec=1800):
         s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
@@ -99,22 +169,7 @@ class AuthService:
             return None
         return User.query.filter_by(email=email).first()
 
-    def send_password_reset_email(self, email):
-        user = User.query.filter_by(email=email.lower()).first()
-        if user:
-            token = self.get_reset_token(user)
-            EmailService.send_password_reset_email(user.email, token)
-            current_app.logger.info(f"Password reset email sent to {email}")
 
-    def reset_password_with_token(self, token, new_password):
-        user = self.verify_reset_token(token)
-        if not user:
-            raise ValueError("The password reset link is invalid or has expired.")
-        
-        user.set_password(new_password)
-        db.session.commit()
-        current_app.logger.info(f"Password reset for user {user.email}")
-        EmailService.send_password_change_confirmation(user.email)
         
     @staticmethod
     def verify_password(hashed_password: str, password: str) -> bool:
