@@ -1,6 +1,6 @@
 import uuid
 from backend import db
-from backend.models.order_models import Order, OrderItem
+from backend.models.order_models import db, Order, OrderItem
 from backend.models.product_models import Product
 from backend.models.cart_models import Cart
 from backend.models.address_models import Address
@@ -11,7 +11,6 @@ from backend.models.user_models import User
 from backend.models.b2b_models import B2BUser
 from backend.services.inventory_service import InventoryService
 from backend.services.referral_service import ReferralService
-from backend.services.email_service import EmailService
 from backend.services.pdf_service import PDFService
 from flask import current_app
 from .notification_service import NotificationService
@@ -19,7 +18,9 @@ from .monitoring_service import MonitoringService
 from ..extensions import socketio
 from backend.services.invoice_service import InvoiceService
 
-
+from backend.services.email_service import EmailService
+from sqlalchemy.exc import SQLAlchemyError
+from backend.database import db_session as session
 
 
 
@@ -34,6 +35,7 @@ class OrderService:
         self.referral_service = ReferralService(session) # Instantiate ReferralService
         self.email_service = EmailService()
         self.pdf_service = PDFService()
+        self.logger = logger
 
     @staticmethod
     def get_orders_by_user(user_id, page=1, per_page=10):
@@ -45,30 +47,79 @@ class OrderService:
             joinedload(Order.shipping_address)
         ).order_by(Order.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
         
-    @staticmethod
-    def get_order_by_id(order_id, user_id):
+    def get_order_by_id(self, order_id):
+        """Retrieves a single order by its ID."""
+        return session.query(Order).get(order_id)
+
+
+    def get_all_orders(self, page=1, per_page=20):
+        """Retrieves all orders with pagination."""
+        return session.query(Order).order_by(Order.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
+    def get_user_orders(self, user_id):
+        """Retrieves all orders for a specific user."""
+        return session.query(Order).filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
+
+    def update_order_status(self, order_id, new_status, notify_customer=True):
         """
-        Gets a single order by its ID, ensuring it belongs to the specified user.
-        Prevents IDOR attacks.
-        Uses joinedload to prevent N+1 queries for user and items.
+        Updates the status of an order and optionally notifies the customer.
         """
-        return Order.query.options(
-            joinedload(Order.user),
-            joinedload(Order.items).joinedload(OrderItem.product)
-        ).filter(Order.id == order_id).first()
+        try:
+            order = self.get_order_by_id(order_id)
+            if not order:
+                raise ValueError(f"Order with id {order_id} not found.")
 
+            original_status = order.status
+            order.status = new_status
+            session.commit()
+            self.logger.info(f"Order {order_id} status updated from '{original_status}' to '{new_status}'.")
 
-    @staticmethod
-    def get_all_orders_for_user(user_id, page=1, per_page=10):
-        query = Order.query.options(
-            # Eagerly load the user associated with each order
-            joinedload(Order.user),
-            # Eagerly load the order items, and for each item, load the associated product
-            joinedload(Order.items).joinedload(OrderItem.product)
-        ).order_by(Order.order_date.desc())
-        
-        return query.paginate(page=page, per_page=per_page, error_out=False)
+            if notify_customer:
+                user = order.user
+                subject = f"Your Order #{order.id} Status Update"
+                template = None
 
+                if new_status == 'shipped':
+                    template = "order_shipped"
+                elif new_status == 'cancelled':
+                    template = "order_cancelled"
+                # Add more conditions for other statuses like 'delivered', 'processing', etc.
+
+                if template and user:
+                    context = {"order": order, "user": user}
+                    self.email_service.send_email(user.email, subject, template, context)
+                    self.logger.info(f"Sent order status update email to {user.email} for order {order_id}.")
+
+            return order
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error updating order status for order {order_id}: {e}")
+            raise
+
+    def cancel_order(self, order_id):
+        """
+        Cancels an order and restocks the items.
+        """
+        try:
+            order = self.get_order_by_id(order_id)
+            if not order:
+                raise ValueError(f"Order with id {order_id} not found.")
+
+            if order.status in ['shipped', 'delivered', 'cancelled']:
+                raise ValueError(f"Cannot cancel order with status '{order.status}'.")
+
+            # Restock items
+            for item in order.items:
+                self.inventory_service.increase_stock(item.product_id, item.quantity)
+            
+            # Update status
+            return self.update_order_status(order_id, 'cancelled', notify_customer=True)
+
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error cancelling order {order_id}: {e}")
+            raise
+            
     @staticmethod
     def create_order_from_cart(user_id, user_type, checkout_data):
         """
@@ -330,14 +381,8 @@ class OrderService:
             db.session.rollback()
             # Log the exception e
             raise ServiceException("Failed to create order.") from e    
-    @staticmethod
-    def update_order_status(order_id, new_status):
-        """Update an order's status."""
-        order = Order.query.get(order_id)
-        if order:
-            order.status = new_status
-            db.session.commit()
-        return order
+
+    
 
     @staticmethod
     def fulfill_order(order_id: int):
