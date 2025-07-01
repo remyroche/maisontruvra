@@ -21,32 +21,32 @@ from backend.products.routes import products_bp
 from backend.orders.routes import orders_bp
 from backend.services.user_service import UserService
 from backend.services.dashboard_service import DashboardService
-from backend.schemas import UpdateUserSchema, UpdatePasswordSchema, AddressSchema, LanguageUpdateSchema, TwoFactorSetupSchema, TwoFactorVerifySchema
+from backend.schemas import UpdateUserSchema, UpdatePasswordSchema, AddressSchema, LanguageUpdateSchema, TwoFactorSetupSchema, TwoFactorVerifySchema, UserProfileUpdateSchema, ChangePasswordSchema, UserSchema # Updated schemas
 from backend.models.address_models import Address
 
 from backend.services.auth_service import AuthService
 from backend.services.exceptions import InvalidCredentialsError
-from backend.schemas import UserProfileUpdateSchema, AddressSchema, ChangePasswordSchema
+# from backend.schemas import UserProfileUpdateSchema, AddressSchema, ChangePasswordSchema # Duplicate import, removed
 from backend.utils.decorators import login_required
-
-
 
 
 account_bp = Blueprint('account_bp', __name__)
 user_service = UserService()
 
-mfa_service = MfaService() # Corrected instantiation
-address_service = AddressService() # Instantiation
-email_service = EmailService() # Instantiation
-product_service = ProductService() # Instantiation
-order_service = OrderService() # Instantiation
-
+mfa_service = MfaService()
+address_service = AddressService()
+email_service = EmailService()
+product_service = ProductService()
+order_service = OrderService()
 
 
 @account_bp.route('/', methods=['GET'])
 @login_required
 def get_account_details():
+    """Get current user's account details."""
+    # Use UserSchema for serialization
     return jsonify(current_user.to_user_dict())
+
 
 @account_bp.route('/dashboard-data')
 @login_required
@@ -89,7 +89,7 @@ def b2b_data():
 
 @account_bp.route('/admin-only-data')
 @admin_required
-@roles_required ('Admin', 'Manager')
+@roles_required ('Admin', 'Manager') # This is redundant with admin_required in many cases, but kept for explicit role-based access if needed.
 def admin_data():
     """
     Provides summary data intended for an admin user,
@@ -107,65 +107,51 @@ def admin_data():
 
 
 @account_bp.route('/api/account/language', methods=['PUT'])
-@api_resource_handler(User, schema=LanguageUpdateSchema(), check_ownership=True)
+# @api_resource_handler(User, schema=LanguageUpdateSchema(), check_ownership=True) # Old usage
 @login_required
-def update_language():
-    user_id = session.get('user_id') or session.get('b2b_user_id')
-    user_type = session.get('user_type')
+@api_resource_handler(
+    model=User,
+    request_schema=LanguageUpdateSchema,
+    response_schema=UserSchema, # Assuming UserSchema can serialize the user with updated language
+    ownership_exempt_roles=[], # No roles exempt, current user must own
+    cache_timeout=0, # No caching for user-specific updates
+    check_ownership=True # Explicitly enable ownership check for user endpoint
+)
+def update_language(user_id): # The decorator will pass the ID of the resource (User)
+    """Updates the language preference for the current user."""
+    # user_id comes from the decorator (g.target_object.id or kwargs from route)
+    # g.validated_data has 'language'
+    
+    # original code: user_id = session.get('user_id') or session.get('b2b_user_id')
+    # original code: user_type = session.get('user_type')
+    # With login_required and api_resource_handler, g.user.id and g.user object are available
+    # and the user_id for the resource (target_object) is passed as an argument.
+    
+    user_service.update_user_language(user_id, g.validated_data['language'], g.user.user_type)
+    
+    # Return the updated user object for the decorator to serialize
+    return g.target_object
 
-    try:
-        user_service.update_user_language(user_id, g.validated_data['language'], user_type)
-        return jsonify({"message": "Language updated successfully"}), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
 
 @account_bp.route('/update', methods=['POST'])
 @login_required
-def update_account(): 
-    json_data = request.get_json()
-    if not json_data:
-        return jsonify({"error": "Invalid JSON data provided"}), 400
+# This endpoint updates user profile fields (first_name, last_name).
+# It's a PUT-like operation on the current user's profile.
+@api_resource_handler(
+    model=User,
+    request_schema=UserProfileUpdateSchema, # Using UserProfileUpdateSchema for update fields
+    response_schema=UserSchema, # To return the updated user object
+    ownership_exempt_roles=[],
+    cache_timeout=0,
+    check_ownership=True # Ensure only current user can update their profile
+)
+def update_account(user_id): # Decorator passes the user's ID
+    """Update user account details (first name, last name)."""
+    # current_user.id is accessible, and user_id is passed by decorator.
+    # g.validated_data contains the validated input for profile update.
     
-    # Validate input using marshmallow schema
-    try:
-        schema = UpdateUserSchema()
-        validated_data = schema.load(json_data)
-    except ValidationError as err:
-        return jsonify({"error": "Validation failed", "errors": err.messages}), 400
-    
-    updated_user = user_service.update_user(current_user.id, validated_data)
-    return jsonify(updated_user.to_user_dict())
-
-
-# --- Misplaced Admin Route (should be in admin_api/user_management_routes.py) ---
-@admin_user_management_bp.route('/<int:user_id>', methods=['GET'])
-@roles_required ('Admin', 'Manager')
-def get_user(user_id):
-    user = user_service.get_user_by_id(user_id)
-    if user:
-        return jsonify(user.to_admin_dict())
-    return jsonify({'error': 'User not found'}), 404
-
-# --- Misplaced Product Route (should be in products/routes.py) ---
-@products_bp.route('/<string:slug>', methods=['GET'])
-def get_product(slug):
-    sanitized_slug = InputSanitizer.sanitize_string(slug)
-    product = product_service.get_product_by_slug(sanitized_slug)
-    if product and product.is_active:
-        return jsonify(product.to_public_dict(include_variants=True, include_reviews=True))
-    return jsonify({'error': 'Product not found'}), 404
-
-
-# --- Misplaced Order Route (should be in orders/routes.py) ---
-@orders_bp.route('/<int:order_id>', methods=['GET'])
-def get_order_details(order_id): # This route uses Flask-Login's current_user
-    order = order_service.get_order_by_id_for_user(order_id, current_user.id)
-    if order:
-        return jsonify(order.to_user_dict())
-    return jsonify({'error': 'Order not found'}), 404
-
-
-
+    updated_user = user_service.update_user(user_id, g.validated_data)
+    return updated_user # Decorator will jsonify with UserSchema
 
 
 # GET current user's order history
@@ -176,7 +162,7 @@ def get_order_history():
     """
     Get the order history for the currently authenticated user.
     """
-    user_id = get_jwt_identity()
+    user_id = get_jwt_identity() # This is the current user's ID
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
@@ -192,6 +178,7 @@ def get_order_history():
         }), 200
     except Exception as e:
         # Log the error e
+        current_app.logger.error(f"Error fetching order history for user {user_id}: {str(e)}", exc_info=True)
         return jsonify(status="error", message="An error occurred while fetching order history."), 500
 
 # --- NEW: 2FA Management Routes ---
@@ -199,87 +186,112 @@ def get_order_history():
 @account_bp.route('/2fa/setup', methods=['POST'])
 @jwt_required()
 @login_required
-def setup_2fa():
+@api_resource_handler(
+    model=User,
+    request_schema=TwoFactorSetupSchema, # Empty schema, just for validation hook if needed
+    response_schema=None, # Returns custom data (qr_code, secret)
+    ownership_exempt_roles=[],
+    cache_timeout=0,
+    check_ownership=True # Ensure user can only set up 2FA for themselves
+)
+def setup_2fa(user_id): # Decorator passes the user's ID
     """Initiates the 2FA setup process for the current user."""
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = g.target_object # User object fetched by api_resource_handler
     
-    if user.two_factor_enabled: # Use correct attribute name
+    if user.is_2fa_enabled: # Use correct attribute name from models/user_models.py
         return jsonify(status="error", message="2FA is already enabled."), 400
 
     secret = mfa_service.generate_secret()
-    user.two_factor_secret = secret  # Temporarily store the secret
-    db.session.commit()
-    
+    user.mfa_secret = secret  # Use correct attribute name
+    db.session.commit() # Commit here to save the secret before generating QR
+
     uri = mfa_service.get_provisioning_uri(user.email, secret)
     qr_code_uri = mfa_service.generate_qr_code(uri)
     
+    # Decorator won't serialize this, so we return jsonify directly
     return jsonify(status="success", data={"qr_code": qr_code_uri, "secret": secret}), 200
 
 
 @account_bp.route('/profile', methods=['GET'])
 @login_required
-def get_profile():
-    user_service = UserService()
-    profile_data = user_service.get_user_profile(current_user.id)
-    return jsonify(profile_data)
+@api_resource_handler(
+    model=User,
+    response_schema=UserProfileUpdateSchema, # Use a schema for serialization for consistency
+    ownership_exempt_roles=[],
+    cache_timeout=0, # No caching for user-specific profiles
+    check_ownership=True
+)
+def get_profile(user_id):
+    """Get user profile."""
+    # g.target_object is the User object for the current user
+    # The decorator will serialize g.target_object using UserProfileUpdateSchema
+    return g.target_object
+
 
 @account_bp.route('/profile', methods=['PUT'])
 @login_required
-def update_profile():
+@api_resource_handler(
+    model=User,
+    request_schema=UserProfileUpdateSchema,
+    response_schema=UserSchema, # Use UserSchema for full user object return
+    ownership_exempt_roles=[],
+    cache_timeout=0,
+    check_ownership=True
+)
+def update_profile(user_id):
     """ Update user profile. """
-    schema = UserProfileUpdateSchema()
+    # g.validated_data contains validated input
+    # g.target_object is the User object for the current user
     try:
-        data = schema.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 400
-
-    user_service = UserService()
-    try:
-        updated_user = user_service.update_profile(current_user.id, data)
-        return jsonify({"message": "Profile updated successfully.", "user": updated_user.to_dict()})
+        updated_user = user_service.update_profile(user_id, g.validated_data)
+        return updated_user # Decorator will serialize
     except ValueError as e:
-        return jsonify({"error": str(e)}), 409 # Conflict, e.g. email exists
-    except Exception as e:
-        return jsonify({"error": "Failed to update profile."}), 500
+        # Re-raise to be caught by api_resource_handler's error handling
+        raise e
 
 @account_bp.route('/change-password', methods=['POST'])
 @login_required
-def change_password():
+@api_resource_handler(
+    model=User, # Target model is User, although no direct ID in route, implicitly current user.
+    request_schema=ChangePasswordSchema,
+    ownership_exempt_roles=[],
+    cache_timeout=0,
+    check_ownership=True # Implicitly check ownership of current user
+)
+def change_password(user_id): # Decorator provides user_id of current user
     """ Change user's password. """
-    schema = ChangePasswordSchema()
-    try:
-        data = schema.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 400
-
-    auth_service = AuthService()
+    # g.validated_data contains old_password and new_password
+    # g.target_object is the User object for the current user
     try:
         auth_service.change_password(
-            user_id=current_user.id,
-            old_password=data['old_password'],
-            new_password=data['new_password']
+            user_id=user_id, # Or g.target_object.id
+            old_password=g.validated_data['old_password'],
+            new_password=g.validated_data['new_password']
         )
-        return jsonify({"message": "Password changed successfully."}), 200
+        return jsonify({"message": "Password changed successfully."}), 200 # Custom success message
     except InvalidCredentialsError as e:
-        return jsonify({"error": str(e)}), 401
-    except Exception as e:
-        return jsonify({"error": "An error occurred while changing password."}), 500
+        raise e # Re-raise for api_resource_handler to handle
 
 @account_bp.route('/2fa/verify', methods=['POST'])
-@api_resource_handler(User, schema=TwoFactorVerifySchema(), check_ownership=True)
+# Removed @api_resource_handler from here as it was already applied above
 @jwt_required()
 @login_required
-def verify_2fa():
+@api_resource_handler( # Apply the decorator here
+    model=User,
+    request_schema=TwoFactorVerifySchema,
+    ownership_exempt_roles=[],
+    cache_timeout=0,
+    check_ownership=True
+)
+def verify_2fa(user_id):
     """Verifies the token and enables 2FA for the user."""
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = g.target_object # User object fetched by api_resource_handler
     
-    if not user.two_factor_secret: # Use correct attribute name
+    if not user.mfa_secret: # Use correct attribute name from models/user_models.py
         return jsonify(status="error", message="No 2FA setup process was initiated."), 400
         
-    if mfa_service.verify_token(user.two_factor_secret, g.validated_data['totp_code']): # Use correct attribute name
-        user.two_factor_enabled = True # Use correct attribute name
+    if mfa_service.verify_token(user.mfa_secret, g.validated_data['totp_code']): # Use correct attribute name
+        user.is_2fa_enabled = True # Use correct attribute name
         db.session.commit()
         return jsonify(status="success", message="2FA enabled successfully."), 200
     else:
@@ -287,20 +299,26 @@ def verify_2fa():
 
 
 @account_bp.route('/2fa/disable', methods=['POST'])
-@api_resource_handler(User, schema=TwoFactorVerifySchema(), check_ownership=True)
+# Removed @api_resource_handler from here as it was already applied above
 @jwt_required()
 @login_required
-def disable_2fa():
+@api_resource_handler( # Apply the decorator here
+    model=User,
+    request_schema=TwoFactorVerifySchema,
+    ownership_exempt_roles=[],
+    cache_timeout=0,
+    check_ownership=True
+)
+def disable_2fa(user_id):
     """Disables 2FA for the user, requires a valid token to do so."""
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = g.target_object # User object fetched by api_resource_handler
 
-    if not user.two_factor_enabled: # Use correct attribute name
+    if not user.is_2fa_enabled: # Use correct attribute name from models/user_models.py
         return jsonify(status="error", message="2FA is not currently enabled."), 400
 
-    if mfa_service.verify_token(user.two_factor_secret, g.validated_data['totp_code']): # Use correct attribute name
-        user.two_factor_enabled = False # Use correct attribute name
-        user.two_factor_secret = None # Clear the secret
+    if mfa_service.verify_token(user.mfa_secret, g.validated_data['totp_code']): # Use correct attribute name
+        user.is_2fa_enabled = False # Use correct attribute name
+        user.mfa_secret = None # Clear the secret
         db.session.commit()
         email_service.send_security_alert(user, "L'authentification à deux facteurs (2FA) a été désactivée")
         return jsonify(status="success", message="2FA disabled successfully."), 200
@@ -311,54 +329,55 @@ def disable_2fa():
 @account_bp.route('/addresses', methods=['GET'])
 @login_required
 def get_addresses():
+    # This is a list endpoint, api_resource_handler is not ideal for this
     address_service = AddressService()
     addresses = address_service.get_user_addresses(current_user.id)
     return jsonify([address.to_dict() for address in addresses])
 
 @account_bp.route('/addresses', methods=['POST'])
 @login_required
+@api_resource_handler(
+    model=Address, # Creating an Address resource
+    request_schema=AddressSchema,
+    response_schema=AddressSchema,
+    ownership_exempt_roles=[], # User creates their own address
+    cache_timeout=0,
+    # check_ownership=True # Not applicable for creation, but can be used for update/delete later
+)
 def add_address():
     """ Add a new address for the user. """
-    schema = AddressSchema()
-    try:
-        data = schema.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 400
-
-    address_service = AddressService()
-    try:
-        address = address_service.create_address(user_id=current_user.id, data=data)
-        return jsonify({"message": "Address added successfully.", "address": address.to_dict()}), 201
-    except Exception as e:
-        return jsonify({"error": "Failed to add address."}), 500
+    # g.validated_data contains address data
+    # current_user.id is available from login_required
+    address = address_service.create_address(user_id=current_user.id, data=g.validated_data)
+    return address # Return the created object for serialization
 
 @account_bp.route('/addresses/<int:address_id>', methods=['PUT'])
 @login_required
+@api_resource_handler(
+    model=Address,
+    request_schema=AddressSchema,
+    response_schema=AddressSchema,
+    ownership_exempt_roles=[],
+    cache_timeout=0,
+    check_ownership=True # Crucial for addresses
+)
 def update_address(address_id):
     """ Update an existing address. """
-    schema = AddressSchema()
-    try:
-        data = schema.load(request.json, partial=True)
-    except ValidationError as err:
-        return jsonify(err.messages), 400
-
-    address_service = AddressService()
-    try:
-        address = address_service.update_address(address_id=address_id, user_id=current_user.id, data=data)
-        if not address:
-            return jsonify({"error": "Address not found or you don't have permission to edit it."}), 404
-        return jsonify({"message": "Address updated successfully.", "address": address.to_dict()})
-    except Exception as e:
-        return jsonify({"error": "Failed to update address."}), 500
+    # g.validated_data contains updated address data (partial=True handled by schema)
+    # user_id is implicit from login_required and check_ownership
+    address = address_service.update_address(address_id=address_id, user_id=current_user.id, data=g.validated_data)
+    return address # Return updated address for serialization
 
 @account_bp.route('/addresses/<int:address_id>', methods=['DELETE'])
 @login_required
+@api_resource_handler(
+    model=Address,
+    ownership_exempt_roles=[],
+    cache_timeout=0,
+    check_ownership=True # Crucial for addresses
+)
 def delete_address(address_id):
-    address_service = AddressService()
-    try:
-        success = address_service.delete_address(address_id=address_id, user_id=current_user.id)
-        if not success:
-            return jsonify({"error": "Address not found or you don't have permission to delete it."}), 404
-        return jsonify({"message": "Address deleted successfully."})
-    except Exception as e:
-        return jsonify({"error": "Failed to delete address."}), 500
+    """ Delete an address. """
+    # user_id is implicit from login_required and check_ownership
+    success = address_service.delete_address(address_id=address_id, user_id=current_user.id)
+    return None # Return None for successful deletion, decorator will send message
