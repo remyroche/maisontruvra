@@ -91,6 +91,44 @@ class CheckoutService:
         except Exception as e:
             current_app.logger.error(f"Failed to dispatch one or more post-order tasks for order {order.id}: {e}")
 
+    def send_order_confirmation(self, order_id):
+        """
+        Sends an order confirmation email to the user.
+        """
+        try:
+            # Eagerly load all relationships needed for the email and invoice templates
+            order = session.query(Order).options(
+                joinedload(Order.user),
+                joinedload(Order.items).joinedload(OrderItem.product),
+                joinedload(Order.shipping_address),
+                joinedload(Order.billing_address)
+            ).filter_by(id=order_id).first()
+
+            if not order:
+                self.logger.error(f"Order with id {order_id} not found for sending confirmation.")
+                return
+
+            # The user is now available via order.user
+            user = order.user
+            if not user:
+                self.logger.error(f"User not found for order {order_id}.")
+                return
+
+            # Generate invoice PDF
+            invoice_pdf_path = self.pdf_service.generate_invoice(order)
+
+            # Send email
+            subject = "Your Maison Truvra Order Confirmation"
+            template = "b2b_order_confirmation" if user.is_b2b else "b2c_order_confirmation"
+            context = {"order": order, "user": user}
+            attachments = [invoice_pdf_path] if invoice_pdf_path else []
+
+            self.email_service.send_email(user.email, subject, template, context, attachments)
+            self.logger.info(f"Order confirmation email sent for order {order_id}.")
+
+        except Exception as e:
+            self.logger.error(f"Failed to send order confirmation for order {order_id}: {e}")
+
     @staticmethod
     def create_order_from_cart(self, user_id, cart_id, payment_details, shipping_address_id, billing_address_id=None):
         """
@@ -121,7 +159,8 @@ class CheckoutService:
                 status='paid',
                 shipping_address_id=shipping_address_id,
                 billing_address_id=billing_address_id or shipping_address_id,
-                payment_intent_id=payment_intent_id
+                payment_intent_id=payment_intent_id,
+                discount_id=cart.discount_id
             )
             session.add(order)
             session.flush()  # Flush to get the order ID
@@ -137,9 +176,9 @@ class CheckoutService:
                 session.add(order_item)
                 self.inventory_service.decrease_stock(item.product_id, item.quantity)
 
-            # Apply discounts and loyalty points
+            # Record discount usage and add loyalty points
             if cart.discount_id:
-                self.discount_service.apply_discount_to_order(order.id, cart.discount_id)
+                self.discount_service.record_discount_usage(cart.discount_id)
             
             self.loyalty_service.add_points(user_id, total_price)
 
@@ -158,6 +197,72 @@ class CheckoutService:
             self.logger.error(f"Error during checkout for user {user_id}: {e}")
             raise CheckoutError(f"Checkout failed: {e}") from e
 
+    def get_order_details(self, order_id):
+        """
+        Retrieves the details of a specific order.
+        """
+        try:
+            order = session.query(Order).options(
+                db.joinedload(Order.user),
+                db.joinedload(Order.items).joinedload(OrderItem.product),
+                db.joinedload(Order.shipping_address),
+                db.joinedload(Order.billing_address)
+            ).filter_by(id=order_id).first()
+            
+            if not order:
+                raise ProductNotFoundError(f"Order with id {order_id} not found.")
+            
+            return order
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error while retrieving order {order_id}: {e}")
+            raise
+
+    def get_user_orders(self, user_id):
+        """
+        Retrieves all orders for a specific user.
+        """
+        try:
+            orders = session.query(Order).filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
+            return orders
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error while retrieving orders for user {user_id}: {e}")
+            raise
+
+    def apply_discount_code(self, cart_id, discount_code):
+        """
+        Applies a discount code to the cart.
+        """
+        try:
+            cart = session.query(Cart).filter_by(id=cart_id).first()
+            if not cart:
+                raise CartEmptyError("Cart not found.")
+
+            discount = self.discount_service.get_discount_by_code(discount_code)
+            if not discount or not self.discount_service.is_discount_valid(discount):
+                raise ValueError("Invalid or expired discount code.")
+
+            cart.discount_id = discount.id
+            session.commit()
+            self.logger.info(f"Discount '{discount_code}' applied to cart {cart_id}.")
+            return cart
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error applying discount to cart {cart_id}: {e}")
+            raise
+            
+    def calculate_total(self, cart):
+        """
+        Calculates the total price of the cart, including discounts.
+        """
+        subtotal = sum(item.product.price * item.quantity for item in cart.items)
+        if cart.discount and self.discount_service.is_discount_valid(cart.discount):
+            if cart.discount.discount_type == DiscountType.PERCENTAGE:
+                discount_amount = (subtotal * cart.discount.value) / 100
+                return max(0, subtotal - discount_amount)
+            elif cart.discount.discount_type == DiscountType.FIXED_AMOUNT:
+                return max(0, subtotal - cart.discount.value)
+        return subtotal
+        
     @staticmethod
     def process_user_checkout(user_id: int, checkout_data: dict):
         """
