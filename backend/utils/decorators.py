@@ -8,6 +8,19 @@ from backend.services.audit_log_service import AuditLogService
 from backend.utils.csrf_protection import CSRFProtection
 from marshmallow import ValidationError
 from ..models import User, AdminAuditLog, db
+from sqlalchemy.exc import SQLAlchemyError
+
+# Import the base class and all specific exceptions.
+from ..services.exceptions import (
+    ServiceError, 
+    NotFoundException, 
+    ValidationException, 
+    AuthorizationException,
+    DuplicateProductError,
+    InvalidAPIRequestError
+)
+from ..extensions import db
+
 
 # Initialize loggers
 logger = logging.getLogger(__name__)
@@ -114,52 +127,116 @@ def get_object_or_404(model):
         return decorated_function
     return decorator
 
-
-def api_resource_handler(model, schema=None, role_required=None, action_log=None, check_ownership=False):
+def api_resource_handler(model, request_schema=None, response_schema=None, 
+                         ownership_exempt_roles=None, eager_loads=None, 
+                         log_action=False, cache_timeout=3600):
     """
-    A comprehensive decorator that handles role checks, object fetching,
-    input validation, and activity logging for API resource routes.
-    check_ownership: (Optional) Enforces that g.user.id matches the resource's user_id.
+    An all-in-one decorator for API endpoints that handles:
+    1.  Eager loading for performance.
+    2.  Automatic Caching and Invalidation.
+    3.  Conditional Ownership Checks.
+    4.  Dynamic Schema Selection for requests and responses.
+    5.  Database session management, audit logging, and comprehensive error handling.
+
+    Args:
+        model: The SQLAlchemy model class (e.g., Product).
+        request_schema: (Optional) Marshmallow schema for input validation (POST/PUT).
+        response_schema: (Optional) Marshmallow schema for serializing output (GET). If None, uses request_schema.
+        ownership_exempt_roles: (Optional) List of roles (e.g., ['Admin']) exempt from ownership checks. If None, no check is performed.
+        eager_loads: (Optional) List of relationships to eager-load for performance.
+        log_action: (Optional) If True, automatically logs the action to the audit trail.
+        cache_timeout: (Optional) Timeout in seconds for caching GET requests. Set to 0 to disable caching.
     """
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # 1. Fetch the object (reusing get_object_or_404 logic)
             object_id_key = f"{model.__name__.lower()}_id"
-            if object_id_key not in kwargs and 'id' in kwargs:
-                object_id_key = 'id'
+            obj_id = kwargs.get(object_id_key) or kwargs.get('id')
+            
+            # --- ENHANCEMENT: Automatic Caching ---
+            cache_key = f"resource::{model.__name__}::{obj_id}"
+            if request.method == 'GET' and obj_id and cache_timeout > 0:
+                cached_response = cache.get(cache_key)
+                if cached_response:
+                    # Return the cached JSON response directly
+                    return jsonify(cached_response)
 
-            target_object = None
-            if object_id_key in kwargs:
-                obj_id = kwargs.get(object_id_key)
-                target_object = model.query.get(obj_id)
-                if target_object is None:
-                    abort(404, description=f"{model.__name__} with ID {obj_id} not found.")
-                setattr(g, model.__name__.lower(), target_object)
+            try:
+                # --- Step 1: Resource Fetching and Validation (Setup) ---
+                target_object = None
+                if obj_id is not None:
+                    query = model.query
+                    if eager_loads:
+                        for relationship in eager_loads:
+                            query = query.options(joinedload(relationship))
+                    
+                    target_object = query.get(obj_id)
+                    if target_object is None:
+                        raise NotFoundException(f"{model.__name__} with ID {obj_id} not found.")
+                    g.target_object = target_object
 
-            # 2. Ownership Check (only if requested)
-            if check_ownership and target_object:
-                if 'user' not in g or not g.user:
-                    abort(401, description="Authentication required to check resource ownership.")
-                if not hasattr(target_object, 'user_id') or target_object.user_id != g.user.id:
-                    abort(403, description="You do not have permission to access this resource.")
+                # --- ENHANCEMENT: Conditional Ownership Check ---
+                if ownership_exempt_roles is not None and target_object:
+                    # Ensure Admin and Manager are always exempt if the check is active.
+                    exempt_roles = {'Admin', 'Manager'}.union(set(ownership_exempt_roles))
+                    
+                    user_roles = {role.name for role in getattr(g, 'user', {}).get('roles', [])}
+                    
+                    if not user_roles.intersection(exempt_roles):
+                        if not hasattr(g, 'user') or not g.user:
+                            raise AuthorizationException("Authentication required.")
+                        if not hasattr(target_object, 'user_id') or target_object.user_id != g.user.id:
+                            raise AuthorizationException("You do not have permission to access this resource.")
 
-            # 3. Input Validation (for POST/PUT)
-            if request.method in ['POST', 'PUT']:
-                if not schema:
-                    abort(500, description="A schema must be provided for validation on POST/PUT requests.")
-                try:
-                    g.validated_data = schema.load(request.get_json())
-                except ValidationError as err:
-                    abort(400, description={"errors": err.messages})
+                if request.method in ['POST', 'PUT']:
+                    if not request_schema:
+                        raise ServiceError("Server configuration error: missing request schema.", 500)
+                    is_partial = request.method == 'PUT'
+                    g.validated_data = request_schema(partial=is_partial).load(request.get_json())
 
-            # Execute the actual route function
-            response = f(*args, **kwargs)
+                # --- Step 2: Execute the Core Route Logic ---
+                result_object = f(*args, **kwargs)
 
-            return response
+                # --- Step 3: Automatic Audit Logging ---
+                if log_action:
+                    action_type = f"{model.__name__.upper()}_{request.method}"
+                    target_id = result_object.id if result_object else g.target_object.id
+                    AuditLogService.log_action(action_type, target_id=target_id, details=g.get('validated_data'))
+
+                # --- Step 4: Automatic Response Serialization & Caching ---
+                final_schema = response_schema or request_schema
+                if not final_schema:
+                    raise ServiceError("Server configuration error: missing response schema.", 500)
+                
+                if result_object:
+                    response_data = final_schema().dump(result_object)
+                    status_code = 201 if request.method == 'POST' else 200
+                    response = jsonify(response_data)
+                    response.status_code = status_code
+                    if request.method == 'GET' and obj_id and cache_timeout > 0:
+                        cache.set(cache_key, response_data, timeout=cache_timeout)
+                else: # For DELETE actions
+                    response = jsonify({"message": f"{model.__name__} deleted successfully."})
+                    response.status_code = 200
+                
+                # --- Step 5: Commit Transaction & Invalidate Cache ---
+                db.session.commit()
+                if request.method in ['PUT', 'POST', 'DELETE'] and obj_id and cache_timeout > 0:
+                    cache.delete(cache_key) # Invalidate cache on modification
+
+                return response
+
+            except (ServiceError, ValidationError, SQLAlchemyError) as e:
+                db.session.rollback()
+                raise e
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.critical(f"Unexpected Exception in endpoint '{f.__name__}': {str(e)}", exc_info=True)
+                raise ServiceError("An unexpected internal server error occurred.", 500) from e
         return decorated_function
     return decorator
-    
+
+
     
 def _execute_and_log_action(func: Callable, *args: Any, **kwargs: Any) -> Any:
     """
