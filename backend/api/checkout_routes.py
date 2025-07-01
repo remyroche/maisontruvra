@@ -2,20 +2,51 @@
 from flask import Blueprint, request, jsonify, g, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from marshmallow import ValidationError
-from ..services.checkout_service import CheckoutService
 from ..services.discount_service import DiscountService 
 from ..utils.decorators import admin_required, roles_required
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.exceptions import NotFoundException, ValidationException, DiscountInvalidException
-from flask_login import current_user
+from flask_login import login_required, current_user
 from backend.services.checkout_service import process_user_checkout, process_guest_checkout, process_b2b_checkout
 from backend.services.cart_service import get_cart_by_id_or_session
 from backend.models.enums import UserType
 from backend.schemas import ApplyDiscountSchema, CheckoutSchema, AddressSchema
+from backend.services.checkout_service import CheckoutService
+from marshmallow import ValidationError
+from backend.schemas import CheckoutSchema
+from backend.utils.decorators import login_required_json
+
 
 checkout_bp = Blueprint('checkout_bp', __name__, url_prefix='/api')
 checkout_service = CheckoutService()
 discount_service = DiscountService()
+
+@checkout_bp.route('/start', methods=['POST'])
+@login_required_json
+def start_checkout():
+    """
+    Validates the structure of the checkout request and initiates the process.
+    """
+    schema = CheckoutSchema()
+    try:
+        # This validates that the required IDs are present in the request
+        data = schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
+    checkout_service = CheckoutService()
+    try:
+        order = checkout_service.process_checkout(current_user.id, data)
+        return jsonify({
+            "message": "Checkout successful!",
+            "order_id": order.id
+        }), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        # Log the full error for debugging
+        # current_app.logger.error(f"Checkout failed: {e}", exc_info=True)
+        return jsonify({"error": "An unexpected error occurred during checkout."}), 500
 
 @checkout_bp.route('/session', methods=['GET'])
 def get_checkout_session():
