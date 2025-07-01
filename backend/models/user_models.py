@@ -52,11 +52,24 @@ class User(Base):
     
     # B2B specific relationship - one-to-one
     b2b_user = relationship("B2BUser", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    _b2b_user = relationship("B2BUser", back_populates="user", uselist=False, cascade="all, delete-orphan")
     user_type = db.Column(db.Enum(UserType), default=UserType.B2C, nullable=False)
 
     # Passport relationship
     passport = relationship("ProductPassport", back_populates="owner", uselist=False)
 
+    @property
+    def b2b_user(self):
+        if self.user_type != UserType.B2B:
+            return None
+        return self._b2b_user
+
+    @b2b_user.setter
+    def b2b_user(self, value):
+        if self.user_type != UserType.B2B:
+            raise ValueError("Cannot assign b2b_user unless user_type is B2B")
+        self._b2b_user = value
+        
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
