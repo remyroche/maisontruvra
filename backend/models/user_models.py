@@ -38,7 +38,10 @@ class User(Base):
     
     # Relationships
     addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")
-    orders = relationship("Order", back_populates="user")
+    orders = db.relationship('Order', backref='user', lazy=True)
+    roles = db.relationship('Role', secondary='user_roles', back_populates='users')
+    loyalty_account = db.relationship('UserLoyalty', back_populates='user', uselist=False)
+    referrals_made = db.relationship('Referral', foreign_keys='Referral.referrer_id', back_populates='referrer')
     carts = relationship("Cart", back_populates="user", cascade="all, delete-orphan")
     wishlists = relationship("Wishlist", back_populates="user", cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="user")
@@ -165,8 +168,7 @@ class User(Base):
 class Role(BaseModel, SoftDeleteMixin):
     __tablename__ = 'roles'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.Enum(RoleType), unique=True, nullable=False)
-
+    name = db.Column(db.String(50), unique=True)
     users = db.relationship('User', secondary='user_roles', back_populates='roles')
 
     def to_dict(self):
@@ -175,8 +177,9 @@ class Role(BaseModel, SoftDeleteMixin):
 
 class UserRole(db.Model):
     __tablename__ = 'user_roles'
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
-    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), primary_key=True)
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))
 
 class Address(BaseModel, SoftDeleteMixin):
     __tablename__ = 'addresses'
