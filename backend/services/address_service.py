@@ -1,21 +1,69 @@
 from backend.models.user_models import User
 from backend.models.address_models import Address
 from backend.database import db
-from backend.utils.input_sanitizer import InputSanitizer
+from backend.utils.input_sanitizer import InputSanitizer, sanitize_input
+from flask import current_app
+
 
 
 class AddressService:
-    def create_address(self, user_id, address_data):
-        """
-        Creates a new address for a user after sanitizing the input data.
-        """
-        sanitized_data = {key: InputSanitizer.clean_html(value) if isinstance(value, str) else value for key, value in address_data.items()}
+
+
+
+    @staticmethod
+    def get_user_addresses(self, user_id):
+        return Address.query.filter_by(user_id=user_id).all()
+
+    @staticmethod
+    def create_address(self, user_id, data):
+        """ Creates an address after sanitizing string fields. """
+        sanitized_data = {key: sanitize_input(value) if isinstance(value, str) else value for key, value in data.items()}
         
-        address = Address(user_id=user_id, **sanitized_data)
-        db.session.add(address)
+        new_address = Address(user_id=user_id, **sanitized_data)
+        
+        # If this is the new default, unset other defaults
+        if new_address.is_default:
+            Address.query.filter_by(user_id=user_id, address_type=new_address.address_type).update({Address.is_default: False})
+
+        db.session.add(new_address)
         db.session.commit()
+        current_app.logger.info(f"New address created for user_id {user_id}")
+        return new_address
+
+    @staticmethod
+    def update_address(self, address_id, user_id, data):
+        """ Updates an address after sanitizing string fields. """
+        address = Address.query.filter_by(id=address_id, user_id=user_id).first()
+        if not address:
+            return None
+
+        for key, value in data.items():
+            sanitized_value = sanitize_input(value) if isinstance(value, str) else value
+            setattr(address, key, sanitized_value)
+            
+        # Handle default logic on update
+        if data.get('is_default'):
+            Address.query.filter(
+                Address.user_id == user_id,
+                Address.address_type == address.address_type,
+                Address.id != address_id
+            ).update({Address.is_default: False})
+
+        db.session.commit()
+        current_app.logger.info(f"Address {address_id} updated for user_id {user_id}")
         return address
 
+    @staticmethod
+    def delete_address(self, address_id, user_id):
+        address = Address.query.filter_by(id=address_id, user_id=user_id).first()
+        if address:
+            db.session.delete(address)
+            db.session.commit()
+            current_app.logger.info(f"Address {address_id} deleted for user_id {user_id}")
+            return True
+        return False
+
+    
     
     @staticmethod
     def get_addresses_for_user(user_id: int) -> list:
@@ -44,22 +92,5 @@ class AddressService:
         db.session.commit()
         return new_address
 
-    @staticmethod
-    def update_address(self, address_id, address_data):
-        """
-        Updates an existing address after sanitizing the input data.
-        """
-        address = self.get_address_by_id(address_id)
-        if address:
-            sanitized_data = {key: InputSanitizer.clean_html(value) if isinstance(value, str) else value for key, value in address_data.items()}
-            for key, value in sanitized_data.items():
-                setattr(address, key, value)
-            db.session.commit()
-        return address
 
-    @staticmethod
-    def delete_address(address_id: int, user_id: int):
-        """Deletes an address, ensuring it belongs to the user."""
-        address = Address.query.filter_by(id=address_id, user_id=user_id).first_or_404()
-        db.session.delete(address)
-        db.session.commit()
+
