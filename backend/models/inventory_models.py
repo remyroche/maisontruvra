@@ -6,7 +6,8 @@ class Inventory(BaseModel):
     __tablename__ = 'inventories'
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False, unique=True)
-    quantity = db.Column(db.Integer, nullable=False, default=0)
+    quantity = db.Column(db.Integer, default=0)
+    low_stock_threshold = db.Column(db.Integer, default=10)
     product = db.relationship('Product', back_populates='inventory')
     reservations = db.relationship('InventoryReservation', backref='inventory_item', lazy='dynamic', cascade="all, delete-orphan")
 
@@ -26,6 +27,17 @@ class Inventory(BaseModel):
 
     def __repr__(self):
         return f'<Inventory for Product {self.product_id}>'
+
+class StockNotificationRequest(Base):
+    __tablename__ = 'stock_notification_requests'
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    notified_at = db.Column(db.DateTime, nullable=True)
+    
+    product = db.relationship('Product')
+
+    __table_args__ = (db.UniqueConstraint('product_id', 'email', name='_product_email_uc'),)
 
 class InventoryReservation(db.Model):
     __tablename__ = 'inventory_reservations'
