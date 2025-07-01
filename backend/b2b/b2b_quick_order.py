@@ -1,21 +1,14 @@
-# FILE: routes/b2b_quick_order.py
-# This Flask blueprint handles the B2B quick order functionality,
-# allowing users to create an order directly from a list of SKUs.
-# -----------------------------------------------------------------------------
-
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import get_jwt_identity
-from backend.utils.decorators import b2b_user_required
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.services.monitoring_service import MonitoringService
-from flask import current_app
-from backend.database import db
 from redis import Redis
 from rq import Queue
 
-# Redis queue will be initialized in the function to avoid context issues
+from backend.utils.decorators import b2b_user_required
+from backend.utils.input_sanitizer import InputSanitizer
+from backend.services.monitoring_service import MonitoringService
+from backend.database import db # Assumer que db a une méthode get_connection
 
-b2b_quick_order_bp = Blueprint('b2b_quick_order', __name__)
+b2b_quick_order_bp = Blueprint('b2b_quick_order', __name__, url_prefix='/b2b')
 
 @b2b_quick_order_bp.route('/pro/quick-order', methods=['POST'])
 @b2b_user_required
