@@ -1,91 +1,55 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from backend.utils.decorators import staff_required, roles_required, permissions_required
-from ..utils.input_sanitizer import InputSanitizer
-from backend.services.delivery_service import DeliveryService
-from backend.services.loyalty_service import LoyaltyService
+"""
+This module defines the API endpoints for delivery method management in the admin panel.
+It leverages the @api_resource_handler to create clean, secure, and consistent CRUD endpoints.
+"""
+from flask import Blueprint, request, g, jsonify
+from ..models import DeliveryMethod
+from ..schemas import DeliveryMethodSchema
+from ..utils.decorators import api_resource_handler, roles_required
+from ..services.delivery_service import DeliveryService
 
-# This blueprint is registered in __init__.py with the prefix /api/admin/delivery
-admin_delivery_bp = Blueprint('admin_delivery_bp', __name__)
+# --- Blueprint Setup ---
+bp = Blueprint('delivery_management', __name__, url_prefix='/api/admin/delivery-methods')
 
-@admin_delivery_bp.route('/settings', methods=['GET'])
-@permissions_required('MANAGE_DELIVERY')
-@roles_required ('Admin', 'Manager')
-def get_settings():
-    """Get all delivery countries and options."""
-    settings = DeliveryService.get_delivery_settings()
-    return jsonify(status="success", data=settings), 200
-
-@admin_delivery_bp.route('/settings', methods=['POST'])
-@permissions_required('MANAGE_DELIVERY')
-@roles_required ('Admin', 'Manager')
-def update_settings():
-    """Update delivery settings."""
-    data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="No data provided"), 400
+@bp.route('/', methods=['GET', 'POST'])
+@bp.route('/<int:method_id>', methods=['GET', 'PUT', 'DELETE'])
+@roles_required('Admin', 'Manager')
+@api_resource_handler(
+    model=DeliveryMethod,
+    request_schema=DeliveryMethodSchema,
+    response_schema=DeliveryMethodSchema,
+    log_action=True,
+    allow_hard_delete=True # Delivery methods can be hard-deleted as they are simple records
+)
+def handle_delivery_methods(method_id=None, is_hard_delete=False):
+    """Handles all CRUD operations for Delivery Methods."""
     
-    DeliveryService.update_delivery_settings(data)
-    return jsonify(status="success", message="Delivery settings updated successfully"), 200
+    # Handle the collection GET request for all delivery methods
+    if request.method == 'GET' and method_id is None:
+        all_methods = DeliveryService.get_all_methods_for_admin()
+        return jsonify(DeliveryMethodSchema(many=True).dump(all_methods))
 
+    # --- Single Delivery Method Operations ---
+    # The decorator handles fetching the method and validating data.
 
-@admin_delivery_bp.route('/', methods=['GET'])
-@permissions_required('MANAGE_DELIVERY')
-@roles_required ('Admin', 'Manager')
-def get_delivery_methods():
-    """Admin endpoint to get all delivery methods."""
-    methods = DeliveryService.get_all_methods_for_admin()
-    return jsonify(status="success", data=methods), 200
+    if request.method == 'GET':
+        # g.target_object is the method fetched by the decorator.
+        return g.target_object
 
-@admin_delivery_bp.route('/tiers', methods=['GET'])
-@permissions_required('MANAGE_DELIVERY')
-@roles_required ('Admin', 'Manager')
-def get_all_tiers():
-    """Helper endpoint to get all loyalty tiers for the form."""
-    tiers = LoyaltyService.get_all_tier_discounts() # Reusing this as it returns names and discounts
-    return jsonify(status="success", data=tiers), 200
+    elif request.method == 'POST':
+        # g.validated_data contains the sanitized and validated method data.
+        return DeliveryService.create_method(g.validated_data)
 
-@admin_delivery_bp.route('/', methods=['POST'])
-@permissions_required('MANAGE_DELIVERY')
-@roles_required ('Admin', 'Manager')
-def create_delivery_method():
-    """Admin endpoint to create a new delivery method."""
-    data = InputSanitizer.recursive_sanitize(request.get_json())
-    if not data or not data.get('name') or 'price' not in data:
-        return jsonify(status="error", message="Name and price are required."), 400
-    
-    try:
-        new_method = DeliveryService.create_method(data)
-        return jsonify(status="success", data=new_method.to_dict()), 201
-    except Exception as e:
-        return jsonify(status="error", message=str(e)), 500
+    elif request.method == 'PUT':
+        # g.target_object is the method to update.
+        # g.validated_data contains the new data.
+        return DeliveryService.update_method(g.target_object, g.validated_data)
 
-
-@admin_delivery_bp.route('/<int:method_id>', methods=['PUT'])
-@permissions_required('MANAGE_DELIVERY')
-@roles_required ('Admin', 'Manager')
-def update_delivery_method(method_id):
-    """Admin endpoint to update a delivery method."""
-    data = InputSanitizer.recursive_sanitize(request.get_json())
-    try:
-        updated_method = DeliveryService.update_method(method_id, data)
-        return jsonify(status="success", data=updated_method.to_dict()), 200
-    except Exception as e:
-        return jsonify(status="error", message=str(e)), 500
-
-@admin_delivery_bp.route('/<int:method_id>', methods=['DELETE'])
-@permissions_required('MANAGE_DELIVERY')
-@roles_required ('Admin', 'Manager')
-def delete_delivery_method(method_id):
-    """Admin endpoint to delete a delivery method."""
-    try:
-        if DeliveryService.delete_method(method_id):
-            return jsonify(status="success", message="Delivery method deleted successfully."), 200
-        else:
-            return jsonify(status="error", message="Method not found."), 404
-    except Exception as e:
-        return jsonify(status="error", message=str(e)), 500
-
+    elif request.method == 'DELETE':
+        # The decorator handles the hard/soft delete logic.
+        # Here, we've allowed hard delete, so we just call the service.
+        DeliveryService.delete_method(method_id)
+        return None # Decorator provides the success message.
 
 # --- Public-Facing API ---
 # Note: This blueprint is not currently registered in backend/__init__.py
