@@ -8,69 +8,70 @@ from backend.services.audit_log_service import AuditLogService
 from flask import current_app
 from datetime import datetime
 import uuid
-
+from backend.models import db, Quote, QuoteItem
+from backend.services.email_service import EmailService
+from backend.services.pos_service import POSService # Changed import
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
+from backend.database import db_session as session
 
 class QuoteService:
-    """Service for managing quotes and quote requests"""
-    
-    def __init__(self, session=None):
-        self.session = session or db.session
-    
-    @staticmethod
-    def get_all_quotes():
-        """Get all quotes"""
+    def __init__(self, logger):
+        self.logger = logger
+        self.email_service = EmailService(logger)
+        self.pos_service = POSService(logger) # Use the new POS Service
+
+    def respond_and_add_to_cart(self, quote_id, response_data):
+        """
+        Admin responds to a quote, which triggers the POS service
+        to create an exclusive product and add it to the user's cart.
+        """
         try:
-            quotes = Quote.query.order_by(Quote.created_at.desc()).all()
-            return quotes
-        except Exception as e:
-            MonitoringService.log_error(f"Error getting all quotes: {str(e)}")
-            raise ServiceError(f"Failed to get quotes: {str(e)}")
-    
-    @staticmethod
-    def get_all_quotes_paginated(page=1, per_page=20, filters=None):
-        """Get paginated quotes with optional filters"""
-        try:
-            query = Quote.query
-            
-            if filters:
-                if filters.get('status'):
-                    query = query.filter(Quote.status == filters['status'])
-                if filters.get('b2b_account_id'):
-                    query = query.filter(Quote.b2b_account_id == filters['b2b_account_id'])
-                if filters.get('date_from'):
-                    query = query.filter(Quote.created_at >= filters['date_from'])
-                if filters.get('date_to'):
-                    query = query.filter(Quote.created_at <= filters['date_to'])
-            
-            pagination = query.order_by(Quote.created_at.desc()).paginate(
-                page=page, per_page=per_page, error_out=False
-            )
-            
-            return {
-                'quotes': pagination.items,
-                'total': pagination.total,
-                'pages': pagination.pages,
-                'current_page': pagination.page,
-                'per_page': pagination.per_page,
-                'has_next': pagination.has_next,
-                'has_prev': pagination.has_prev
-            }
-        except Exception as e:
-            MonitoringService.log_error(f"Error getting paginated quotes: {str(e)}")
-            raise ServiceError(f"Failed to get quotes: {str(e)}")
-    
-    @staticmethod
-    def get_quote_by_id(quote_id):
-        """Get a quote by ID"""
-        try:
-            quote_id = InputSanitizer.InputSanitizer.sanitize_input(quote_id)
-            quote = Quote.query.get(quote_id)
+            quote = self.get_quote_by_id(quote_id)
             if not quote:
-                raise NotFoundException("Quote not found")
+                raise ValueError("Quote not found.")
+            
+            # Prepare item data for the POS service
+            items_for_pos = []
+            for item_response in response_data['items']:
+                quote_item = session.query(QuoteItem).get(item_response['item_id'])
+                if not quote_item or quote_item.quote_id != quote.id:
+                    continue
+                
+                quote_item.response_price = item_response['price']
+
+                pos_item = {
+                    "quantity": quote_item.quantity,
+                    "price": item_response['price']
+                }
+                if quote_item.custom_item_name:
+                    pos_item["custom_item_name"] = quote_item.custom_item_name
+                    pos_item["custom_item_description"] = quote_item.custom_item_description
+                else:
+                    pos_item["product_id"] = quote_item.product_id
+                
+                items_for_pos.append(pos_item)
+
+            # Call the POS service to create the cart
+            self.pos_service.create_custom_cart_for_user(quote.user_id, items_for_pos)
+
+            quote.status = 'accepted'
+            quote.responded_at = datetime.utcnow()
+            session.commit()
+
+            self.logger.info(f"Quote {quote_id} processed. POS service created cart for user {quote.user_id}.")
             return quote
-        except Exception as e:
-            MonitoringService.log_error(f"Error getting quote {quote_id}: {str(e)}")
-            raise ServiceError(f"Failed to get quote: {str(e)}")
+
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error in quote response for quote {quote_id}: {e}")
+            raise
+
+    # create_quote_request and get_quote_by_id remain the same
+    def create_quote_request(self, user_id, items_data):
+        pass
+    def get_quote_by_id(self, quote_id):
+        pass
     
     def create_quote_request(self, user_id, items_data):
         """Creates a new quote request for a B2B user."""
