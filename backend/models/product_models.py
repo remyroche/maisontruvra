@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
+from backend.models.base import Base
 from backend.database import db
 from .base import BaseModel, SoftDeleteMixin
 
@@ -32,7 +33,10 @@ class Product(BaseModel, SoftDeleteMixin):
     base_sku = db.Column(db.String(100), nullable=False, unique=True)
     is_published = db.Column(db.Boolean, default=False, nullable=False)
     product_type = db.Column(db.String(50), default='standard') # e.g., standard, b2b_exclusive, blog
-    
+
+    # POS / B2B Quotes
+    is_quotable_only = db.Column(db.Boolean, default=False, nullable=False)
+
     # Use back_populates for explicit relationship management
     variants = db.relationship('ProductVariant', back_populates='product', cascade="all, delete-orphan", lazy='joined')
     category = db.relationship('Category', back_populates='products')
