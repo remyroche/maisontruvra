@@ -129,23 +129,24 @@ def get_object_or_404(model):
 
 def api_resource_handler(model, request_schema=None, response_schema=None, 
                          ownership_exempt_roles=None, eager_loads=None, 
-                         log_action=False, cache_timeout=3600):
+                         log_action=False, cache_timeout=3600, allow_hard_delete=False):
     """
     An all-in-one decorator for API endpoints that handles:
     1.  Eager loading for performance.
     2.  Automatic Caching and Invalidation.
     3.  Conditional Ownership Checks.
-    4.  Dynamic Schema Selection for requests and responses.
+    4.  Standardized Soft/Hard Delete logic.
     5.  Database session management, audit logging, and comprehensive error handling.
 
     Args:
         model: The SQLAlchemy model class (e.g., Product).
         request_schema: (Optional) Marshmallow schema for input validation (POST/PUT).
         response_schema: (Optional) Marshmallow schema for serializing output (GET). If None, uses request_schema.
-        ownership_exempt_roles: (Optional) List of roles (e.g., ['Admin']) exempt from ownership checks. If None, no check is performed.
+        ownership_exempt_roles: (Optional) List of roles exempt from ownership checks. 'Admin' and 'Manager' are always exempt.
         eager_loads: (Optional) List of relationships to eager-load for performance.
-        log_action: (Optional) If True, automatically logs the action to the audit trail.
-        cache_timeout: (Optional) Timeout in seconds for caching GET requests. Set to 0 to disable caching.
+        log_action: (Optional) If True, automatically logs the action.
+        cache_timeout: (Optional) Timeout for caching GET requests. Set to 0 to disable caching.
+        allow_hard_delete: (Optional) If False (default), any attempt to use `?hard=true` on a DELETE request will be rejected.
     """
     def decorator(f):
         @wraps(f)
@@ -153,12 +154,10 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
             object_id_key = f"{model.__name__.lower()}_id"
             obj_id = kwargs.get(object_id_key) or kwargs.get('id')
             
-            # --- ENHANCEMENT: Automatic Caching ---
             cache_key = f"resource::{model.__name__}::{obj_id}"
             if request.method == 'GET' and obj_id and cache_timeout > 0:
                 cached_response = cache.get(cache_key)
                 if cached_response:
-                    # Return the cached JSON response directly
                     return jsonify(cached_response)
 
             try:
@@ -175,13 +174,9 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
                         raise NotFoundException(f"{model.__name__} with ID {obj_id} not found.")
                     g.target_object = target_object
 
-                # --- ENHANCEMENT: Conditional Ownership Check ---
                 if ownership_exempt_roles is not None and target_object:
-                    # Ensure Admin and Manager are always exempt if the check is active.
                     exempt_roles = {'Admin', 'Manager'}.union(set(ownership_exempt_roles))
-                    
                     user_roles = {role.name for role in getattr(g, 'user', {}).get('roles', [])}
-                    
                     if not user_roles.intersection(exempt_roles):
                         if not hasattr(g, 'user') or not g.user:
                             raise AuthorizationException("Authentication required.")
@@ -194,8 +189,16 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
                     is_partial = request.method == 'PUT'
                     g.validated_data = request_schema(partial=is_partial).load(request.get_json())
 
+                # --- ENHANCEMENT: Standardized Delete Logic ---
+                delete_kwargs = {}
+                if request.method == 'DELETE':
+                    is_hard_delete = request.args.get('hard', 'false').lower() == 'true'
+                    if is_hard_delete and not allow_hard_delete:
+                        raise AuthorizationException("Hard delete is not permitted for this resource.")
+                    delete_kwargs['is_hard_delete'] = is_hard_delete
+
                 # --- Step 2: Execute the Core Route Logic ---
-                result_object = f(*args, **kwargs)
+                result_object = f(*args, **kwargs, **delete_kwargs)
 
                 # --- Step 3: Automatic Audit Logging ---
                 if log_action:
@@ -215,14 +218,14 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
                     response.status_code = status_code
                     if request.method == 'GET' and obj_id and cache_timeout > 0:
                         cache.set(cache_key, response_data, timeout=cache_timeout)
-                else: # For DELETE actions
+                else:
                     response = jsonify({"message": f"{model.__name__} deleted successfully."})
                     response.status_code = 200
                 
                 # --- Step 5: Commit Transaction & Invalidate Cache ---
                 db.session.commit()
                 if request.method in ['PUT', 'POST', 'DELETE'] and obj_id and cache_timeout > 0:
-                    cache.delete(cache_key) # Invalidate cache on modification
+                    cache.delete(cache_key)
 
                 return response
 
@@ -235,7 +238,6 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
                 raise ServiceError("An unexpected internal server error occurred.", 500) from e
         return decorated_function
     return decorator
-
 
     
 def _execute_and_log_action(func: Callable, *args: Any, **kwargs: Any) -> Any:
