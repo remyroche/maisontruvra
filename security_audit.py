@@ -357,30 +357,47 @@ class SecurityAuditor:
                 recommendation="Ensure DEBUG is set to False in production environments.", cwe_id="CWE-215"
             )
 
-    def check_missing_permissions(self, file_path: str, content: str, lines: List[str]):
-        # This check works by finding a route and then looking backwards for a permission decorator.
-        for i, line in enumerate(lines):
-            if re.search(r'@\w+\.route\(', line):
-                # Ignore public routes
-                if any(re.search(pattern, line) for pattern in self.public_routes):
-                    continue
+
+    def check_missing_permissions(self, tree, file_path):
+        """
+        Vérifie les routes Flask pour les permissions manquantes en utilisant l'AST.
+        C'est une méthode beaucoup plus fiable que l'analyse textuelle.
+        """
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+
+            # Vérifie si la fonction est une route Flask
+            is_route = any(
+                isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr == 'route'
+                for d in node.decorator_list
+            )
+
+            if not is_route:
+                continue
+
+            # Vérifie si un décorateur de permission est présent
+            has_auth = False
+            for decorator in node.decorator_list:
+                decorator_name = ''
+                if isinstance(decorator, ast.Name):
+                    decorator_name = decorator.id
+                elif isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name):
+                    decorator_name = decorator.func.id
                 
-                is_protected = False
-                # Look in the 5 lines preceding the route decorator
-                for j in range(max(0, i - 5), i):
-                    if any(dec in lines[j] for dec in self.permission_decorators):
-                        is_protected = True
-                        break
+                if decorator_name in self.permission_decorators:
+                    has_auth = True
+                    break
+            
+            if not has_auth:
+                self._add_issue(
+                    file_path,
+                    node.lineno,
+                    'Endpoint Missing Permissions',
+                    f"L'endpoint '{node.name}' semble ne pas avoir de décorateur d'autorisation.",
+                    'HIGH'
+                )
                 
-                if not is_protected:
-                    self.add_finding(
-                        severity="HIGH", category="Authentication", title="Endpoint Missing Permissions",
-                        description=f"The endpoint '{line.strip()}' appears to be missing an authorization decorator.",
-                        file_path=file_path, line_number=i + 1,
-                        code_snippet=line.strip(),
-                        recommendation="Add a permission decorator like @jwt_required or @roles_required.",
-                        cwe_id="CWE-306"
-                    )
 
     def check_secure_cookies(self, file_path: str, content: str, lines: List[str]):
         if 'config.py' not in file_path:
