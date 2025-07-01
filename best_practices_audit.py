@@ -10,6 +10,7 @@ import json
 import sys
 import datetime
 import argparse
+import subprocess
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Set
 from dataclasses import dataclass, asdict
@@ -19,12 +20,14 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
+RESET = '\033[0m'
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 # Détermine la racine du projet en se basant sur l'emplacement de ce script.
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
+backend_path = os.path.join(os.path.dirname(__file__), 'backend')
 
 # Répertoires à analyser (chemins absolus).
 SCAN_DIRECTORIES = [
@@ -114,6 +117,39 @@ def print_finding(level: str, message: str, file_path: str, line_num: int):
         "LOW": Colors.BLUE, "INFO": Colors.CYAN
     }.get(level.upper(), Colors.ENDC)
     print(f"[{color}{level.upper()}{Colors.ENDC}] {message}\n    -> {file_path}:{line_num}")
+
+
+def run_static_analysis():
+    """
+    Exécute des outils d'analyse statique comme bandit pour trouver des problèmes de sécurité.
+    """
+    print(f"{YELLOW}--- Démarrage de l'analyse statique avec Bandit ---{RESET}")
+    try:
+        # Exécute bandit et capture la sortie.
+        # -r: récursif, -f: format, -o: fichier de sortie
+        # Nous allons imprimer la sortie JSON directement pour l'instant.
+        result = subprocess.run(
+            ['bandit', '-r', backend_path, '-f', 'json'],
+            capture_output=True,
+            text=True,
+            check=False  # Ne lève pas d'exception si bandit trouve des problèmes
+        )
+
+        if result.returncode == 0:
+            print(f"{GREEN}Bandit n'a trouvé aucun problème de haute confiance.{RESET}")
+        else:
+            print(f"{RED}Bandit a trouvé des problèmes potentiels. Voici la sortie JSON :{RESET}")
+            print(result.stdout)
+
+        if result.stderr:
+            print(f"{RED}Erreurs lors de l'exécution de Bandit:{RESET}")
+            print(result.stderr)
+            
+    except FileNotFoundError:
+        print(f"{RED}Erreur : La commande 'bandit' n'a pas été trouvée. Assurez-vous qu'elle est installée (`pip install bandit`).{RESET}")
+    except Exception as e:
+        print(f"{RED}Une erreur inattendue est survenue lors de l'exécution de l'analyse statique : {e}{RESET}")
+
 
 def find_files(directory: str, extensions: List[str]) -> List[str]:
     """Finds all files with given extensions in a directory."""
