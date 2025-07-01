@@ -1,6 +1,7 @@
 # backend/Services/product_service.py
 from sqlalchemy import func
 from backend.database import db
+from backend.models import db, Product, Category, Collection
 from backend.models.product_models import Product, ProductVariant, Stock
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError, ProductNotFoundError, DuplicateProductError, InvalidAPIRequestError
 from backend.utils.input_sanitizer import InputSanitizer
@@ -14,9 +15,13 @@ from backend.models.b2b_loyalty_models import LoyaltyTier
 from sqlalchemy.orm import joinedload, selectinload
 from ..models import Category, Collection, product_tags
 from backend.utils.input_sanitizer import sanitize_html
+from sqlalchemy.exc import SQLAlchemyError
+from backend.database import db_session as session
 
 
 class ProductService:
+    def __init__(self, logger):
+        self.logger = logger
 
     def get_all_products_paginated(self, page: int, per_page: int, user=None, filters: dict = None):
         """
@@ -263,7 +268,31 @@ class ProductService:
             )
             raise ServiceError("Product creation failed due to a database error.")
 
-    
+    def create_product_for_quote(self, name, description, price):
+        """
+        Creates a new, non-public product specifically for a quote.
+        """
+        try:
+            # Generate a unique SKU for the quote product
+            unique_sku = f"QUOTE-{int(db.func.now().timestamp())}"
+            
+            quote_product = Product(
+                name=name,
+                description=description,
+                price=price,
+                sku=unique_sku,
+                is_active=True, # Active so it can be ordered
+                is_quotable_only=True # Hidden from public shop
+            )
+            session.add(quote_product)
+            session.commit()
+            self.logger.info(f"Created hidden product '{name}' for a quote.")
+            return quote_product
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Error creating product for quote: {e}")
+            raise
+            
     @staticmethod
     def create_product(product_data: dict):
         """Create a new product with proper validation and logging."""
