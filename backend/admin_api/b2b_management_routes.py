@@ -1,14 +1,15 @@
-from flask import Blueprint, request, jsonify, current_user
+from flask import Blueprint, request, jsonify, current_user, g
 from backend.services.b2b_service import B2BService
 from backend.services.exceptions import NotFoundException
-from backend.utils.decorators import staff_required, roles_required, permissions_required
+from backend.utils.decorators import staff_required, roles_required, permissions_required, api_resource_handler
 from backend.models.enums import B2BStatus, B2BRequestStatus
-from backend.models.b2b_models import B2BPartnershipRequest
+from backend.models.b2b_models import B2BPartnershipRequest, B2BTier, B2BAccount
 from backend.models.user_models import User
 from decimal import Decimal
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from backend.extensions import limiter
+from backend.schemas import B2BAccountStatusUpdateSchema, B2BTierCreateSchema, B2BTierUpdateSchema, B2BTierSchema, B2BUserAssignTierSchema # Added B2BTierSchema
 
 b2b_management_bp = Blueprint('b2b_management_api', __name__, url_prefix='/admin/api/b2b')
 b2b_service = B2BService()
@@ -55,10 +56,10 @@ def approve_b2b_application(application_id):
     application = B2BPartnershipRequest.query.get_or_404(application_id)
     
     # The service layer handles the logic of creating the B2B account, setting tiers, etc.
-    b2b_user = B2BService.approve_b2b_application(application)
+    b2b_user_approved = B2BService.approve_b2b_application(application)
     
     AuditLogService.log_action(
-        user_id=current_user.id,
+        user_id=g.user.id, # Using g.user.id as roles_required ensures g.user is populated
         action='approve_b2b_application',
         details=f"Approved B2B application for '{application.contact_email}' (ID: {application.id})."
     )
@@ -80,7 +81,7 @@ def reject_b2b_application(application_id):
     B2BService.reject_b2b_application(application, reason=rejection_reason)
     
     AuditLogService.log_action(
-        user_id=current_user.id,
+        user_id=g.user.id, # Using g.user.id as roles_required ensures g.user is populated
         action='reject_b2b_application',
         details=f"Rejected B2B application for '{application.contact_email}' (ID: {application.id}). Reason: {rejection_reason}"
     )
@@ -88,54 +89,48 @@ def reject_b2b_application(application_id):
     return jsonify({"message": f"B2B application for {application.contact_email} rejected."})
 
 
-@b2b_management_bp.route('/<int:b2b_user_id>/status', methods=['PUT'])
+@b2b_management_bp.route('/<int:user_id>/status', methods=['PUT'])
 @roles_required ('Admin', 'Manager', 'Support')
-def update_b2b_account_status(b2b_user_id):
+@api_resource_handler(
+    model=User,
+    request_schema=B2BAccountStatusUpdateSchema,
+    ownership_exempt_roles=['Admin', 'Manager', 'Support'],
+    cache_timeout=0 # No caching for updates
+)
+def update_b2b_account_status(user_id):
     """Updates a B2B account's status (e.g., "approved", "rejected")."""
-    data = request.get_json()
-    new_status_str = data.get('status')
-    if not new_status_str:
-        return jsonify({'message': 'Status is required'}), 400
+    new_status_str = g.validated_data['status']
+    new_status = B2BStatus(new_status_str) # Convert string from validated_data to Enum
     
-    try:
-        new_status = B2BStatus(new_status_str.lower())
-    except ValueError:
-        valid_statuses = [s.value for s in B2BStatus]
-        return jsonify({'message': f'Invalid status. Must be one of: {valid_statuses}'}), 400
-
-    try:
-        B2BService.update_b2b_status(b2b_user_id, new_status)
-        return jsonify({'message': f'B2B account status updated to {new_status.value}'}), 200
-    except NotFoundException as e:
-        return jsonify({'message': str(e)}), 404
-    except Exception as e:
-        return jsonify({'message': f'An error occurred: {str(e)}'}), 500
+    B2BService.update_b2b_status(user_id, new_status)
+    
+    return None # Return None to let api_resource_handler generate a default success message
         
 # --- Tier Management ---
 
 @b2b_management_bp.route('/tiers', methods=['POST'])
 @roles_required ('Admin', 'Manager')
+@api_resource_handler(
+    model=B2BTier,
+    request_schema=B2BTierCreateSchema,
+    response_schema=B2BTierSchema,
+    ownership_exempt_roles=['Admin', 'Manager'],
+    cache_timeout=0 # No caching for creation
+)
 def create_tier():
     """Creates a new B2B pricing tier."""
-    data = request.get_json()
-    if not data or 'name' not in data or 'discount_percentage' not in data:
-        return jsonify({'message': 'Missing required fields'}), 400
-    
-    try:
-        tier = B2BService.create_tier(
-            name=data['name'],
-            discount_percentage=Decimal(data['discount_percentage']),
-            minimum_spend=Decimal(data.get('minimum_spend')) if data.get('minimum_spend') else None
-        )
-        return jsonify({'message': 'Tier created successfully', 'tier_id': tier.id}), 201
-    except Exception as e:
-        return jsonify({'message': f'An error occurred: {str(e)}'}), 500
+    tier = b2b_service.create_tier(
+        name=g.validated_data['name'],
+        discount_percentage=g.validated_data['discount_percentage'],
+        minimum_spend=g.validated_data.get('minimum_spend')
+    )
+    return tier # Return the created object for serialization by api_resource_handler
 
 @b2b_management_bp.route('/tiers', methods=['GET'])
 @roles_required ('Admin', 'Manager', 'Support')
 def get_all_tiers():
     """Retrieves all B2B pricing tiers."""
-    tiers = B2BService.get_all_tiers()
+    tiers = b2b_service.get_all_tiers()
     return jsonify([{
         'id': tier.id,
         'name': tier.name,
@@ -145,34 +140,32 @@ def get_all_tiers():
 
 @b2b_management_bp.route('/tiers/<int:tier_id>', methods=['PUT'])
 @roles_required ('Admin', 'Manager')
+@api_resource_handler(
+    model=B2BTier,
+    request_schema=B2BTierUpdateSchema,
+    response_schema=B2BTierSchema,
+    ownership_exempt_roles=['Admin', 'Manager'],
+    cache_timeout=0 # No caching for updates
+)
 def update_tier(tier_id):
     """Updates an existing B2B pricing tier."""
-    data = request.get_json()
-    try:
-        tier = B2BService.update_tier(
-            tier_id,
-            name=data.get('name'),
-            discount_percentage=Decimal(data['discount_percentage']) if data.get('discount_percentage') else None,
-            minimum_spend=Decimal(data.get('minimum_spend')) if data.get('minimum_spend') else None
-        )
-        if not tier:
-            return jsonify({'message': 'Tier not found'}), 404
-        return jsonify({'message': 'Tier updated successfully'}), 200
-    except Exception as e:
-        return jsonify({'message': f'An error occurred: {str(e)}'}), 500
+    tier = b2b_service.update_tier(
+        tier_id,
+        name=g.validated_data.get('name'),
+        discount_percentage=g.validated_data.get('discount_percentage'),
+        minimum_spend=g.validated_data.get('minimum_spend')
+    )
+    return tier # Return the updated object for serialization by api_resource_handler
 
-@b2b_management_bp.route('/users/<int:b2b_user_id>/assign-tier', methods=['POST'])
+@b2b_management_bp.route('/users/<int:user_id>/assign-tier', methods=['POST'])
 @roles_required ('Admin', 'Manager', 'Support')
-def assign_tier_to_user(b2b_user_id):
+@api_resource_handler(
+    model=User,
+    request_schema=B2BUserAssignTierSchema,
+    ownership_exempt_roles=['Admin', 'Manager', 'Support'],
+    cache_timeout=0 # No caching for updates
+)
+def assign_tier_to_user(user_id):
     """Assigns a tier to a B2B user."""
-    data = request.get_json()
-    if not data or 'tier_id' not in data:
-        return jsonify({'message': 'tier_id is required'}), 400
-    
-    try:
-        b2b_user = B2BService.assign_tier_to_b2b_user(b2b_user_id, data['tier_id'])
-        if not b2b_user:
-            return jsonify({'message': 'B2B user or tier not found'}), 404
-        return jsonify({'message': f'Tier assigned to {b2b_user.company_name} successfully'}), 200
-    except Exception as e:
-        return jsonify({'message': f'An error occurred: {str(e)}'}), 500
+    b2b_user_assigned = b2b_service.assign_tier_to_b2b_user(user_id, g.validated_data['tier_id'])
+    return None # Return None to let api_resource_handler generate a default success message
