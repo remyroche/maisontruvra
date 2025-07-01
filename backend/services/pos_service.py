@@ -16,8 +16,10 @@ logger = logging.getLogger(__name__)
 
 class PosService:
     """Service for handling Point of Sale transactions."""
-
-    def __init__(self):
+    def __init__(self, logger):
+        self.logger = logger
+        self.product_service = ProductService(logger)
+        self.cart_service = CartService(logger)
         self.inventory_service = InventoryService()
         self.order_service = OrderService()
         self.pdf_service = PDFService()
@@ -113,7 +115,66 @@ class PosService:
                 }
         
         return MockTransaction(transaction_data)
-    
+
+    def create_custom_cart_for_user(self, user_id, items_data):
+        """
+        Creates a new cart for a user with custom items and pricing.
+        This is the core of the "direct-to-cart" B2B workflow.
+        
+        items_data should be a list of dicts, e.g.:
+        [{
+            "custom_item_name": "Special Truffle Oil",
+            "custom_item_description": "Aged in oak barrels.",
+            "quantity": 10,
+            "price": 50.00
+        }, {
+            "product_id": 5, // Existing product
+            "quantity": 20,
+            "price": 15.00 // Special price for this product
+        }]
+        """
+        try:
+            # Create a new, empty cart for this transaction
+            cart = Cart(user_id=user_id)
+            session.add(cart)
+            session.flush()
+
+            for item_data in items_data:
+                price = item_data['price']
+                quantity = item_data['quantity']
+                product_id_to_add = item_data.get('product_id')
+
+                # If it's a custom item, create an exclusive product for it
+                if 'custom_item_name' in item_data:
+                    exclusive_product = self.product_service.create_exclusive_product_for_quote(
+                        name=item_data['custom_item_name'],
+                        description=item_data.get('custom_item_description'),
+                        price=price,
+                        owner_id=user_id
+                    )
+                    product_id_to_add = exclusive_product.id
+                
+                if not product_id_to_add:
+                    raise ValueError("Item data is missing a product_id or custom_item_name.")
+
+                # Add the item to the new cart with the specified price
+                cart_item = CartItem(
+                    cart_id=cart.id,
+                    product_id=product_id_to_add,
+                    quantity=quantity,
+                    price=price
+                )
+                session.add(cart_item)
+
+            session.commit()
+            self.logger.info(f"POS Service created new cart {cart.id} for user {user_id} with custom items.")
+            return cart
+
+        except (SQLAlchemyError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error creating custom cart via POS service for user {user_id}: {e}")
+            raise
+            
     @staticmethod
     def get_transaction(transaction_id):
         """Get a POS transaction by ID."""
