@@ -1,5 +1,4 @@
 from backend.database import db
-from backend.models.user_models import User, UserRole
 from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
 from backend.utils.input_sanitizer import InputSanitizer
@@ -9,12 +8,95 @@ from flask_jwt_extended import get_jwt_identity
 from backend.models.b2b_models import B2BUser  # Add this import
 from backend.services.audit_log_service import AuditLogService
 from backend.utils.input_sanitizer import sanitize_input
+from backend.models import db, User, Address, UserRole
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from backend.database import db_session as session
 
 
 class UserService:
 
-    def __init__(self, audit_log_service: AuditLogService):
-        self.audit_log_service = audit_log_service
+    def __init__(self, logger):
+        self.logger = logger
+
+    def get_user_by_id(self, user_id):
+        """Retrieves a user by their ID."""
+        try:
+            return session.query(User).get(user_id)
+        except SQLAlchemyError as e:
+            self.logger.error(f"Error retrieving user by ID {user_id}: {e}")
+            raise
+
+    def get_user_by_email(self, email):
+        """Retrieves a user by their email address."""
+        try:
+            return session.query(User).filter_by(email=email).first()
+        except SQLAlchemyError as e:
+            self.logger.error(f"Error retrieving user by email {email}: {e}")
+            raise
+
+    def get_or_create_guest_user(self, email, first_name, last_name):
+        """
+        Retrieves an existing user or creates a new, inactive guest user.
+        This is for guest checkout.
+        """
+        try:
+            user = self.get_user_by_email(email)
+            if user:
+                # If user exists but is a guest, we can reuse it.
+                # If they are a registered user, we should prompt them to log in.
+                if not user.is_guest:
+                    raise ValueError("An account with this email already exists. Please log in.")
+                return user
+
+            # Create a new guest user
+            guest_user = User(
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                is_active=False, # Remains inactive
+                is_guest=True
+            )
+            session.add(guest_user)
+            session.commit()
+            self.logger.info(f"Created new guest user account for {email}.")
+            return guest_user
+        except (SQLAlchemyError, IntegrityError, ValueError) as e:
+            session.rollback()
+            self.logger.error(f"Error creating guest user for {email}: {e}")
+            raise
+
+    def update_user_profile(self, user_id, profile_data):
+        """Updates a user's profile information."""
+        try:
+            user = self.get_user_by_id(user_id)
+            if user:
+                user.email_address = profile_data.get('email_address', user.email_address)
+                user.first_name = profile_data.get('first_name', user.first_name)
+                user.last_name = profile_data.get('last_name', user.last_name)
+                session.commit()
+                self.logger.info(f"User profile for {user_id} updated.")
+                return user
+            return None
+        except SQLAlchemyError as e:
+            session.rollback()
+            self.logger.error(f"Error updating profile for user {user_id}: {e}")
+            raise
+
+    def get_user_addresses(self, user_id):
+        """Retrieves all addresses for a given user."""
+        try:
+            return session.query(Address).filter_by(user_id=user_id).all()
+        except SQLAlchemyError as e:
+            self.logger.error(f"Error retrieving addresses for user {user_id}: {e}")
+            raise
+    
+    def get_all_users(self, page=1, per_page=20):
+        """Retrieves all users with pagination for admin purposes."""
+        try:
+            return User.query.order_by(User.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+        except SQLAlchemyError as e:
+            self.logger.error(f"Error retrieving all users: {e}")
+            raise
 
 
     @staticmethod
@@ -88,32 +170,8 @@ class UserService:
         current_app.logger.info(f"Admin created new user: {user.email}")
         return user
         
-    @staticmethod
-    def get_user_by_id(user_id: int, context: str = 'basic'):
-        user = User.query.get_or_404(user_id)
-        return user.to_dict()
-
         
-    @staticmethod
-    def get_all_users_paginated(page: int, per_page: int, filters: dict = None):
-        """Get paginated users with N+1 optimization."""
-        query = User.query
 
-        if filters:
-            filters = InputSanitizer.sanitize_input(filters)
-            if filters.get('role'):
-                query = query.filter(User.role == filters['role'])
-            if filters.get('is_active') is not None:
-                query = query.filter(User.is_active == filters['is_active'])
-            if filters.get('email'):
-                query = query.filter(User.email.ilike(f"%{filters['email']}%"))
-
-        # Optimize query to avoid N+1 problem
-        query = query.options(db.selectinload(User.addresses))
-
-        return query.order_by(User.created_at.desc()).paginate(
-            page=page, per_page=per_page, error_out=False
-        )
 
     @staticmethod
     def create_user(user_data: dict):
@@ -178,69 +236,6 @@ class UserService:
         self.session.commit()
         return user
     
-    @staticmethod
-    def update_user(user_id: int, update_data: dict):
-        """Update user with proper validation and logging."""
-        update_data = InputSanitizer.sanitize_input(update_data)
-
-        user = User.query.get(user_id)
-        if not user:
-            raise NotFoundException(f"User with ID {user_id} not found")
-
-        try:
-            original_data = {
-                'email': user.email,
-                'role': user.role.value,
-                'is_active': user.is_active
-            }
-
-            # Update fields
-            if 'email' in update_data and update_data['email'] != user.email:
-                # Check email uniqueness
-                existing = User.query.filter_by(email=update_data['email']).first()
-                if existing and existing.id != user_id:
-                    raise ValidationException("Email already in use")
-                user.email = update_data['email']
-
-            if 'first_name' in update_data:
-                user.first_name = update_data['first_name']
-            if 'last_name' in update_data:
-                user.last_name = update_data['last_name']
-            if 'role' in update_data:
-                user.role = UserRole(update_data['role'])
-            if 'is_active' in update_data:
-                user.is_active = update_data['is_active']
-
-            db.session.flush()
-
-            # Log the action with changes
-            changes = {}
-            for key, original_value in original_data.items():
-                current_value = getattr(user, key)
-                if hasattr(current_value, 'value'):
-                    current_value = current_value.value
-                if original_value != current_value:
-                    changes[key] = {'from': original_value, 'to': current_value}
-
-            db.session.commit()
-
-            # Log the update action
-            actor_id = g.user.id if g.user else 'system'
-            UserService.audit_log_service.log_admin_action(
-                user_id=actor_id,
-                action=f"Updated user profile",
-                target_id=user.id,
-                target_type="User",
-                details=update_data 
-            )
-
-            MonitoringService.log_info(f"User created successfully: {user.email} (ID: {user.id})", "UserService")
-            return user.to_dict(context='admin')
-
-        except Exception as e:
-            db.session.rollback()
-            MonitoringService.log_error(f"Failed to update user {user_id}: {str(e)}", "UserService")
-            raise ValidationException(f"Failed to update user: {str(e)}")
 
     @staticmethod
     def delete_user(user_id: int):
