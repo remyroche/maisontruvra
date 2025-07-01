@@ -18,21 +18,31 @@ from backend.utils.input_sanitizer import sanitize_html
 from sqlalchemy.exc import SQLAlchemyError
 from backend.database import db_session as session
 
+from slugify import slugify
+
+from ..extensions import db, cache
+from ..models import Product
+from ..utils.cache_helpers import (
+    get_product_list_key,
+    get_product_by_slug_key,
+    get_product_by_id_key,
+    clear_product_cache
+)
+
 
 class ProductService:
     def __init__(self, logger):
         self.logger = logger
 
     def get_all_products(self):
-        """
-        Retrieves all public, shoppable products.
-        Filters out quote-only and owned products.
-        """
-        try:
-            return session.query(Product).filter_by(is_active=True, is_quotable_only=False, owner_id=None).all()
-        except SQLAlchemyError as e:
-            self.logger.error(f"Error retrieving all products: {e}")
-            raise
+        """Retrieves all products from the database, with caching."""
+        cache_key = get_product_list_key()
+        products = cache.get(cache_key)
+        if products is None:
+            products = Product.query.options(joinedload(Product.category)).order_by(Product.name).all()
+            cache.set(cache_key, products, timeout=3600)  # Cache for 1 hour
+        return products
+
 
         # --- User-based Filtering (Visibility & Tier Restrictions) ---
         if user:
@@ -93,6 +103,17 @@ class ProductService:
         )
 
 
+    def get_product_by_slug_cached(slug):
+        """Retrieves a single product by its slug, with caching."""
+        cache_key = get_product_by_slug_key(slug)
+        product = cache.get(cache_key)
+        if product is None:
+            product = Product.query.filter_by(slug=slug).first()
+            if product:
+                cache.set(cache_key, product, timeout=3600)
+                # Also cache by ID for consistency
+                cache.set(get_product_by_id_key(product.id), product, timeout=3600)
+        return product
     @staticmethod
     def get_all_products():
         """
@@ -103,8 +124,8 @@ class ProductService:
             db.joinedload(Product.variants).joinedload(ProductVariant.stock),
             db.joinedload(Product.category)
         ).all()
-            
-    def get_product_by_id(self, product_id: int, user=None):
+                
+    def get_product_by_id(product_id: int, user=None):
         """
         Get a single product by ID, handling serialization, visibility, and B2B pricing.
         """
@@ -119,28 +140,28 @@ class ProductService:
         
         if not product:
             raise NotFoundException(f"Product with ID {product_id} not found")
-
+    
         # --- Visibility Check ---
         is_b2b_user = hasattr(user, 'is_b2b') and user.is_b2b
         if is_b2b_user and not product.is_b2b_visible:
             raise NotFoundException(f"Product with ID {product_id} not found")
         if not is_b2b_user and not product.is_b2c_visible:
             raise NotFoundException(f"Product with ID {product_id} not found")
-
+    
         # --- Tier Restriction Check ---
         if product.restricted_to_tiers:
             if not user or not hasattr(user, 'loyalty') or not user.loyalty:
-                 raise NotFoundException(f"Product with ID {product_id} not found")
+                    raise NotFoundException(f"Product with ID {product_id} not found")
             
             user_tier_id = user.loyalty.tier_id
             allowed_tier_ids = {tier.id for tier in product.restricted_to_tiers}
             if user_tier_id not in allowed_tier_ids:
-                raise NotFoundException(f"Product with ID {product_id} not found")
-                
+                    raise NotFoundException(f"Product with ID {product_id} not found")
+                    
         # --- Serialization and Price Calculation ---
         view = 'b2b' if is_b2b_user else 'public'
         product_data = product.to_dict(view=view)
-
+    
         # Calculate B2B-specific price if applicable
         if is_b2b_user:
             tier_discount = 0
@@ -150,7 +171,7 @@ class ProductService:
             b2b_price = product.price * (1 - tier_discount / 100)
             product_data['b2c_price'] = product.price
             product_data['b2b_price'] = b2b_price
-
+    
         return product_data
 
 
@@ -289,7 +310,174 @@ class ProductService:
             session.rollback()
             self.logger.error(f"Error creating product for quote: {e}")
             raise
-            
+
+
+def create_product(product_data: dict):
+    """Create a new product with proper validation and logging."""
+    # Check for duplicate product name before proceeding.
+    if Product.query.filter(Product.name.ilike(product_data['name'])).first():
+        raise DuplicateProductError(f"Product with name '{product_data['name']}' already exists.")
+
+    # Sanitize user-provided string fields to prevent XSS.
+    sanitized_name = sanitize_html(product_data['name'])
+    sanitized_description = sanitize_html(product_data['description'])
+
+    # Verify that the foreign key references are valid.
+    if not Category.query.get(product_data['category_id']):
+        raise InvalidAPIRequestError(f"Category with id {product_data['category_id']} not found.")
+    
+    if product_data.get('collection_id') and not Collection.query.get(product_data['collection_id']):
+        raise InvalidAPIRequestError(f"Collection with id {product_data['collection_id']} not found.")
+
+    # Create the main product record.
+    new_product = Product(
+        name=sanitized_name,
+        description=sanitized_description,
+        price=product_data['price'],
+        category_id=product_data['category_id'],
+        collection_id=product_data.get('collection_id'),
+        is_active=product_data['is_active'],
+        is_featured=product_data['is_featured']
+    )
+    db.session.add(new_product)
+    db.session.flush()  # Flush to get the new_product.id for variant creation.
+
+    # Create variants and their initial stock.
+    for variant_data in product_data['variants']:
+        if ProductVariant.query.filter_by(sku=variant_data['sku']).first():
+            db.session.rollback()  # Rollback the transaction to avoid partial creation.
+            raise DuplicateProductError(f"Variant with SKU '{variant_data['sku']}' already exists.")
+
+        new_variant = ProductVariant(
+            product_id=new_product.id,
+            sku=variant_data['sku'],
+            price_offset=variant_data['price_offset']
+        )
+        db.session.add(new_variant)
+        db.session.flush()  # Flush to get new_variant.id for stock creation.
+
+        new_stock = Stock(
+            variant_id=new_variant.id,
+            quantity=variant_data['stock']
+        )
+        db.session.add(new_stock)
+
+    # Log the administrative action for auditing purposes.
+    AuditLogService.log_admin_action(
+        action='create_product',
+        target_id=new_product.id,
+        details=f"Created product '{new_product.name}'"
+    )
+    
+    db.session.commit()
+    clear_product_cache()
+    return new_product
+
+def update_product(product_id: int, update_data: dict):
+    """Update product with proper validation and logging."""
+    update_data = InputSanitizer.sanitize_input(update_data)
+    
+    product = Product.query.get(product_id)
+    if not product:
+        raise NotFoundException(f"Product with ID {product_id} not found")
+    
+    try:
+        original_data = {
+            'name': product.name,
+            'description': product.description,
+            'is_active': product.is_active
+        }
+        original_slug = product.slug
+        
+        # Update fields
+        if 'name' in update_data:
+            product.name = update_data['name']
+            product.slug = slugify(update_data['name'])
+        if 'description' in update_data:
+            product.description = update_data['description']
+        if 'category_id' in update_data:
+            product.category_id = update_data['category_id']
+        if 'is_active' in update_data:
+            product.is_active = update_data['is_active']
+        if 'metadata' in update_data:
+            product.metadata = update_data['metadata']
+        
+        db.session.flush()
+        
+        # Log changes
+        changes = {}
+        for key, original_value in original_data.items():
+            current_value = getattr(product, key)
+            if original_value != current_value:
+                changes[key] = {'from': original_value, 'to': current_value}
+        
+        if changes:
+            AuditLogService.log_action(
+                'PRODUCT_UPDATED',
+                target_id=product.id,
+                details={'changes': changes}
+            )
+        
+        db.session.commit()
+        
+        # Invalidate caches
+        clear_product_cache(product_id=product.id, slug=original_slug)
+        if original_slug != product.slug:
+            clear_product_cache(slug=product.slug)
+
+        MonitoringService.log_info(
+            f"Product updated successfully: {product.name} (ID: {product.id})",
+            "ProductService"
+        )
+        return product.to_dict(view='admin')
+        
+    except Exception as e:
+        db.session.rollback()
+        MonitoringService.log_error(
+            f"Failed to update product {product_id}: {str(e)}",
+            "ProductService",
+            exc_info=True
+        )
+        raise ValidationException(f"Failed to update product: {str(e)}")
+
+def delete_product(product_id: int):
+    """Soft delete product with logging."""
+    product = Product.query.get(product_id)
+    if not product:
+        raise NotFoundException(f"Product with ID {product_id} not found")
+    
+    try:
+        product_slug = product.slug
+        product.is_active = False
+        product.deleted_at = db.func.now()
+        
+        db.session.flush()
+        
+        AuditLogService.log_action(
+            'PRODUCT_DELETED',
+            target_id=product.id,
+            details={'name': product.name}
+        )
+        
+        db.session.commit()
+        
+        # Invalidate all caches related to this product
+        clear_product_cache(product_id=product_id, slug=product_slug)
+        
+        MonitoringService.log_info(
+            f"Product soft deleted: {product.name} (ID: {product.id})",
+            "ProductService"
+        )
+        
+    except Exception as e:
+        db.session.rollback()
+        MonitoringService.log_error(
+            f"Failed to delete product {product_id}: {str(e)}",
+            "ProductService",
+            exc_info=True
+        )
+        raise ValidationException(f"Failed to delete product: {str(e)}")
+    
     @staticmethod
     def create_product(product_data: dict):
         """Create a new product with proper validation and logging."""
@@ -366,101 +554,6 @@ class ProductService:
             raise ProductNotFoundError(f"Product with id {product_id} not found.")
         return product
 
-    @staticmethod
-    def update_product(product_id: int, update_data: dict):
-        """Update product with proper validation and logging."""
-        update_data = InputSanitizer.sanitize_input(update_data)
-        
-        product = Product.query.get(product_id)
-        if not product:
-            raise NotFoundException(f"Product with ID {product_id} not found")
-        
-        try:
-            original_data = {
-                'name': product.name,
-                'description': product.description,
-                'is_active': product.is_active
-            }
-            
-            # Update fields
-            if 'name' in update_data:
-                product.name = update_data['name']
-            if 'description' in update_data:
-                product.description = update_data['description']
-            if 'category_id' in update_data:
-                product.category_id = update_data['category_id']
-            if 'is_active' in update_data:
-                product.is_active = update_data['is_active']
-            if 'metadata' in update_data:
-                product.metadata = update_data['metadata']
-            
-            db.session.flush()
-            
-            # Log changes
-            changes = {}
-            for key, original_value in original_data.items():
-                current_value = getattr(product, key)
-                if original_value != current_value:
-                    changes[key] = {'from': original_value, 'to': current_value}
-            
-            if changes:
-                AuditLogService.log_action(
-                    'PRODUCT_UPDATED',
-                    target_id=product.id,
-                    details={'changes': changes}
-                )
-            
-            db.session.commit()
-            
-            MonitoringService.log_info(
-                f"Product updated successfully: {product.name} (ID: {product.id})",
-                "ProductService"
-            )
-            return product.to_dict(view='admin')
-            
-        except Exception as e:
-            db.session.rollback()
-            MonitoringService.log_error(
-                f"Failed to update product {product_id}: {str(e)}",
-                "ProductService",
-                exc_info=True
-            )
-            raise ValidationException(f"Failed to update product: {str(e)}")
-    
-    @staticmethod
-    def delete_product(product_id: int):
-        """Soft delete product with logging."""
-        product = Product.query.get(product_id)
-        if not product:
-            raise NotFoundException(f"Product with ID {product_id} not found")
-        
-        try:
-            product.is_active = False
-            product.deleted_at = db.func.now()
-            
-            db.session.flush()
-            
-            AuditLogService.log_action(
-                'PRODUCT_DELETED',
-                target_id=product.id,
-                details={'name': product.name}
-            )
-            
-            db.session.commit()
-            
-            MonitoringService.log_info(
-                f"Product soft deleted: {product.name} (ID: {product.id})",
-                "ProductService"
-            )
-            
-        except Exception as e:
-            db.session.rollback()
-            MonitoringService.log_error(
-                f"Failed to delete product {product_id}: {str(e)}",
-                "ProductService",
-                exc_info=True
-            )
-            raise ValidationException(f"Failed to delete product: {str(e)}")
     
     @staticmethod
     def get_low_stock_products(threshold: int = 10):
