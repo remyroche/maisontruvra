@@ -4,7 +4,6 @@ from backend.utils.decorators import admin_required, roles_required, api_resourc
 from backend.extensions import cache
 from backend.models.blog_models import BlogCategory, BlogPost
 from backend.schemas import BlogCategorySchema, BlogPostSchema
-from backend.services.blog_service import BlogService
 from marshmallow import ValidationError
 
 blog_management_bp = Blueprint('blog_management_bp', __name__, url_prefix='/api/admin/blog')
