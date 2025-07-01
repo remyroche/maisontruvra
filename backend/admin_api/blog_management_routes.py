@@ -1,9 +1,11 @@
 from flask import Blueprint, request, jsonify, g
 from backend.services.blog_service import BlogService
-from backend.utils.decorators import roles_required, api_resource_handler
+from backend.utils.decorators import admin_required, roles_required, api_resource_handler
 from backend.extensions import cache
 from backend.models.blog_models import BlogCategory, BlogPost
 from backend.schemas import BlogCategorySchema, BlogPostSchema
+from backend.services.blog_service import BlogService
+from marshmallow import ValidationError
 
 blog_management_bp = Blueprint('blog_management_bp', __name__, url_prefix='/api/admin/blog')
 
@@ -50,23 +52,43 @@ def get_posts():
 @api_resource_handler(BlogPost, schema=BlogPostSchema(), check_ownership=False)
 @roles_required('Admin', 'Manager', 'Editor')
 def create_post():
-    post = BlogService.create_post(g.validated_data)
-    # Invalidate cache for the list of posts
-    cache.delete('view//api/blog/posts')
-    return jsonify(post.to_dict()), 201
+    schema = BlogPostSchema()
+    # Exclude author_id from loading as it's set from current_user
+    # schema.load(..., partial=('author_id',))
+    # For now, we assume it's in the request for simplicity
+    try:
+        data = schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
+    blog_service = BlogService()
+    try:
+        post = blog_service.create_post(data)
+        return jsonify({"message": "Blog post created.", "post": post.to_dict()}), 201
+    except Exception as e:
+        return jsonify({"error": "Failed to create post."}), 500
+
 
 @blog_management_bp.route('/posts/<int:post_id>', methods=['PUT'])
 @api_resource_handler(BlogPost, schema=BlogPostSchema(), check_ownership=False)
 @roles_required('Admin', 'Manager', 'Editor')
 def update_post(post_id):
-    post = BlogService.update_post(post_id, g.validated_data)
-    if not post:
-        return jsonify({"error": "Post not found or update failed"}), 404
-        
-    # Invalidate relevant caches
-    cache.delete('view//api/blog/posts') # Clear the list cache
-    cache.delete('view//api/blog/posts/{}'.format(post.slug)) # FIX: Use post.slug
-    return jsonify(post.to_dict())
+    """ Update an existing blog post. """
+    schema = BlogPostSchema()
+    try:
+        data = schema.load(request.json, partial=True)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
+    blog_service = BlogService()
+    try:
+        post = blog_service.update_post(post_id, data)
+        if not post:
+            return jsonify({"error": "Post not found."}), 404
+        return jsonify({"message": "Blog post updated.", "post": post.to_dict()})
+    except Exception as e:
+        return jsonify({"error": "Failed to update post."}), 500
+
 
 @blog_management_bp.route('/posts/<int:post_id>', methods=['GET'])
 @api_resource_handler(BlogPost, check_ownership=False)
