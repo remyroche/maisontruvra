@@ -1,35 +1,53 @@
-from flask import Blueprint, jsonify, request
-from backend.utils.decorators import roles_required, permissions_required
-from backend.services.site_settings_service import SiteSettingsService
+"""
+This module defines the API endpoints for managing global site settings.
+"""
+from flask import Blueprint, request, g, jsonify
+from ..schemas import SiteSettingsSchema
+from ..utils.decorators import roles_required
+from ..services.site_settings_service import SiteSettingsService
+from ..extensions import db
 from marshmallow import ValidationError
-from backend.schemas import SiteSettingsSchema
 
+# --- Blueprint Setup ---
+bp = Blueprint('site_management', __name__, url_prefix='/api/admin/site-settings')
 
-site_management_bp = Blueprint('admin_site_management_routes', __name__, url_prefix='/api/admin/site-settings')
-
-@site_management_bp.route('/', methods=['GET'])
-@admin_required
+@bp.route('/', methods=['GET'])
+@roles_required('Admin', 'Manager')
 def get_site_settings():
-    """ Get all site settings. """
-    settings_service = SiteSettingsService()
-    settings = settings_service.get_all_settings()
+    """
+    Retrieves all site settings from the database.
+    This endpoint uses a cached service method for performance.
+    """
+    settings = SiteSettingsService.get_all_settings_cached()
     return jsonify(settings)
 
-@site_management_bp.route('/', methods=['PUT'])
-@admin_required
+@bp.route('/', methods=['PUT'])
+@roles_required('Admin', 'Manager')
 def update_site_settings():
-    """ Update site settings. """
-    schema = SiteSettingsSchema()
+    """
+    Updates multiple site settings in a single transaction.
+    The request body should be a JSON object containing the settings.
+    Example: { "settings": { "site_name": "Maison Truvra", "maintenance_mode": "false" } }
+    """
+    # Manually handle validation and transaction since this isn't a standard CRUD resource.
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"error": "Invalid JSON data provided"}), 400
+        
     try:
-        # The schema can validate known fields, and unknown=INCLUDE allows other settings
-        # request.json is automatically sanitized by middleware
-        data = schema.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 400
+        # Validate the incoming data against our schema
+        validated_data = SiteSettingsSchema().load(json_data)
+        
+        # The service layer handles the update logic and cache invalidation
+        SiteSettingsService.update_settings(validated_data['settings'])
+        
+        # The service commits the session, so we don't need to do it here.
+        
+        return jsonify({"message": "Site settings updated successfully."}), 200
 
-    settings_service = SiteSettingsService()
-    try:
-        settings_service.update_settings(data)
-        return jsonify({"message": "Site settings updated successfully."})
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed", "messages": err.messages}), 400
     except Exception as e:
-        return jsonify({"error": "Failed to update settings."}), 500
+        db.session.rollback()
+        # Log the error properly in a real application
+        return jsonify({"error": "An internal error occurred", "details": str(e)}), 500
