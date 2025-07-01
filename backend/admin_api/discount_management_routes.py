@@ -1,74 +1,55 @@
-# backend/admin_api/discount_management_routes.py
-
-from flask import Blueprint, request, jsonify, g
-from ..services.discount_service import DiscountService
-from ..utils.decorators import api_resource_handler
+"""
+This module defines the API endpoints for discount management in the admin panel.
+It leverages the @api_resource_handler to create clean, secure, and consistent CRUD endpoints.
+"""
+from flask import Blueprint, request, g, jsonify
 from ..models import Discount
-from backend.utils.decorators import admin_required, roles_required
-from backend.services.discount_service import DiscountService
-from marshmallow import ValidationError
-from backend.schemas import DiscountSchema, DiscountCreateSchema, DiscountUpdateSchema
+from ..schemas import DiscountSchema
+from ..utils.decorators import api_resource_handler, roles_required
+from ..services.discount_service import DiscountService
 
-discount_management_bp = Blueprint('discount_management_bp', __name__, url_prefix='/admin/discounts')
-discount_service = DiscountService()
+# --- Blueprint Setup ---
+bp = Blueprint('discount_management', __name__, url_prefix='/api/admin/discounts')
 
-@discount_management_bp.route('', methods=['POST'])
-@roles_required('Admin', 'Manager', 'Marketing')
-def create_discount():
-    """ Create a new discount/coupon. """
-    schema = DiscountSchema()
-    try:
-        data = schema.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 400
-
-    discount_service = DiscountService()
-    try:
-        discount = discount_service.create_discount(data)
-        return jsonify({"message": "Discount created successfully.", "discount": discount.to_dict()}), 201
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 409 # e.g., code already exists
-    except Exception as e:
-        return jsonify({"error": "Failed to create discount."}), 500
-
-
-@discount_management_bp.route('', methods=['GET'])
-@api_resource_handler(model=Discount, role_required='admin')
-def get_discounts():
-    """Admin endpoint to get all discounts."""
-    discounts = Discount.query.all()
-    return jsonify([d.to_dict() for d in discounts])
-
-@discount_management_bp.route('/<int:discount_id>', methods=['PUT'])
-@roles_required('Admin', 'Manager', 'Marketing')
-def update_discount(discount_id):
-    """ Update an existing discount. """
-    schema = DiscountSchema()
-    try:
-        data = schema.load(request.json, partial=True)
-    except ValidationError as err:
-        return jsonify(err.messages), 400
-
-    discount_service = DiscountService()
-    try:
-        discount = discount_service.update_discount(discount_id, data)
-        if not discount:
-            return jsonify({"error": "Discount not found."}), 404
-        return jsonify({"message": "Discount updated successfully.", "discount": discount.to_dict()})
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 409
-    except Exception as e:
-        return jsonify({"error": "Failed to update discount."}), 500
-
-
-
-@discount_management_bp.route('/<int:discount_id>', methods=['DELETE'])
+@bp.route('/', methods=['GET', 'POST'])
+@bp.route('/<int:discount_id>', methods=['GET', 'PUT', 'DELETE'])
+@roles_required('Admin', 'Manager')
 @api_resource_handler(
     model=Discount,
-    role_required='admin',
-    action_log=lambda d: f"Deleted Discount '{d.code}'"
+    request_schema=DiscountSchema,
+    response_schema=DiscountSchema,
+    log_action=True,
+    allow_hard_delete=False # Soft delete is the safe default for discounts
 )
-def delete_discount(discount_id):
-    """Admin endpoint to delete a discount."""
-    discount_service.delete_discount(g.discount)
-    return jsonify({"message": "Discount deleted successfully."})
+def handle_discounts(discount_id=None, is_hard_delete=False):
+    """Handles all CRUD operations for Discounts."""
+    
+    # Handle the collection GET request for all discounts
+    if request.method == 'GET' and discount_id is None:
+        all_discounts = DiscountService.get_all_discounts()
+        return jsonify(DiscountSchema(many=True).dump(all_discounts))
+
+    # --- Single Discount Operations ---
+    # The decorator handles fetching the discount and validating data.
+
+    if request.method == 'GET':
+        # g.target_object is the discount fetched by the decorator.
+        return g.target_object
+
+    elif request.method == 'POST':
+        # g.validated_data contains the sanitized and validated discount data.
+        return DiscountService.create_discount(g.validated_data)
+
+    elif request.method == 'PUT':
+        # g.target_object is the discount to update.
+        # g.validated_data contains the new data.
+        return DiscountService.update_discount(g.target_object, g.validated_data)
+
+    elif request.method == 'DELETE':
+        # The decorator ensures is_hard_delete is False by default.
+        if is_hard_delete:
+            DiscountService.hard_delete_discount(discount_id)
+        else:
+            # Safe, default behavior.
+            DiscountService.soft_delete_discount(discount_id)
+        return None # Decorator provides the success message.
