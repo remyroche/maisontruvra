@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
-from flask_login import login_required, current_user
+from flask_login import  current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from marshmallow import ValidationError
 from flask import Blueprint, request, jsonify
@@ -119,7 +119,6 @@ def admin_data():
 
 
 @account_bp.route('/api/account/language', methods=['PUT'])
-# @api_resource_handler(User, schema=LanguageUpdateSchema(), check_ownership=True) # Old usage
 @login_required
 @api_resource_handler(
     model=User,
@@ -147,8 +146,6 @@ def update_language(user_id): # The decorator will pass the ID of the resource (
 
 @account_bp.route('/update', methods=['POST'])
 @login_required
-# This endpoint updates user profile fields (first_name, last_name).
-# It's a PUT-like operation on the current user's profile.
 @api_resource_handler(
     model=User,
     request_schema=UserProfileUpdateSchema, # Using UserProfileUpdateSchema for update fields
