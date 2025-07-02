@@ -8,107 +8,145 @@ from backend.extensions import db
 from backend.utils.encryption import hash_password
 from backend.models.enums import RoleType
 from backend.services.audit_log_service import AuditLogService
+froom backend.utils.decorators import 
 
 class B2BService:
-    def __init__(self, logger):
-        self.logger = logger
-        self.email_service = EmailService(logger)
-        self.user_service = UserService(logger)
+    """
+    Service layer for managing B2B accounts and related operations.
+    """
+    def __init__(self):
+        self.email_service = EmailService()
+        self.user_service = UserService()
+        self.auth_service = AuthService()
         self.audit_log_service = AuditLogService()
 
     def create_b2b_account(self, data):
         """
-        Creates a B2B user account, which is initially pending approval.
+        Creates a B2B account application.
+        This involves creating a User and a linked B2BAccount with 'pending' status.
         """
-        try:
-            if db.session.query(User).filter_by(email=data['email']).first():
-                raise ValueError("B2B user with this email already exists.")
+        if User.query.filter_by(email=data['email']).first():
+            raise CreationException("A user with this email already exists.")
 
-            hashed_password = hash_password(data['password'])
-            
-            b2b_user = User(
-                email=data['email'],
-                password_hash=hashed_password,
+        try:
+            # First, create the user record
+            user = self.user_service.create_user({
+                'email': data['email'],
+                'password': data['password'],
+                'first_name': data['first_name'],
+                'last_name': data['last_name'],
+                'is_b2b': True,
+                'is_active': False # Account is not active until approved
+            })
+
+            # Then, create the B2B account record
+            b2b_account = B2BAccount(
+                user_id=user.id,
                 company_name=data['company_name'],
-                contact_person=data['contact_person'],
+                vat_number=data.get('vat_number'),
                 status='pending'
             )
-            db.session.add(b2b_user)
+            db.session.add(b2b_account)
             db.session.commit()
 
-            # Send email to admin for approval and to user for confirmation
-            subject = "Your B2B Account Application is Pending Approval"
-            template = "b2b_account_pending"
-            context = {"b2b_user": b2b_user}
-            self.email_service.send_email(b2b_user.email, subject, template, context)
-            
-            # TODO: Send notification to admin dashboard
+            # Send notifications
+            self.email_service.send_b2b_pending_email(user.email, user.first_name)
+            # self.email_service.send_admin_b2b_review_email(b2b_account) # Optional: notify admin
 
-            self.logger.info(f"B2B account created for {data['email']} and is pending approval.")
-            return b2b_user
-        except (SQLAlchemyError, ValueError) as e:
+            self.audit_log_service.add_entry(
+                f"B2B account application submitted for '{b2b_account.company_name}' by '{user.email}'",
+                user_id=user.id,
+                target_type='b2b_account',
+                target_id=b2b_account.id,
+                action='create'
+            )
+            return b2b_account
+        except (SQLAlchemyError, Exception) as e:
             db.session.rollback()
-            self.logger.error(f"Error creating B2B account: {e}")
-            raise
+            raise CreationException(f"Error creating B2B account: {e}")
 
-    def approve_b2b_account(self, b2b_user_id):
+    def approve_b2b_account(self, b2b_account_id):
         """
-        Approves a B2B user account and assigns the 'b2b_user' role.
+        Approves a pending B2B account.
+        This activates the user, changes the B2B status, and assigns the B2B role.
         """
+        b2b_account = B2BAccount.query.get(b2b_account_id)
+        if not b2b_account:
+            raise NotFoundException("B2B account not found.")
+        if b2b_account.status == 'approved':
+            raise UpdateException("B2B account is already approved.")
+
         try:
-            b2b_user = db.session.query(User).get(b2b_user_id)
-            if not b2b_user:
-                raise ValueError("B2B user not found.")
+            # Update status and activate user
+            b2b_account.status = 'approved'
+            b2b_account.user.is_active = True
 
-            b2b_user.status = 'approved'
-            
-            # Assign 'b2b_user' role
-            b2b_role = db.session.query(Role).filter_by(name='b2b_user').first()
-            if b2b_role:
-                # Check if role is already assigned
-                existing_role = db.session.query(UserRole).filter_by(user_id=b2b_user.id, role_id=b2b_role.id).first()
-                if not existing_role:
-                    user_role = UserRole(user_id=b2b_user.id, role_id=b2b_role.id)
-                    db.session.add(user_role)
+            # Assign 'b2b' role
+            self.auth_service.add_role_to_user(b2b_account.user, 'b2b')
             
             db.session.commit()
 
             # Send approval email
-            subject = "Your B2B Account has been Approved!"
-            template = "b2b_account_approved"
-            context = {"b2b_user": b2b_user}
-            self.email_service.send_email(b2b_user.email, subject, template, context)
-
-            self.logger.info(f"B2B account {b2b_user.email} has been approved.")
-            return b2b_user
-        except (SQLAlchemyError, ValueError) as e:
+            self.email_service.send_b2b_approved_email(b2b_account.user.email, b2b_account.user.first_name)
+            
+            self.audit_log_service.add_entry(
+                f"B2B account approved for '{b2b_account.company_name}'",
+                user_id=current_user.id, # The admin performing the action
+                target_type='b2b_account',
+                target_id=b2b_account.id,
+                action='approve'
+            )
+            return b2b_account
+        except (SQLAlchemyError, Exception) as e:
             db.session.rollback()
-            self.logger.error(f"Error approving B2B account: {e}")
-            raise
+            raise UpdateException(f"Error approving B2B account: {e}")
+
+    def get_all_b2b_accounts(self, status=None):
+        """
+        Retrieves all B2B accounts, optionally filtering by status.
+        """
+        query = B2BAccount.query
+        if status:
+            query = query.filter(B2BAccount.status == status)
+        return query.all()
 
     def get_b2b_account_by_user_id(self, user_id):
-        """Retrieves a B2B account by user ID."""
+        """Retrieves a B2B account by the associated user ID."""
         b2b_account = B2BAccount.query.filter_by(user_id=user_id).first()
         if not b2b_account:
             raise NotFoundException("B2B account not found for this user.")
         return b2b_account
 
+    def update_b2b_account(self, user_id, data):
+        """
+        Updates a B2B account and its associated user details.
+        """
+        b2b_account = self.get_b2b_account_by_user_id(user_id)
+        try:
+            if 'company_name' in data and data['company_name'] is not None:
+                b2b_account.company_name = data['company_name']
+            if 'vat_number' in data and data['vat_number'] is not None:
+                b2b_account.vat_number = data['vat_number']
+            if 'user_details' in data and data['user_details'] is not None:
+                self.user_service.update_user(user_id, data['user_details'])
+            db.session.commit()
+            return b2b_account
+        except Exception as e:
+            db.session.rollback()
+            raise UpdateException(f"Could not update B2B account: {e}")
+
     def request_b2b_account_deletion(self, user_id):
         """
         Allows a B2B user to soft-delete their own account.
-        This will also soft-delete the associated user record.
         """
         b2b_account = self.get_b2b_account_by_user_id(user_id)
-        user = self.user_service.get_user_by_id(user_id)
-
         try:
             b2b_account.soft_delete()
-            user.soft_delete() # Also soft-delete the underlying user
+            b2b_account.user.soft_delete()
             db.session.commit()
-            
             self.audit_log_service.add_entry(
                 f"B2B User requested account deletion for '{b2b_account.company_name}'",
-                user_id=user.id,
+                user_id=user_id,
                 target_type='b2b_account',
                 target_id=b2b_account.id,
                 action='soft_delete'
@@ -117,23 +155,6 @@ class B2BService:
             db.session.rollback()
             raise DeletionException(f"Could not process B2B account deletion: {e}")
 
-
-    def get_all_b2b_users(self):
-        """Récupère tous les utilisateurs avec un rôle B2B."""
-        return self.session.query(User).join(User.roles).filter(Role.name == RoleType.B2B_USER).all()
-        
-    def update_b2b_user_profile(self, user_id: int, data: dict):
-        """Met à jour le profil d'un utilisateur B2B."""
-        user = self.get_b2b_user_by_id(user_id)
-        if not user:
-            raise ValueError("Utilisateur B2B non trouvé.")
-        
-        for key, value in data.items():
-            if hasattr(user, key) and key != 'password':
-                setattr(user, key, value)
-        
-        self.session.commit()
-        return user
 
     # --- Tier Management Logic ---
 
