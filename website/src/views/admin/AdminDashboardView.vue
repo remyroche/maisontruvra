@@ -1,77 +1,106 @@
 <template>
-  <div>
-    <h1 class="text-3xl font-bold text-gray-900 mb-6">Admin Dashboard</h1>
-    <!-- Stats Cards -->
-    <DashboardStats />
+  <div class="flex h-screen bg-gray-100">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gray-800 text-white flex-shrink-0">
+      <div class="p-4 text-lg font-semibold">Admin Panel</div>
+      <nav>
+        <ul>
+          <li v-for="item in navItems" :key="item.name">
+            <router-link :to="item.path" class="flex items-center p-4 hover:bg-gray-700">
+              <component :is="item.icon" class="h-6 w-6 mr-3" />
+              <span>{{ item.name }}</span>
+            </router-link>
+          </li>
+        </ul>
+      </nav>
+    </aside>
 
-    <div class="mt-8">
-      <h2 class="text-xl font-semibold text-gray-800 mb-4">Recent Activity</h2>
-      <!-- Placeholder for recent orders/users tables -->
-       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-           <div class="bg-white p-4 rounded-lg shadow">
-               <h3 class="font-semibold">Recent Orders</h3>
-               <!-- Order list would go here -->
-           </div>
-           <div class="bg-white p-4 rounded-lg shadow">
-                <h3 class="font-semibold">New Users</h3>
-               <!-- User list would go here -->
-           </div>
-       </div>
+    <!-- Main content -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <header class="bg-white shadow p-4 flex justify-between items-center">
+        <h1 class="text-xl font-bold">Dashboard</h1>
+        <div>
+          <router-link to="/admin/profile" class="mr-4">Profile</router-link>
+          <button @click="logout" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
+            Logout
+          </button>
+        </div>
+      </header>
+      <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4">
+        <router-view />
+      </main>
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted } from 'vue';
-import { io } from 'socket.io-client';
-import { useAdminOrdersStore } from '../../../js/stores/adminOrders';
-import { useAdminUsersStore } from '../../../js/stores/adminUsers';
-import { useNotificationStore } from '../../../js/stores/notification';
-import DashboardStats from '../../vue/components/DashboardStats.vue';
+import { useRouter } from 'vue-router';
+import { useAdminAuthStore } from '@/stores/adminAuth';
+import {
+  ChartBarIcon,
+  UsersIcon,
+  ShoppingBagIcon,
+  TagIcon,
+  CubeIcon,
+  CollectionIcon,
+  TruckIcon,
+  CurrencyDollarIcon,
+  DocumentTextIcon,
+  ChatAlt2Icon,
+  NewspaperIcon,
+  SparklesIcon,
+  CogIcon,
+  ShieldCheckIcon,
+  UserGroupIcon,
+  DocumentReportIcon,
+  ClockIcon,
+  KeyIcon,
+  ViewGridIcon,
+  QrcodeIcon,
+  TerminalIcon,
+  GiftIcon,
+  TrashIcon, // Added TrashIcon for the Recycling Bin
+} from '@heroicons/vue/outline';
 
-const ordersStore = useAdminOrdersStore();
-const usersStore = useAdminUsersStore();
-const notificationStore = useNotificationStore();
+const router = useRouter();
+const authStore = useAdminAuthStore();
 
-let socket;
+const navItems = [
+  { name: 'Dashboard', path: '/admin/dashboard', icon: ChartBarIcon },
+  { name: 'Users', path: '/admin/manage-users', icon: UsersIcon },
+  { name: 'B2B', path: '/admin/manage-b2b', icon: UserGroupIcon },
+  { name: 'Orders', path: '/admin/manage-orders', icon: ShoppingBagIcon },
+  { name: 'Products', path: '/admin/manage-products', icon: CubeIcon },
+  { name: 'Categories', path: '/admin/manage-categories', icon: TagIcon },
+  { name: 'Collections', path: '/admin/manage-collections', icon: CollectionIcon },
+  { name: 'Inventory', path: '/admin/manage-inventory', icon: ViewGridIcon },
+  { name: 'Delivery', path: '/admin/manage-delivery', icon: TruckIcon },
+  { name: 'Discounts', path: '/admin/manage-discounts', icon: CurrencyDollarIcon },
+  { name: 'Invoices', path: '/admin/manage-invoices', icon: DocumentTextIcon },
+  { name: 'Quotes', path: '/admin/manage-quotes', icon: ChatAlt2Icon },
+  { name: 'Reviews', path: '/admin/manage-reviews', icon: ChatAlt2Icon },
+  { name: 'Blog', path: '/admin/manage-blog', icon: NewspaperIcon },
+  { name: 'Loyalty', path: '/admin/manage-loyalty', icon: SparklesIcon },
+  { name: 'Newsletter', path: '/admin/manage-newsletter', icon: GiftIcon },
+  { name: 'Assets', path: '/admin/manage-assets', icon: DocumentReportIcon },
+  { name: 'Passports', path: '/admin/view-passports', icon: QrcodeIcon },
+  { name: 'POS', path: '/admin/manage-pos', icon: TerminalIcon },
+  { name: 'Sessions', path: '/admin/manage-sessions', icon: ClockIcon },
+  { name: 'Roles', path: '/admin/manage-roles', icon: KeyIcon },
+  { name: 'Site Settings', path: '/admin/site-settings', icon: CogIcon },
+  { name: 'Audit Log', path: '/admin/audit-log', icon: ShieldCheckIcon },
+  { name: 'Recycling Bin', path: '/admin/recycling-bin', icon: TrashIcon }, // Added new navigation item
+];
 
-onMounted(() => {
-  // Connect to the WebSocket server
-  socket = io('http://localhost:5000/admin'); // Use your server address and namespace
-
-  socket.on('connect', () => {
-    console.log('Connected to admin WebSocket namespace.');
-  });
-
-  // Listen for 'new_order' events
-  socket.on('new_order', (order) => {
-    notificationStore.showNotification({
-      message: `New order #${order.id} placed for €${order.total_amount}.`,
-      type: 'info'
-    });
-    // Refresh dashboard data
-    ordersStore.fetchOrders(); 
-  });
-
-  // Listen for 'new_user' events
-  socket.on('new_user', (user) => {
-    notificationStore.showNotification({
-      message: `New user registered: ${user.email}.`,
-      type: 'info'
-    });
-    // Refresh dashboard data
-    usersStore.fetchUsers();
-  });
-
-   // Fetch initial data
-  ordersStore.fetchOrders();
-  usersStore.fetchUsers();
-});
-
-onUnmounted(() => {
-  // Disconnect the socket when the component is destroyed
-  if (socket) {
-    socket.disconnect();
-  }
-});
+const logout = async () => {
+  await authStore.logout();
+  router.push('/admin/login');
+};
 </script>
+
+<style scoped>
+/* Add any specific styles for the admin dashboard here */
+.router-link-active {
+  @apply bg-gray-700;
+}
+</style>
