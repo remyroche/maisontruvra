@@ -9,6 +9,8 @@ from backend.models import User, Address, UserRole
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from backend.extensions import dbF
 
+audit_log_service = AuditLogService()
+
 
 class UserService:
 
