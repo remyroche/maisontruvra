@@ -26,8 +26,13 @@ class User(BaseModel):
     email_verified_at = db.Column(db.DateTime, nullable=True)
     
     # User Type and Status
-    user_type = Column(SQLAlchemyEnum(UserType), default=UserType.B2C)
+    user_type = db.Column(db.String(50), nullable=False, default='b2c_user')
     status = Column(SQLAlchemyEnum(UserStatus), default=UserStatus.PENDING_VERIFICATION)
+
+    # Relation avec l'entreprise (pour les utilisateurs B2B)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=True)
+    company = db.relationship('Company', back_populates='users')
+
 
     # Timestamps and Tracking
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
