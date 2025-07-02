@@ -1,92 +1,100 @@
+<!-- website/src/views/account/DashboardView.vue -->
 <template>
-  <div v-if="dashboardStore.isLoading" class="text-center p-12">
-    <p>{{ i18n.loading }}</p>
-  </div>
-  <div v-else-if="dashboardStore.data" class="space-y-8">
-    <!-- Welcome Header -->
-    <div class="px-4">
-      <h1 class="text-3xl font-bold text-gray-900">{{ i18n.welcome.replace('{name}', userStore.profile.first_name) }}</h1>
-      <p class="text-gray-600 mt-1">{{ i18n.welcomeSubtitle }}</p>
-    </div>
+  <div>
+    <h1 class="text-3xl font-bold tracking-tight text-gray-900">Mon Compte</h1>
+    <p class="mt-2 text-sm text-gray-600">Bienvenue, {{ userStore.user?.first_name || 'client' }}. D'ici, vous pouvez consulter vos commandes récentes et gérer vos informations personnelles.</p>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <!-- Main Column -->
-      <div class="lg:col-span-2 space-y-8">
-        <!-- Recent Orders -->
-        <div class="bg-white p-6 rounded-lg shadow">
-          <h2 class="text-xl font-semibold text-gray-800 mb-4">{{ i18n.recentOrdersTitle }}</h2>
-          <div v-if="dashboardStore.data.recentOrders.length > 0" class="space-y-4">
-              <div v-for="order in dashboardStore.data.recentOrders" :key="order.id" class="flex justify-between items-center p-3 border rounded-md">
-                  <div>
-                      <p class="font-medium">Order #{{ order.id.slice(0, 8) }}</p>
-                      <p class="text-sm text-gray-500">Placed on {{ new Date(order.created_at).toLocaleDateString() }}</p>
-                  </div>
-                  <div class="text-right">
-                      <p class="font-semibold">€{{ order.total_amount }}</p>
-                      <span :class="['px-2 inline-flex text-xs leading-5 font-semibold rounded-full', getStatusClass(order.status)]">
-                          {{ order.status }}
-                      </span>
-                  </div>
-              </div>
-          </div>
-          <p v-else class="text-gray-500">{{ i18n.noOrders }}</p>
-        </div>
+    <div class="mt-8">
+      <h2 class="text-xl font-semibold text-gray-900">Commandes Récentes</h2>
+
+      <div v-if="orderStore.loading" class="mt-4 text-center">
+        <p class="text-gray-500">Chargement des commandes...</p>
       </div>
-
-      <!-- Sidebar Column -->
-      <div class="space-y-8">
-          <!-- Loyalty Status -->
-          <div v-if="dashboardStore.data.loyaltyStatus" class="bg-white p-6 rounded-lg shadow">
-              <h2 class="text-xl font-semibold text-gray-800 mb-4">{{ i18n.loyaltyStatusTitle }}</h2>
-              <div class="text-center">
-                  <p class="text-4xl font-bold text-indigo-600">{{ dashboardStore.data.loyaltyStatus.points }}</p>
-                  <p class="text-gray-500">{{ i18n.points }}</p>
-              </div>
-              <div class="mt-4 text-center">
-                  <p class="font-medium">{{ dashboardStore.data.loyaltyStatus.tier.name }} {{ i18n.tier }}</p>
-                  <p class="text-sm text-gray-600">{{ dashboardStore.data.loyaltyStatus.tier.benefits }}</p>
-              </div>
-               <router-link :to="{ name: 'Rewards' }" class="block w-full text-center mt-6 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700">
-                  {{ i18n.viewRewards }}
-              </router-link>
+      <div v-else-if="orderStore.error" class="mt-4 text-center text-red-500">
+        {{ orderStore.error }}
+      </div>
+      <div v-else-if="orders.length === 0" class="mt-4 text-center bg-gray-50 p-8 rounded-lg">
+        <p class="text-gray-600">Vous n'avez pas encore passé de commande.</p>
+        <router-link to="/shop" class="mt-4 inline-block text-indigo-600 hover:text-indigo-800 font-medium">
+          Commencer vos achats &rarr;
+        </router-link>
+      </div>
+      
+      <!-- Orders List -->
+      <div v-else class="mt-4 flow-root">
+        <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+          <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+            <table class="min-w-full divide-y divide-gray-300">
+              <thead>
+                <tr>
+                  <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">N° Commande</th>
+                  <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Date</th>
+                  <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Statut</th>
+                  <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Total</th>
+                  <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-0">
+                    <span class="sr-only">View</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr v-for="order in orders" :key="order.id" class="hover:bg-gray-50 cursor-pointer" @click="viewOrder(order.id)">
+                  <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-0">#{{ order.id }}</td>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ formatDate(order.created_at) }}</td>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="statusClass(order.order_status)">
+                      {{ order.order_status }}
+                    </span>
+                  </td>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ formatCurrency(order.total_price) }}</td>
+                  <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
+                    <router-link :to="{ name: 'OrderStatus', params: { id: order.id } }" class="text-indigo-600 hover:text-indigo-900">
+                      Voir<span class="sr-only">, order #{{ order.id }}</span>
+                    </router-link>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-           <!-- Quick Actions -->
-          <div class="bg-white p-6 rounded-lg shadow">
-              <h2 class="text-xl font-semibold text-gray-800 mb-4">{{ i18n.quickLinksTitle }}</h2>
-              <ul class="space-y-2">
-                  <li><router-link to="/account/profile" class="text-indigo-600 hover:underline">{{ i18n.editProfile }}</router-link></li>
-                  <li><router-link to="/account/orders" class="text-indigo-600 hover:underline">{{ i18n.viewAllOrders }}</router-link></li>
-                  <li><router-link :to="{ name: 'Referrals' }" class="text-indigo-600 hover:underline">{{ i18n.referFriend }}</router-link></li>
-              </ul>
-          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { useDashboardStore } from '@/stores/dashboard';
+import { onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
-import i18nData from '@/locales/pages/account-dashboard.json';
+import { useOrderStore } from '@/stores/orders';
+import { useCurrencyFormatter } from '@/composables/useCurrencyFormatter';
+import { useDateFormatter } from '@/composables/useDateFormatter';
 
-const dashboardStore = useDashboardStore();
 const userStore = useUserStore();
-const currentLang = ref('fr');
-const i18n = computed(() => i18nData[currentLang.value]);
+const orderStore = useOrderStore();
+const router = useRouter();
+const { formatCurrency } = useCurrencyFormatter();
+const { formatDate } = useDateFormatter();
+
+const orders = computed(() => orderStore.orders);
+
+const viewOrder = (orderId) => {
+  router.push({ name: 'OrderStatus', params: { id: orderId } });
+};
+
+const statusClass = (status) => {
+  switch (status) {
+    case 'Delivered':
+      return 'bg-green-100 text-green-800';
+    case 'Shipped':
+      return 'bg-blue-100 text-blue-800';
+    case 'Cancelled':
+      return 'bg-red-100 text-red-800';
+    default:
+      return 'bg-yellow-100 text-yellow-800';
+  }
+};
 
 onMounted(() => {
-    dashboardStore.fetchDashboardData();
+  orderStore.fetchUserOrders();
 });
-
-const getStatusClass = (status) => {
-    const classes = {
-        'pending': 'bg-yellow-100 text-yellow-800',
-        'processing': 'bg-blue-100 text-blue-800',
-        'shipped': 'bg-green-100 text-green-800',
-        'completed': 'bg-green-100 text-green-800',
-        'cancelled': 'bg-red-100 text-red-800'
-    };
-    return classes[status] || 'bg-gray-100 text-gray-800';
-}
 </script>
