@@ -2,6 +2,13 @@ from backend.database import db
 from .base import BaseModel, SoftDeleteMixin
 from .enums import OrderStatus
 
+class OrderStatusEnum(enum.Enum):
+    CONFIRMED = 'Confirmed'
+    PACKING = 'Packing'
+    SHIPPED = 'Shipped'
+    DELIVERED = 'Delivered'
+    CANCELLED = 'Cancelled'
+    
 class Order(BaseModel, SoftDeleteMixin):
     __tablename__ = 'orders'
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
@@ -26,18 +33,20 @@ class Order(BaseModel, SoftDeleteMixin):
     shipping_address = db.relationship('Address')
     invoice = db.relationship('Invoice', back_populates='order', uselist=False)
 
-    def to_user_dict(self):
-        """Serialization for the user viewing their own order."""
+    items = db.relationship('OrderItem', backref='order', lazy=True)
+
+    def to_dict(self):
         return {
             'id': self.id,
-            'order_number': self.order_number,
-            'status': self.status.value,
-            'total_amount': str(self.total_amount),
+            'user_id': self.user_id,
+            'total_price': self.total_price,
             'created_at': self.created_at.isoformat(),
-            'items': [item.to_dict() for item in self.items],
-            'shipping_address': self.shipping_address.to_dict() if self.shipping_address else None,
-            'is_deleted': self.is_deleted
+            'order_status': self.order_status.value,
+            'tracking_number': self.tracking_number,
+            'tracking_url': self.tracking_url,
+            'items': [item.to_dict() for item in self.items]
         }
+
 
     def to_admin_dict(self):
         """Serialization for an admin viewing an order."""
