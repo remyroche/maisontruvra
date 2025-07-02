@@ -7,7 +7,7 @@ from flask import current_app, request, g
 from flask_jwt_extended import get_jwt_identity
 from backend.models import User, Address, UserRole
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
-from backend.extensions import db
+from backend.extensions import dbF
 
 
 class UserService:
