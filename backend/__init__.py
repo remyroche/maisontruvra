@@ -305,6 +305,9 @@ def create_app(config_class=config.Config):
     from .admin_api.session_routes import admin_session_bp
     app.register_blueprint(admin_session_bp, url_prefix='/api/admin/sessions')
 
+    from backend.admin_api.recycling_bin_routes import recycling_bin_bp
+    app.register_blueprint(recycling_bin_bp)
+
     from .contact.routes import contact_bp
     app.register_blueprint(contact_bp)
 
