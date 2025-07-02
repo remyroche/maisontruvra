@@ -1,11 +1,12 @@
 from decimal import Decimal
-from backend.models import db, User, Role, UserRole, Tier, Order
+from backend.models import db, User, Role, UserRole, Tier, Order, Company
 from backend.services.email_service import EmailService
 from backend.services.user_service import UserService
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
 from backend.extensions import db
 from backend.utils.encryption import hash_password
+from backend.models.enums import RoleType
 
 class B2BService:
     def __init__(self, logger):
@@ -84,10 +85,30 @@ class B2BService:
             raise
 
 
-    def get_all_b2b_users(self):
-        """Retrieves all B2B users."""
-        return db.session.query(User).all()
+    def get_b2b_user_by_id(self, user_id: int):
+        """Récupère un utilisateur B2B par ID."""
+        user = self.session.query(User).get(user_id)
+        # Vérifie si l'utilisateur est bien un utilisateur B2B
+        if user and user.is_b2b_user():
+            return user
+        return None
 
+    def get_all_b2b_users(self):
+        """Récupère tous les utilisateurs avec un rôle B2B."""
+        return self.session.query(User).join(User.roles).filter(Role.name == RoleType.B2B_USER).all()
+        
+    def update_b2b_user_profile(self, user_id: int, data: dict):
+        """Met à jour le profil d'un utilisateur B2B."""
+        user = self.get_b2b_user_by_id(user_id)
+        if not user:
+            raise ValueError("Utilisateur B2B non trouvé.")
+        
+        for key, value in data.items():
+            if hasattr(user, key) and key != 'password':
+                setattr(user, key, value)
+        
+        self.session.commit()
+        return user
 
     # --- Tier Management Logic ---
 
