@@ -64,22 +64,6 @@ class UserService:
             self.logger.error(f"Error creating guest user for {email}: {e}")
             raise
 
-    def update_user_profile(self, user_id, profile_data):
-        """Updates a user's profile information."""
-        try:
-            user = self.get_user_by_id(user_id)
-            if user:
-                user.email = profile_data.get('email', user.email)
-                user.first_name = profile_data.get('first_name', user.first_name)
-                user.last_name = profile_data.get('last_name', user.last_name)
-                db.session.commit()
-                self.logger.info(f"User profile for {user_id} updated.")
-                return user
-            return None
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            self.logger.error(f"Error updating profile for user {user_id}: {e}")
-            raise
 
     def get_user_addresses(self, user_id):
         """Retrieves all addresses for a given user."""
@@ -298,9 +282,67 @@ class UserService:
             MonitoringService.log_info(f"User created successfully: {user.email} (ID: {user.id})", "UserService")
             raise ValidationException(f"Failed to delete user: {str(e)}")
 
+    def get_user_by_id(self, user_id):
+        """Retrieves a user by their ID."""
+        user = User.query.get(user_id)
+        if not user:
+            raise UserNotFoundException(f"User with ID {user_id} not found.")
+        return user
 
-# Standalone functions for backward compatibility
-def get_user_by_id(user_id):
-    """Standalone function to get user by ID"""
-    service = UserService()
-    return service.get_user_by_id(user_id)
+    def update_user(self, user_id, data):
+        """Updates a user's information."""
+        user = self.get_user_by_id(user_id)
+        try:
+            for key, value in data.items():
+                if key == "password":
+                    user.set_password(value)
+                elif hasattr(user, key):
+                    setattr(user, key, value)
+            db.session.commit()
+            return user
+        except Exception as e:
+            db.session.rollback()
+            raise UpdateException(f"Could not update user: {e}")
+
+    def deactivate_user(self, user_id):
+        """
+        Admin action to deactivate a user account.
+        This is a hard delete, intended for admin use.
+        """
+        user = self.get_user_by_id(user_id)
+        try:
+            db.session.delete(user)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise DeletionException(f"Could not deactivate user: {e}")
+
+    def request_account_deletion(self, user_id):
+        """
+        Allows a user to soft-delete their own account.
+        Logs out the user after deletion.
+        """
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise UserNotFoundException(f"User with ID {user_id} not found.")
+        
+        try:
+            user.soft_delete()
+            db.session.commit()
+            # The audit log service will use current_user if available
+            audit_log_service.add_entry(
+                f"User requested account deletion for '{user.email}'",
+                user_id=user.id,
+                target_type='user',
+                target_id=user.id,
+                action='soft_delete'
+            )
+        except Exception as e:
+            db.session.rollback()
+            raise DeletionException(f"Could not process account deletion: {e}")
+
+    def get_user_activity(self, user_id):
+        """Retrieves user activity logs."""
+        self.get_user_by_id(user_id) # Ensures user exists
+        logs = AdminAuditLog.query.filter_by(user_id=user_id).all()
+        return [log.to_dict() for log in logs]
