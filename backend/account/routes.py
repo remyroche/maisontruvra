@@ -6,7 +6,7 @@ from marshmallow import ValidationError
 from flask import Blueprint, request, jsonify
 from backend.services.auth_service import AuthService
 from backend.services.exceptions import AuthorizationException
-from backend.utils.decorators import login_required, b2c_user_required
+from backend.utils.decorators import login_required, b2c_user_required, api_resource_handler
 from backend.models.user_models import User
 
 from backend.database import db
@@ -31,8 +31,6 @@ from backend.models.address_models import Address
 
 from backend.services.auth_service import AuthService
 from backend.services.exceptions import InvalidCredentialsError
-# from backend.schemas import UserProfileUpdateSchema, AddressSchema, ChangePasswordSchema # Duplicate import, removed
-from backend.utils.decorators import login_required
 
 
 account_bp = Blueprint('account_bp', __name__)
@@ -237,28 +235,35 @@ def get_profile(user_id):
     return g.target_object
 
 
+
+
 @account_bp.route('/profile', methods=['PUT'])
-@api_resource_handler(
-    model=User,
-    request_schema=UserProfileUpdateSchema,
-    response_schema=UserSchema,
-    ownership_exempt_roles=[],  # Only the user themselves can update
-    cache_timeout=0,  # No caching for user profiles
-    log_action=True  # Log profile updates
-)
 @login_required
-def update_profile():
-    """ Update user profile. """
-    # For profile updates, we work with the current user
-    user = current_user
-    
-    # Update user with validated data
-    for key, value in g.validated_data.items():
-        if hasattr(user, key) and key not in ['password', 'id']:  # Exclude sensitive fields
-            setattr(user, key, value)
-    
+@api_resource_handler(
+    request_schema=UserProfileUpdateSchema,
+    response_schema=UserSchema
+)
+def update_profile(validated_data):
+    """
+    Updates the current user's profile information.
+    The decorator handles validation, error handling, and response serialization.
+    Ownership is implicitly handled by using current_user.
+    """
+    user = user_service.update_user(current_user.id, validated_data)
     return user
 
+@account_bp.route('/delete', methods=['DELETE'])
+@login_required
+@api_resource_handler()
+def delete_account():
+    """
+    Endpoint for a B2C user to request soft-deletion of their own account.
+    The decorator handles JSON response formatting and error catching.
+    """
+    user_service.request_account_deletion(current_user.id)
+    logout_user()  # Log the user out after deletion
+    return {"message": "Account deletion request processed successfully. You have been logged out."}
+    
 @account_bp.route('/change-password', methods=['POST'])
 @login_required
 @api_resource_handler(
