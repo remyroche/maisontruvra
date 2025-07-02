@@ -65,19 +65,21 @@ class OrderItem(BaseModel, SoftDeleteMixin):
     order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
-    price = db.Column(db.Numeric(10, 2), nullable=False) # Price at the time of purchase
+    price_at_purchase = db.Column(db.Float, nullable=False)
 
     order = db.relationship('Order', back_populates='items')
     product = db.relationship('Product')
 
+
     def to_dict(self):
         return {
+            'id': self.id,
             'product_id': self.product_id,
             'product_name': self.product.name,
             'quantity': self.quantity,
-            'price': str(self.price),
-            'is_deleted': self.is_deleted
+            'price_at_purchase': self.price_at_purchase
         }
+
 
 class Invoice(BaseModel, SoftDeleteMixin):
     __tablename__ = 'invoices'
