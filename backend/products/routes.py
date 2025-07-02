@@ -81,21 +81,13 @@ def get_products():
         return jsonify(status="error", message="An error occurred while fetching products."), 500
 
 # READ a single product by its slug
-@products_bp.route('/<string:slug>', methods=['GET'])
-@api_resource_handler(
-    model=Product,
-    response_schema=ProductSchema,
-    ownership_exempt_roles=None,  # Public endpoint, no ownership checks
-    eager_loads=['variants', 'category', 'images', 'reviews'],  # Eager load related data
-    cache_timeout=21600,  # 6 hour cache for public product data
-    log_action=False,  # No need to log public product views
-    lookup_field='slug'  # Use slug for lookup instead of ID
-)
+@product_bp.route('/<slug>', methods=['GET'])
+@api_resource_handler(model=Product, response_schema=ProductSchema, lookup_field='slug', eager_loads=['category', 'collections', 'reviews'])
 def get_product_by_slug(slug):
     """
     Get detailed information for a single product by its slug.
     """
-    # Product is already fetched and validated by decorator
+    from flask import g
     return g.target_object
 
 @products_bp.route('/<int:product_id>', methods=['GET'])
@@ -107,6 +99,7 @@ def get_product_by_slug(slug):
     cache_timeout=3600,  # 1 hour cache for public product data
     log_action=False  # No need to log public product views
 )
+
 def get_product(product_id):
     """Get detailed information for a single product by ID."""
     # Product is already fetched and validated by decorator
