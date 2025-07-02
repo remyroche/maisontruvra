@@ -21,6 +21,8 @@ from backend.services.invoice_service import InvoiceService
 from backend.services.email_service import EmailService
 from sqlalchemy.exc import SQLAlchemyError
 from backend.extensions import db
+from ..models import Order, OrderItem, Product, db
+from ..models.order_models import OrderStatusEnum
 
 
 
@@ -73,6 +75,20 @@ class OrderService:
             order.status = new_status
             db.session.commit()
             self.logger.info(f"Order {order_id} status updated from '{original_status}' to '{new_status}'.")
+    
+            # Validate the status against the enum
+            try:
+                status_enum = OrderStatusEnum(status)
+            except ValueError:
+                raise ValueError(f"'{status}' is not a valid order status.")
+    
+            order.order_status = status_enum
+            
+            # Only add tracking info if provided.
+            if tracking_number:
+                order.tracking_number = tracking_number
+            if tracking_url:
+                order.tracking_url = tracking_url
 
             if notify_customer:
                 user = order.user
