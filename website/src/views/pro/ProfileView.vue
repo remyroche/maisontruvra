@@ -2,20 +2,26 @@
   <div class="space-y-8">
     <h1 class="text-3xl font-bold">My Professional Profile</h1>
 
+    <!-- Company Details -->
     <div v-if="b2bStore.profile" class="bg-white p-6 rounded-lg shadow space-y-4">
       <h2 class="text-xl font-semibold">Company Details</h2>
       <p><strong>Company Name:</strong> {{ b2bStore.profile.company_name }}</p>
       <p><strong>VAT Number:</strong> {{ b2bStore.profile.vat_number }}</p>
-      <!-- Add more B2B profile details here -->
     </div>
 
-    <!-- User Details (shared component) -->
+    <!-- Personal Details -->
     <div class="bg-white p-6 rounded-lg shadow">
         <h2 class="text-xl font-semibold mb-4">Personal Details</h2>
         <UserDetailsForm />
     </div>
+    
+    <!-- Company Addresses -->
+    <B2BAddressManager />
 
-    <!-- Password Change (shared component) -->
+    <!-- Team Management -->
+    <B2BTeamManager />
+
+    <!-- Password Change -->
     <div class="bg-white p-6 rounded-lg shadow">
         <h2 class="text-xl font-semibold mb-4">Change Password</h2>
         <PasswordChangeForm />
@@ -52,14 +58,15 @@ import { useRouter } from 'vue-router';
 import { useB2BStore } from '@/stores/b2b';
 import UserDetailsForm from '@/components/forms/UserDetailsForm.vue';
 import PasswordChangeForm from '@/components/auth/PasswordChangeForm.vue';
+import B2BAddressManager from '@/components/pro/B2BAddressManager.vue';
+import B2BTeamManager from '@/components/pro/B2BTeamManager.vue';
 
 const b2bStore = useB2BStore();
 const router = useRouter();
 const showConfirmModal = ref(false);
 
 onMounted(() => {
-  // Assuming you have a method to fetch the B2B profile
-  // b2bStore.fetchProfile(); 
+  b2bStore.fetchB2BProfile(); 
 });
 
 async function confirmB2BDeletion() {
