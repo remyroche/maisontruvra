@@ -395,16 +395,28 @@ def update_address(address_id):
     
     return address
 
+@account_bp.route('/addresses/<int:address_id>/restore', methods=['POST'])
+@login_required
+@api_resource_handler(model=Address, response_schema=AddressSchema, ownership_exempt_roles=[])
+def restore_user_address(address_id):
+    """
+    Restores a soft-deleted address for the current user.
+    The decorator handles fetching, ownership checks, and restoration.
+    """
+    # This function body is now intentionally empty.
+    # The decorator performs the entire operation and returns a standard message.
+    return None
+    
 @account_bp.route('/addresses/<int:address_id>', methods=['DELETE'])
 @login_required
-@api_resource_handler(
-    model=Address,
-    ownership_exempt_roles=[],
-    cache_timeout=0,
-    check_ownership=True # Crucial for addresses
-)
-def delete_address(address_id):
-    """ Delete an address. """
-    # user_id is implicit from login_required and check_ownership
-    success = address_service.delete_address(address_id=address_id, user_id=current_user.id)
-    return None # Return None for successful deletion, decorator will send message
+@api_resource_handler(model=Address, ownership_exempt_roles=[], allow_hard_delete=True)
+def delete_user_address(address_id):
+    """
+    Deletes a specific address for the current user.
+    - Soft-delete by default.
+    - Use ?hard=true for a permanent, irreversible delete.
+    The decorator handles all fetching, ownership checks, and deletion logic.
+    """
+    # This function body is now intentionally empty.
+    # The decorator performs the entire operation.
+    return None
