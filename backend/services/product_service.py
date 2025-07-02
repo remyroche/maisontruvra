@@ -17,6 +17,10 @@ from ..models import Category, Collection, product_tags
 from backend.utils.input_sanitizer import sanitize_html
 from sqlalchemy.exc import SQLAlchemyError
 from backend.extensions import db
+from backend.models import db, Product, Category, Collection, Review, User
+from backend.utils.slug_utility import slugify
+from sqlalchemy.orm import joinedload
+from sqlalchemy import select
 
 from slugify import slugify
 
