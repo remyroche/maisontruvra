@@ -40,41 +40,16 @@ def get_b2b_users():
     return jsonify(user_list)
 
 @b2b_profile_bp.route('/users/add', methods=['POST'])
-@login_required
-@b2b_admin_required # Seuls les admins de l'entreprise peuvent ajouter de nouveaux utilisateurs
+@jwt_required()
+@api_resource_handler(model=B2BUser, request_schema=B2BUserInviteSchema, response_schema=B2BUserSchema, log_action=True)
 def add_b2b_user():
-    """Ajoute un nouvel utilisateur au compte de l'entreprise."""
-    data = request.get_json()
-    if not current_user.company_id:
-        return jsonify({"error": "L'utilisateur admin n'est pas associé à une entreprise."}), 400
-
-    try:
-        # Utilise le service utilisateur qui contient la logique de création robuste
-        new_user = user_service.create_b2b_user(
-            user_data=data,
-            company_id=current_user.company_id
-        )
-        
-        # Envoyer un e-mail d'invitation de manière asynchrone.
-        email_context = {
-            'inviter_name': current_user.first_name,
-            'company_name': current_user.company.name,
-            'new_user_name': new_user.first_name
-        }
-        send_async_email.delay(
-            to_email=new_user.email,
-            subject=f"Invitation à rejoindre {current_user.company.name} sur Maison Truvrā",
-            template='emails/b2b_user_invitation.html',
-            **email_context
-        )
-        
-        return jsonify({"message": "Utilisateur ajouté avec succès.", "user_id": new_user.id}), 201
-        
-    except ValidationException as e:
-        return jsonify({"error": str(e)}), 409
-    except Exception as e:
-        # Log l'erreur pour le débogage
-        return jsonify({"error": "Une erreur inattendue est survenue."}), 500
+    """
+    Invites a new user to the B2B account.
+    The decorator handles input validation and response serialization.
+    """
+    admin_user_id = get_jwt_identity()
+    invited_user = B2BService.invite_user(admin_user_id, g.validated_data)
+    return invited_user
 
 @b2b_profile_bp.route('/users/remove', methods=['POST'])
 @login_required
