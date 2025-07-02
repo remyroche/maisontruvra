@@ -13,7 +13,7 @@ class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     
     # A unique identifier for this specific item/batch (e.g., for passports)
-    uid = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    uid = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Foreign key to the parent Product template
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
@@ -32,6 +32,7 @@ class Item(db.Model):
     
     stock_quantity = db.Column(db.Integer, nullable=False, default=1)
     creation_date = db.Column(db.Date, nullable=False, default=db.func.current_date())
+    harvest_date = db.Column(db.Date, nullable=True) # <-- NEW FIELD
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     
     # Relationships
@@ -47,7 +48,7 @@ class Item(db.Model):
 
         return {
             'id': self.id,
-            'uid': self.uid,
+            'uid': str(self.uid),
             'product_id': self.product_id,
             'product_name': self.product.name,
             'product_sku': self.product.sku,
@@ -58,8 +59,10 @@ class Item(db.Model):
             'pairing_suggestions': final_pairing_suggestions,
             'stock_quantity': self.stock_quantity,
             'creation_date': self.creation_date.isoformat(),
+            'harvest_date': self.harvest_date.isoformat() if self.harvest_date else None, # <-- NEW FIELD
             'is_active': self.is_active
         }
+
 
 class Inventory(BaseModel):
     __tablename__ = 'inventories'
