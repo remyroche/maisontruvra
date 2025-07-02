@@ -72,6 +72,33 @@ class VariantSchema(BaseSchema):
     price_offset = fields.Decimal(as_string=True, required=True)
     stock = fields.Int(required=True, validate=validate.Range(min=0))
 
+class B2BProfileSchema(BaseModel):
+    """
+    Schema for representing a B2B account's profile data.
+    """
+    id: int
+    company_name: str
+    vat_number: Optional[str] = None
+    status: str
+    user: UserSchema # Embed the user details
+
+    class Config:
+        from_attributes = True
+
+class B2BProfileUpdateSchema(BaseModel):
+    """
+    Schema for validating updates to a B2B profile.
+    A B2B user can update their company info and their personal info.
+    """
+    company_name: Optional[constr(min_length=1)] = None
+    vat_number: Optional[constr(min_length=1)] = None
+    # Nested schema for updating the associated user details
+    user_details: Optional[UserProfileUpdateSchema] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ProductSchema(BaseSchema):
     """Schema for serializing a full Product object."""
     id = fields.Int(dump_only=True)
