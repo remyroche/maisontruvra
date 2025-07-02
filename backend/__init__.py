@@ -235,6 +235,10 @@ def create_app(config_class=config.Config):
     from backend.api.referral_routes import referral_bp # New Referral routes
     app.register_blueprint(referral_bp)
 
+    app.register_blueprint(wishlist_bp)
+    app.register_blueprint(review_bp)
+    app.register_blueprint(recommendation_bp)
+
     from .b2b.invoice_routes import b2b_invoice_bp
     app.register_blueprint(b2b_invoice_bp, url_prefix='/api/b2b/invoices')
     
