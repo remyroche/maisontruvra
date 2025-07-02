@@ -47,15 +47,22 @@ def update_tier(tier_id):
         return jsonify({"error": "Tier not found"}), 404
     return jsonify(tier.to_dict())
 
-@loyalty_bp.route('/tiers/<uuid:tier_id>', methods=['DELETE'])
-@roles_required('ADMIN', 'MANAGER')
-@permissions_required('MANAGE_LOYALTY_PROGRAM')
-def delete_tier(tier_id):
-    """Deletes a loyalty tier."""
-    if LoyaltyService.delete_tier(tier_id):
-        cache.delete('view//b2b/loyalty/program-details')
-        return jsonify({"message": "Tier deleted successfully"})
-    return jsonify({"error": "Tier not found"}), 404
+@admin_loyalty_bp.route('/tiers/<int:tier_id>', methods=['DELETE'])
+@jwt_required()
+@roles_required('Admin')
+@api_resource_handler(model=LoyaltyTier, allow_hard_delete=False) # Hard delete is disallowed for safety
+def delete_loyalty_tier(tier_id):
+    """Deletes a loyalty tier (soft by default)."""
+    return None
+
+@admin_loyalty_bp.route('/tiers/<int:tier_id>/restore', methods=['POST'])
+@jwt_required()
+@roles_required('Admin')
+@api_resource_handler(model=LoyaltyTier, response_schema=LoyaltyTierSchema)
+def restore_loyalty_tier(tier_id):
+    """Restores a soft-deleted loyalty tier."""
+    return g.target_object
+
 
 # --- Referral Reward Tier Management ---
 
