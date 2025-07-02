@@ -21,7 +21,7 @@
       <p v-if="!selectedProduct" class="text-sm text-gray-500">Select a parent product to continue.</p>
 
       <!-- Item-specific fields -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div>
           <label for="stock_quantity" class="block text-sm font-medium text-gray-700">Stock Quantity</label>
           <input type="number" id="stock_quantity" v-model.number="itemData.stock_quantity" required
@@ -30,6 +30,11 @@
         <div>
           <label for="creation_date" class="block text-sm font-medium text-gray-700">Creation Date</label>
           <input type="date" id="creation_date" v-model="itemData.creation_date" required
+                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+        </div>
+        <div>
+          <label for="harvest_date" class="block text-sm font-medium text-gray-700">Harvest Date (Optional)</label>
+          <input type="date" id="harvest_date" v-model="itemData.harvest_date"
                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
         </div>
       </div>
@@ -110,6 +115,7 @@ const itemData = ref({
   collection_id: null,
   stock_quantity: 1,
   creation_date: new Date().toISOString().slice(0, 10), // Defaults to today
+  harvest_date: null, // <-- NEW FIELD
   price: null, // Null means use parent's price
   producer_notes: null,
   pairing_suggestions: null,
@@ -119,17 +125,16 @@ const onProductSelect = () => {
   selectedProduct.value = products.value.find(p => p.id === selectedProductId.value);
   if (selectedProduct.value) {
     itemData.value.product_id = selectedProduct.value.id;
-    // Pre-fill placeholders or even the model if desired, but placeholders are safer
-    // to distinguish between "not set" and "intentionally empty".
   }
 };
 
 const handleSubmit = () => {
-  // Create a clean payload, removing null values so the backend uses the parent's data
+  // Create a clean payload, removing null/empty values so the backend uses the parent's data
   const payload = { ...itemData.value };
   if (payload.price === '' || payload.price === null) delete payload.price;
   if (payload.producer_notes === '' || payload.producer_notes === null) delete payload.producer_notes;
   if (payload.pairing_suggestions === '' || payload.pairing_suggestions === null) delete payload.pairing_suggestions;
+  if (payload.harvest_date === '' || payload.harvest_date === null) delete payload.harvest_date;
   
   emit('submit', payload);
 };
