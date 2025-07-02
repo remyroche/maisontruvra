@@ -9,7 +9,8 @@ from decimal import Decimal
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from backend.extensions import limiter
-from backend.schemas import B2BAccountStatusUpdateSchema, B2BTierCreateSchema, B2BTierUpdateSchema, B2BTierSchema, B2BUserAssignTierSchema # Added B2BTierSchema
+from backend.schemas import B2BAccountStatusUpdateSchema, B2BTierCreateSchema, B2BTierUpdateSchema, B2BTierSchema, B2BUserAssignTierSchema, QuoteUpdateSchema
+
 
 b2b_management_bp = Blueprint('b2b_management_api', __name__, url_prefix='/admin/api/b2b')
 b2b_service = B2BService()
@@ -169,3 +170,39 @@ def assign_tier_to_user(user_id):
     """Assigns a tier to a B2B user."""
     b2b_user_assigned = b2b_service.assign_tier_to_b2b_user(user_id, g.validated_data['tier_id'])
     return None # Return None to let api_resource_handler generate a default success message
+
+
+# --- B2B Quote Management (Consolidated) ---
+
+@b2b_management_bp.route('/quotes', methods=['GET'])
+@admin_required
+def get_all_quotes():
+    """
+    Retrieves all B2B quotes for the admin panel.
+    """
+    status = request.args.get('status')
+    quotes = quote_service.get_all_quotes(status=status)
+    return jsonify([q.to_dict() for q in quotes]), 200
+
+@b2b_management_bp.route('/quotes/<int:quote_id>', methods=['GET'])
+@admin_required
+def get_quote_details(quote_id):
+    """
+    Retrieves the details of a single B2B quote.
+    """
+    try:
+        quote = quote_service.get_quote_by_id(quote_id)
+        return jsonify(quote.to_dict_detailed()), 200
+    except NotFoundException as e:
+        return jsonify({"error": str(e)}), 404
+
+@b2b_management_bp.route('/quotes/<int:quote_id>', methods=['PUT'])
+@admin_required
+@api_resource_handler(request_schema=QuoteUpdateSchema)
+def update_quote(validated_data, quote_id):
+    """
+    Updates a B2B quote (e.g., change status, add response).
+    The decorator handles validation.
+    """
+    quote = quote_service.update_quote(quote_id, validated_data)
+    return jsonify(quote.to_dict()), 200
