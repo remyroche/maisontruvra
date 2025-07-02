@@ -29,7 +29,22 @@ class B2BTier(BaseModel):
     # Relationships
     accounts = db.relationship('B2BAccount', back_populates='tier')
 
+class Company(db.Model):
+    __tablename__ = 'companies'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), unique=True, nullable=False)
+    vat_number = db.Column(db.String(50), unique=True, nullable=False)
+    status = db.Column(db.String(50), default='pending') # ex: pending, approved, rejected
+    
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
 
+    # La relation est définie avec back_populates pour correspondre au modèle User
+    users = db.relationship('User', back_populates='company')
+
+    def __repr__(self):
+        return f'<Company {self.name}>'
+        
 class B2BAccount(BaseModel):
     """B2B Account model for managing business customer accounts"""
     __tablename__ = 'b2b_accounts'
