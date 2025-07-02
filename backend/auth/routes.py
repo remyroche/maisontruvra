@@ -10,6 +10,7 @@ from ..services.exceptions import ValidationException, UnauthorizedException, No
 from datetime import datetime, timezone
 from flask import current_app
 from backend.schemas import UserSchema, UserRegistrationSchema, LoginSchema, MfaVerificationSchema, PasswordResetRequestSchema, PasswordResetConfirmSchema
+from backend.utils.decorators import api_resource_handler
 
 import redis
 
@@ -68,36 +69,18 @@ def verify_mfa():
 
 @auth_bp.route('/register', methods=['POST'])
 @limiter.limit("10 per minute")
+@api_resource_handler(model=User, request_schema=UserRegistrationSchema, response_schema=UserSchema, log_action=True)
 def register():
-    """ User registration route """
-    schema = UserRegistrationSchema()
-    try:
-        data = schema.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 400
+    """
+    Registers a new user.
+    The decorator handles input validation, database session management,
+    and serializing the new user object in the response.
+    """
+    new_user = AuthService.register_user(g.validated_data)
+    # The decorator will commit the session and serialize the returned user.
+    return new_user
 
-    auth_service = AuthService()
-    try:
-        user = auth_service.register_user(
-            first_name=data['first_name'],
-            last_name=data['last_name'],
-            email=data['email'],
-            password=data['password']
-        )
-        login_user(user)
-        # Convert user to dict for JSON response
-        user_data = {
-            "id": user.id,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "email": user.email
-        }
-        return jsonify({"message": "User registered successfully.", "user": user_data}), 201
-    except UserAlreadyExistsError as e:
-        return jsonify({"error": str(e)}), 409
-    except Exception as e:
-        current_app.logger.error(f"Error during registration: {e}", exc_info=True)
-        return jsonify({"error": "An unexpected error occurred."}), 500
+
 
 @auth_bp.route('/login', methods=['POST'])
 @limiter.limit("10 per minute")
