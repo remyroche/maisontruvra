@@ -1,10 +1,27 @@
 from flask import Blueprint, jsonify, request
 from backend.services.inventory_service import InventoryService # Assumed service
-from backend.utils.decorators import permissions_required, admin_required
+from backend.utils.decorators import permissions_required, admin_required, api_resource_handler
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services import product_service
+from backend.models.inventory_models import StockNotification
+from backend.schemas import StockNotificationSchema
 
 inventory_bp = Blueprint('inventory_bp', __name__, url_prefix='/api/inventory')
+
+@inventory_bp.route('/notify-in-stock', methods=['POST'])
+@login_required
+@api_resource_handler(model=StockNotification, request_schema=StockNotificationSchema, response_schema=StockNotificationSchema, log_action=True)
+def notify_in_stock():
+    """
+    Creates a stock notification request for a user and product.
+    The decorator handles validation and response serialization.
+    """
+    notification = InventoryService.create_stock_notification(
+        user_id=current_user.id,
+        product_id=g.validated_data.get('product_id')
+    )
+    return notification
+
 
 # Check stock level for a specific product
 @inventory_bp.route('/stock/<int:product_id>', methods=['GET'])
