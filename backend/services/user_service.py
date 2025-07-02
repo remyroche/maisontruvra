@@ -222,7 +222,7 @@ class UserService:
         if user_type == 'b2c':
             user = self.db.session.get(User, user_id)
         else:
-            user = self.db.session.get(B2BUser, user_id)
+            user = self.db.session.get(User, user_id)
             
         if not user:
             raise ValueError("User not found")
