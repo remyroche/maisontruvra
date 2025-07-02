@@ -38,6 +38,37 @@ class InventoryService:
         self.background_task_service = BackgroundTaskService(logger)
         self.email_service = EmailService(logger)
 
+
+    
+        @staticmethod
+        def create_item_batch(batch_data):
+            """
+            Creates a batch of new inventory Items from a single parent Product.
+            This calls the single create_item method in a loop.
+            """
+            product_id = batch_data.get('product_id')
+            number_to_create = batch_data.get('number_to_create', 0)
+    
+            if not isinstance(number_to_create, int) or number_to_create <= 0:
+                raise ValidationException("Number of items to create must be a positive integer.")
+            
+            if number_to_create > 100: # Safety limit
+                raise ValidationException("Cannot create more than 100 items in a single batch.")
+    
+            created_items = []
+            # We pass the same data to each item creation call.
+            # The UID will be unique for each, as it's generated on model creation.
+            for _ in range(number_to_create):
+                # The single item data payload is the same as the batch data,
+                # but we ensure stock_quantity is 1 for each unique item.
+                single_item_data = batch_data.copy()
+                single_item_data['stock_quantity'] = 1
+                
+                new_item = InventoryService.create_item(single_item_data)
+                created_items.append(new_item)
+            
+            return created_items
+
     @staticmethod
     def create_item(data):
         """
