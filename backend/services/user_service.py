@@ -162,7 +162,12 @@ class UserService:
         # Admins might set additional properties upon creation
         if 'is_active' in data:
             user.is_active = data['is_active']
-        
+            
+        b2c_role = self.session.query(Role).filter_by(name=RoleType.B2C_USER).first()
+        if b2c_role:
+            new_user.roles.append(b2c_role)
+
+
         db.session.commit()
         current_app.logger.info(f"Admin created new user: {user.email}")
         return user
@@ -170,54 +175,83 @@ class UserService:
         
 
 
-    @staticmethod
-    def create_user(user_data: dict):
-        """Create a new user with proper validation and logging."""
-        user_data = InputSanitizer.sanitize_input(user_data)
+    def _create_user_logic(self, user_data: dict, role: Role, user_type: str, company_id: int = None):
+        """
+        Méthode privée et centralisée pour créer un utilisateur avec validation, 
+        nettoyage des données et journalisation robustes.
+        """
+        sanitized_data = InputSanitizer.sanitize_input(user_data)
 
-        # Validate required fields
+        # Valider les champs requis
         required_fields = ['email', 'password', 'first_name', 'last_name']
         for field in required_fields:
-            if not user_data.get(field):
-                raise ValidationException(f"Field '{field}' is required")
+            if not sanitized_data.get(field):
+                raise ValidationException(f"Le champ '{field}' est requis.")
 
-        # Check if user already exists
-        if User.query.filter_by(email=user_data['email']).first():
-            raise ValidationException("User with this email already exists")
+        # Vérifier si l'utilisateur existe déjà
+        if self.get_user_by_email(sanitized_data['email']):
+            raise ValidationException("Un utilisateur avec cet e-mail existe déjà.")
 
-        browser_lang = request.accept_languages.best_match(['en', 'fr'], default='en')
+        # NOTE : L'exemple fourni détecte la langue du navigateur.
+        # Pour l'activer, ajoutez une colonne 'language' au modèle User.
+        # browser_lang = request.accept_languages.best_match(['en', 'fr'], default='en')
 
         try:
-            user = User(
-                email=user_data['email'],
-                first_name=user_data['first_name'],
-                last_name=user_data['last_name'],
-                role=user_data.get('role', UserRole.B2C),
-                is_active=user_data.get('is_active', True),
-                language=browser_lang
+            new_user = User(
+                email=sanitized_data['email'],
+                first_name=sanitized_data['first_name'],
+                last_name=sanitized_data['last_name'],
+                user_type=user_type,
+                company_id=company_id
+                # language=browser_lang # Décommentez après avoir ajouté la colonne au modèle User
             )
-            user.set_password(user_data['password'])
+            new_user.set_password(sanitized_data['password'])
+            new_user.roles.append(role)
 
-            db.session.add(user)
-            db.session.flush()  # Get ID before commit
+            self.session.add(new_user)
+            self.session.flush()  # Obtenir l'ID de l'utilisateur avant le commit pour la journalisation
 
-            # Log the action
-            AuditLogService.log_action(
-                'USER_CREATED',
-                target_id=user.id,
-                details={'email': user.email, 'role': user.role.value}
+            # Journaliser l'action de création
+            self.audit_log_service.log_action(
+                action='USER_CREATED',
+                target_id=new_user.id,
+                details={'email': new_user.email, 'role': role.name.value, 'user_type': user_type}
             )
 
-            db.session.commit()
+            self.session.commit()
 
-            MonitoringService.log_info(f"User created successfully: {user.email} (ID: {user.id})", "UserService")
-            return user.to_dict(context='admin')
+            self.monitoring_service.log_info(f"Utilisateur créé avec succès: {new_user.email} (ID: {new_user.id})", "UserService")
+            return new_user
 
         except Exception as e:
-            db.session.rollback()
-            MonitoringService.log_error(f"Failed to create user: {str(e)}", "UserService")
-            raise ValidationException(f"Failed to create user: {str(e)}")
+            self.session.rollback()
+            self.monitoring_service.log_error(f"Échec de la création de l'utilisateur: {str(e)}", "UserService")
+            # Propagez une exception plus conviviale à l'appelant
+            raise ValidationException("Une erreur technique est survenue lors de la création de l'utilisateur.")
 
+    def create_b2c_user(self, user_data: dict):
+        """Crée un nouvel utilisateur B2C avec validation et journalisation complètes."""
+        b2c_role = self.session.query(Role).filter_by(name=RoleType.B2C_USER).first()
+        if not b2c_role:
+            self.monitoring_service.log_error("Le rôle B2C n'a pas été trouvé dans la base de données.", "UserService")
+            raise Exception("La configuration du système de rôles est incomplète.")
+        
+        return self._create_user_logic(user_data, b2c_role, 'b2c_user')
+
+    def create_b2b_user(self, user_data: dict, company_id: int):
+        """Crée un nouvel utilisateur B2B avec validation et journalisation complètes."""
+        company = self.session.get(Company, company_id)
+        if not company:
+            raise ValidationException("Entreprise non trouvée.")
+
+        b2b_role = self.session.query(Role).filter_by(name=RoleType.B2B_USER).first()
+        if not b2b_role:
+            self.monitoring_service.log_error("Le rôle B2B n'a pas été trouvé dans la base de données.", "UserService")
+            raise Exception("La configuration du système de rôles est incomplète.")
+
+        return self._create_user_logic(user_data, b2b_role, 'b2b_user', company_id=company.id)
+
+    
     def update_user_language(self, user_id, language, user_type='b2c'):
         if user_type == 'b2c':
             user = self.db.session.get(User, user_id)
