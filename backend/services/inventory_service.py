@@ -16,12 +16,125 @@ from sqlalchemy import select
 # Updated reservation lifetime to 1 hour (60 minutes)
 RESERVATION_LIFETIME_MINUTES = 60
 
+import os
+import qrcode
+from flask import current_app, render_template, url_for
+from ..models import db
+from ..models.inventory_models import Item
+from ..models.product_models import Product
+from ..models.passport_models import Passport # Import the Passport model
+from ..services.exceptions import NotFoundException, ValidationException, ServiceError
+from ..services.pdf_service import PDFService # Import PDFService to generate PDFs
+
 class InventoryService:
+    """
+    Handles the business logic for managing individual inventory items,
+    including the generation of their digital passports and QR codes.
+    """
+
 
     def __init__(self, logger):
         self.logger = logger
         self.background_task_service = BackgroundTaskService(logger)
         self.email_service = EmailService(logger)
+
+    @staticmethod
+    def create_item(data):
+        """
+        Creates a new inventory Item and its associated digital passport.
+        
+        This process includes:
+        1. Creating the Item record in the database.
+        2. Generating an HTML passport from a template.
+        3. Generating a PDF version of the passport.
+        4. Creating a QR code that links to the passport's public URL.
+        5. Saving all asset paths in a new Passport database record.
+        """
+        product_id = data.get('product_id')
+        if not product_id:
+            raise ValidationException("A parent product ID is required to create an item.")
+
+        parent_product = Product.query.get(product_id)
+        if not parent_product:
+            raise NotFoundException(f"Parent product with ID {product_id} not found.")
+
+        try:
+            # Create the Item first to get its UID
+            new_item = Item(
+                product_id=product_id,
+                collection_id=data.get('collection_id'),
+                stock_quantity=data.get('stock_quantity', 1),
+                creation_date=data.get('creation_date'),
+                harvest_date=data.get('harvest_date'),
+                price=data.get('price'),
+                producer_notes=data.get('producer_notes'),
+                pairing_suggestions=data.get('pairing_suggestions')
+            )
+            db.session.add(new_item)
+            db.session.commit() # Commit to persist the item and its generated UID
+
+            # --- Post-Creation: Generate Passport and QR Code ---
+            
+            # 1. Define paths and URL for the assets
+            item_uid_str = str(new_item.uid)
+            passport_url = url_for('passport_bp.view_passport', item_uid=item_uid_str, _external=True)
+            
+            # Ensure storage directories exist
+            html_dir = current_app.config['PASSPORT_HTML_STORAGE_PATH']
+            pdf_dir = current_app.config['PASSPORT_PDF_STORAGE_PATH']
+            qr_dir = current_app.config['QR_CODE_STORAGE_PATH']
+            os.makedirs(html_dir, exist_ok=True)
+            os.makedirs(pdf_dir, exist_ok=True)
+            os.makedirs(qr_dir, exist_ok=True)
+
+            html_path = os.path.join(html_dir, f"{item_uid_str}.html")
+            pdf_path = os.path.join(pdf_dir, f"{item_uid_str}.pdf")
+            qr_path = os.path.join(qr_dir, f"{item_uid_str}.png")
+
+            # 2. Generate and save the HTML passport
+            rendered_html = render_template('non-email/product_passport.html', item=new_item)
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(rendered_html)
+
+            # 3. Generate and save the PDF passport
+            PDFService.generate_from_html(html_path, pdf_path)
+
+            # 4. Generate and save the QR code
+            qr_img = qrcode.make(passport_url)
+            qr_img.save(qr_path)
+
+            # 5. Create and save the Passport database record
+            new_passport = Passport(
+                item_id=new_item.id,
+                public_url=passport_url,
+                html_file_path=html_path,
+                pdf_file_path=pdf_path,
+                qr_code_file_path=qr_path
+            )
+
+            increase_stock(InventoryService, product_id, 1)
+            
+            db.session.add(new_passport)
+            db.session.commit()
+
+            return new_item
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error creating item and passport: {e}", exc_info=True)
+            raise ServiceError("An error occurred while creating the inventory item and its passport.")
+
+
+    
+    @staticmethod
+    def get_item_by_id(item_id):
+        """Retrieves a single item by its ID."""
+        return Item.query.get(item_id)
+
+    @staticmethod
+    def get_all_items():
+        """Retrieves all inventory items."""
+        return Item.query.all()
 
     def get_stock_level(self, product_id):
         """Gets the current stock level for a product."""
@@ -31,7 +144,6 @@ class InventoryService:
     def check_stock(self, product_id, quantity_needed):
         """Checks if there is enough stock for a product."""
         return self.get_stock_level(product_id) >= quantity_needed
-
 
     def decrease_stock(self, product_id, quantity):
         """Decreases stock for a product."""
