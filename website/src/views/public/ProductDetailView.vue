@@ -1,3 +1,4 @@
+<!-- website/src/views/public/ProductDetailView.vue -->
 <template>
   <div class="bg-white">
     <div class="pt-6">
@@ -25,8 +26,8 @@
           <h1 class="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">{{ product.name }}</h1>
         </div>
         
-        <!-- Image gallery would go on the left -->
-        <div class="mt-6 lg:col-span-1 lg:row-span-2 lg:mt-0">
+        <!-- Image gallery -->
+        <div class="mt-6 lg:col-span-1 lg:row-span-3 lg:mt-0">
             <img :src="product.image_url || 'https://placehold.co/600x600/F4E9E2/7C3242?text=' + product.name" alt="Product Image" class="w-full h-full object-cover object-center rounded-lg shadow-lg">
         </div>
 
@@ -38,13 +39,13 @@
           <!-- Add to Cart Form -->
           <form class="mt-10" @submit.prevent="handleAddToCart">
             <!-- In Stock -->
-            <div v-if="product.inventory && product.inventory.quantity > 0">
+            <div v-if="product.stock > 0">
               <div class="flex items-center space-x-4">
                 <label for="quantity" class="text-sm font-medium text-gray-900">Quantité:</label>
-                <input type="number" id="quantity" v-model.number="quantity" min="1" :max="product.inventory.quantity" class="w-20 rounded-md border-gray-300 text-center">
+                <input type="number" id="quantity" v-model.number="quantity" min="1" :max="product.stock" class="w-20 rounded-md border-gray-300 text-center">
               </div>
-              <button type="submit" class="mt-6 flex w-full items-center justify-center rounded-md border border-transparent bg-brand-burgundy px-8 py-3 text-base font-medium text-white hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-brand-burgundy focus:ring-offset-2">Ajouter au panier</button>
-              <p class="text-sm text-center text-gray-500 mt-2">{{ product.inventory.quantity }} en stock</p>
+              <button type="submit" class="mt-6 flex w-full items-center justify-center rounded-md border border-transparent bg-indigo-600 px-8 py-3 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Ajouter au panier</button>
+              <p class="text-sm text-center text-gray-500 mt-2">{{ product.stock }} en stock</p>
             </div>
             
             <!-- Out of Stock -->
@@ -55,7 +56,7 @@
 
           <!-- Back-in-stock notification form -->
           <StockNotificationForm 
-            v-if="!product.inventory || product.inventory.quantity <= 0" 
+            v-if="!product.stock || product.stock <= 0" 
             :product-id="product.id" 
             class="mt-4"
           />
@@ -69,6 +70,19 @@
               <p class="text-base text-gray-900">{{ product.description }}</p>
             </div>
           </div>
+          
+          <!-- Producer Notes & Pairing Suggestions -->
+          <div class="mt-10">
+            <div v-if="product.producer_notes">
+                <h3 class="text-sm font-medium text-gray-900">Notes du Producteur</h3>
+                <p class="mt-2 text-sm text-gray-500">{{ product.producer_notes }}</p>
+            </div>
+            <div v-if="product.pairing_suggestions" class="mt-4">
+                <h3 class="text-sm font-medium text-gray-900">Suggestions d'Accords</h3>
+                <p class="mt-2 text-sm text-gray-500">{{ product.pairing_suggestions }}</p>
+            </div>
+          </div>
+
         </div>
       </div>
       
@@ -76,10 +90,17 @@
       <div v-else class="text-center py-24">
         <h2 class="text-2xl font-bold text-gray-900">Produit non trouvé</h2>
         <p class="text-lg text-gray-500 mt-2">Désolé, nous n'avons pas pu trouver ce produit.</p>
-        <router-link :to="{ name: 'Shop' }" class="mt-6 inline-block px-5 py-2.5 bg-brand-burgundy text-white font-medium rounded-lg text-sm hover:bg-opacity-90">
+        <router-link to="/shop" class="mt-6 inline-block px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg text-sm hover:bg-indigo-700">
           Retour à la boutique
         </router-link>
       </div>
+
+      <!-- --- REVIEWS SECTION --- -->
+      <div v-if="product" class="mx-auto max-w-2xl px-4 lg:max-w-7xl lg:px-8">
+          <ProductReviews :product-id="product.id" />
+      </div>
+      <!-- --------------------- -->
+
     </div>
   </div>
 </template>
@@ -91,6 +112,7 @@ import { useProductStore } from '@/stores/products';
 import { useCartStore } from '@/stores/cart';
 import { useCurrencyFormatter } from '@/composables/useCurrencyFormatter';
 import StockNotificationForm from '@/components/products/StockNotificationForm.vue';
+import ProductReviews from '@/components/products/ProductReviews.vue';
 // Assuming you have a notification store for user feedback
 // import { useNotificationStore } from '@/stores/notification';
 
@@ -116,7 +138,7 @@ const handleAddToCart = () => {
 };
 
 const fetchProductData = () => {
-  const productId = route.params.id; // Using ID as per our backend routes
+  const productId = route.params.id;
   productStore.fetchProductById(productId);
 };
 
