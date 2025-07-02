@@ -12,128 +12,89 @@ from backend.utils.decorators import b2b_user_required
 from flask_login import current_user
 from backend.models import db, User, Company
 from backend.services.b2b_service import B2BService
-from backend.utils.decorators import login_required
+from backend.utils.decorators import login_required, api_resource_handler
 
 b2b_profile_bp = Blueprint('b2b_profile_bp', __name__, url_prefix='/api/b2b/profile')
 b2b_service = B2BService()
 user_service = UserService()
 
+@b2b_profile_bp.route('/', methods=['GET'])
+@login_required
+@b2b_required
+@api_resource_handler(response_schema=B2BProfileSchema)
+def get_b2b_profile():
+    """
+    Retrieves the current B2B user's profile.
+    """
+    return b2b_service.get_b2b_account_by_user_id(current_user.id)
+
+
+# --- B2B User Management ---
 
 @b2b_profile_bp.route('/users', methods=['GET'])
 @login_required
-@b2b_user_required
+@b2b_admin_required
+@api_resource_handler(response_schema=B2BUserSchema, is_list=True)
 def get_b2b_users():
-    """Récupère tous les utilisateurs associés à l'entreprise de l'utilisateur actuel."""
-    if not current_user.company_id:
-        return jsonify({"error": "L'utilisateur n'est pas associé à une entreprise."}), 400
+    """
+    Retrieves all users associated with the current B2B admin's company.
+    """
+    return b2b_service.get_users_for_b2b_account(current_user.id)
 
-    users = User.query.filter_by(company_id=current_user.company_id).all()
-    
-    user_list = [{
-        'id': user.id,
-        'first_name': user.first_name,
-        'last_name': user.last_name,
-        'email': user.email,
-        'roles': [role.name.value for role in user.roles] # Utilise la relation de rôles
-    } for user in users]
-    
-    return jsonify(user_list)
-
-@b2b_profile_bp.route('/users/add', methods=['POST'])
-@jwt_required()
-@api_resource_handler(model=B2BUser, request_schema=B2BUserInviteSchema, response_schema=B2BUserSchema, log_action=True)
-def add_b2b_user():
+@b2b_profile_bp.route('/users/invite', methods=['POST'])
+@login_required
+@b2b_admin_required
+@api_resource_handler(
+    request_schema=B2BUserInviteSchema,
+    response_schema=B2BUserSchema
+)
+def invite_b2b_user(validated_data):
     """
     Invites a new user to the B2B account.
-    The decorator handles input validation and response serialization.
     """
-    admin_user_id = get_jwt_identity()
-    invited_user = B2BService.invite_user(admin_user_id, g.validated_data)
+    invited_user = b2b_service.invite_b2b_user(current_user.id, validated_data)
     return invited_user
 
 @b2b_profile_bp.route('/users/remove', methods=['POST'])
 @login_required
 @b2b_admin_required
-def remove_b2b_user():
-    """Supprime un utilisateur du compte de l'entreprise."""
-    data = request.get_json()
-    user_to_remove_id = data.get('user_id')
-    
-    if not user_to_remove_id:
-        return jsonify({"error": "L'ID de l'utilisateur est requis."}), 400
-
-    if not current_user.company_id:
-        return jsonify({"error": "L'utilisateur admin n'est pas associé à une entreprise."}), 400
-
-    user_to_remove = user_service.get_user_by_id(user_to_remove_id)
-    
-    # S'assurer que l'utilisateur existe et appartient à la même entreprise
-    if not user_to_remove or user_to_remove.company_id != current_user.company_id:
-        return jsonify({"error": "Utilisateur non trouvé ou ne faisant pas partie de cette entreprise."}), 404
-        
-    # Empêcher un admin de se supprimer lui-même
-    if user_to_remove.id == current_user.id:
-        return jsonify({"error": "Vous ne pouvez pas vous supprimer vous-même du compte."}), 403
-
-    try:
-        db.session.delete(user_to_remove)
-        db.session.commit()
-        return jsonify({"message": "Utilisateur supprimé avec succès."}), 200
-    except Exception as e:
-        db.session.rollback()
-        # Log l'erreur pour le débogage
-        return jsonify({"error": "Échec de la suppression de l'utilisateur."}), 500
-
-
-# GET the B2B user's profile
-@b2b_profile_bp.route('/', methods=['GET'])
-@api_resource_handler(
-    model=User,
-    response_schema=UserSchema,
-    ownership_exempt_roles=[],  # Only the user themselves can access
-    cache_timeout=0,  # No caching for user profiles
-    log_action=True
-)
-@b2b_user_required
-@jwt_required()
-def get_b2b_profile():
+@api_resource_handler(request_schema=B2BUserRemoveSchema)
+def remove_b2b_user(validated_data):
     """
-    Get the profile of the currently authenticated B2B user.
+    Removes a user from the B2B account.
     """
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user or user.user_type.value != 'B2B':
-        return None  # Will be handled by decorator as 404
-    return user
+    b2b_service.remove_b2b_user(current_user.id, validated_data)
+    return {"message": "User removed successfully from the B2B account."}
+    
 
-
-# UPDATE the B2B user's profile
 @b2b_profile_bp.route('/', methods=['PUT'])
+@login_required
+@b2b_required
 @api_resource_handler(
-    model=User,
-    request_schema=UserSchema,
-    response_schema=UserSchema,
-    ownership_exempt_roles=[],  # Only the user themselves can update
-    cache_timeout=0,  # No caching for user profiles
-    log_action=True
+    request_schema=B2BProfileUpdateSchema,
+    response_schema=B2BProfileSchema
 )
-@b2b_user_required
-@jwt_required()
-def edit_profile():
+def update_b2b_profile(validated_data):
     """
-    Update the profile information for the authenticated B2B user.
+    Updates the current B2B user's profile.
+    The decorator handles validation, serialization, and error handling.
     """
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user or user.user_type.value != 'B2B':
-        return None  # Will be handled by decorator as 404
-    
-    # Update user with validated data from g.validated_data
-    for key, value in g.validated_data.items():
-        if hasattr(user, key) and key not in ['vat_number', 'status']:  # Exclude sensitive fields
-            setattr(user, key, value)
-    
-    return user
+    b2b_account = b2b_service.update_b2b_account(current_user.id, validated_data)
+    return b2b_account
+
+@b2b_profile_bp.route('/delete', methods=['DELETE'])
+@login_required
+@b2b_required
+@api_resource_handler()
+def delete_b2b_account():
+    """
+    Endpoint for a B2B user to request soft-deletion of their own account.
+    The decorator handles response formatting and error catching.
+    """
+    b2b_service.request_b2b_account_deletion(current_user.id)
+    logout_user()  # Log the user out after deletion
+    return {"message": "Account deletion request processed successfully. You have been logged out."}
+
 
 
 @b2b_profile_bp.route('/address', methods=['POST'])
