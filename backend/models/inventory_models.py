@@ -2,6 +2,7 @@ from backend.database import db
 from .base import BaseModel
 from datetime import datetime
 import uuid
+from sqlalchemy.dialects.postgresql import UUID
 
 class Item(db.Model):
     """
