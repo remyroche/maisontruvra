@@ -1,3 +1,4 @@
+// website/src/stores/user.js
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import api from '@/services/api';
@@ -6,15 +7,19 @@ import { useCartStore } from './cart';
 
 /**
  * Manages user state, including authentication, profile information,
- * and account-related actions.
+ * and account-related actions like the wishlist.
  */
 export const useUserStore = defineStore('user', () => {
   // --- STATE ---
   const user = ref(null);
   const isAuthenticated = ref(null); // null: unknown, false: logged out, true: logged in
+  const wishlist = ref([]); // Holds the user's wishlist items
 
   // --- GETTERS ---
   const isB2B = computed(() => user.value?.is_b2b === true);
+  const isProductInWishlist = computed(() => {
+    return (productId) => wishlist.value.some(item => item.product_id === productId);
+  });
 
   // --- ACTIONS ---
 
@@ -27,9 +32,13 @@ export const useUserStore = defineStore('user', () => {
       const response = await api.get('/auth/status');
       user.value = response.data.user;
       isAuthenticated.value = response.data.is_authenticated;
+      if (isAuthenticated.value) {
+        await fetchWishlist(); // Fetch wishlist if user is logged in
+      }
     } catch (error) {
       user.value = null;
       isAuthenticated.value = false;
+      wishlist.value = []; // Clear wishlist if auth check fails
     }
   }
 
@@ -42,7 +51,7 @@ export const useUserStore = defineStore('user', () => {
     const notificationStore = useNotificationStore();
     try {
       await api.post('/auth/login', credentials);
-      await checkAuthStatus(); // Refresh user state after successful login
+      await checkAuthStatus(); // Refreshes user and wishlist state
       notificationStore.addNotification('Login successful!', 'success');
       return true;
     } catch (error) {
@@ -62,7 +71,8 @@ export const useUserStore = defineStore('user', () => {
       await api.post('/auth/logout');
       user.value = null;
       isAuthenticated.value = false;
-      useCartStore().clearCart(); // Clear cart on logout
+      wishlist.value = []; // Clear wishlist on logout
+      useCartStore().clearCart();
       notificationStore.addNotification('You have been logged out.', 'success');
     } catch (error) {
       notificationStore.addNotification('Logout failed. Please try again.', 'error');
@@ -96,7 +106,7 @@ export const useUserStore = defineStore('user', () => {
     const notificationStore = useNotificationStore();
     try {
       const response = await api.put('/account/profile', profileData);
-      user.value = response.data; // Update local profile with the response
+      user.value = response.data;
       notificationStore.addNotification('Profile updated successfully.', 'success');
       return true;
     } catch (error) {
@@ -119,6 +129,7 @@ export const useUserStore = defineStore('user', () => {
       // Clear local state after successful deletion
       user.value = null;
       isAuthenticated.value = false;
+      wishlist.value = [];
       useCartStore().clearCart();
       
       return true;
@@ -129,16 +140,63 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  // --- WISHLIST ACTIONS ---
+
+  async function fetchWishlist() {
+    if (!isAuthenticated.value) return;
+    try {
+      const response = await api.get('/api/wishlist');
+      wishlist.value = response.data;
+    } catch (err) {
+      useNotificationStore().addNotification('Could not load wishlist.', 'error');
+    }
+  }
+
+  async function addToWishlist(productId) {
+    if (!isAuthenticated.value) return;
+    try {
+      const response = await api.post('/api/wishlist/items', { product_id: productId });
+      wishlist.value.push(response.data);
+      useNotificationStore().addNotification('Added to wishlist!', 'success');
+    } catch (err) {
+      const errorMessage = err.response?.data?.error || 'Failed to add to wishlist.';
+      useNotificationStore().addNotification(errorMessage, 'error');
+      throw err;
+    }
+  }
+
+  async function removeFromWishlist(productId) {
+    if (!isAuthenticated.value) return;
+    try {
+        // We need the wishlist *item* ID to delete, not the product ID.
+        const item = wishlist.value.find(i => i.product_id === productId);
+        if (!item) return;
+
+        await api.delete(`/api/wishlist/items/${item.id}`);
+        wishlist.value = wishlist.value.filter(i => i.product_id !== productId);
+        useNotificationStore().addNotification('Removed from wishlist.', 'success');
+    } catch (err) {
+        const errorMessage = err.response?.data?.error || 'Failed to remove from wishlist.';
+        useNotificationStore().addNotification(errorMessage, 'error');
+        throw err;
+    }
+  }
+
   // Expose state, getters, and actions
   return {
     user,
     isAuthenticated,
+    wishlist,
     isB2B,
+    isProductInWishlist,
     checkAuthStatus,
     login,
     logout,
     register,
     updateProfile,
-    deleteAccount
+    deleteAccount,
+    fetchWishlist,
+    addToWishlist,
+    removeFromWishlist,
   };
 });
