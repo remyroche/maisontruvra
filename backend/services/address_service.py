@@ -1,7 +1,7 @@
 from backend.models.user_models import User
 from backend.models.address_models import Address
 from backend.database import db
-from backend.utils.input_sanitizer import InputSanitizer, sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from flask import current_app
 
 
@@ -17,7 +17,7 @@ class AddressService:
     @staticmethod
     def create_address(self, user_id, data):
         """ Creates an address after sanitizing string fields. """
-        sanitized_data = {key: sanitize_input(value) if isinstance(value, str) else value for key, value in data.items()}
+        sanitized_data = {key: InputSanitizer.sanitize_input(value) if isinstance(value, str) else value for key, value in data.items()}
         
         new_address = Address(user_id=user_id, **sanitized_data)
         
@@ -38,7 +38,7 @@ class AddressService:
             return None
 
         for key, value in data.items():
-            sanitized_value = sanitize_input(value) if isinstance(value, str) else value
+            sanitized_value = InputSanitizer.sanitize_input(value) if isinstance(value, str) else value
             setattr(address, key, sanitized_value)
             
         # Handle default logic on update

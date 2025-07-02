@@ -8,7 +8,6 @@ from backend.models.product_models import Product
 from backend.models.user_models import User, UserType
 from backend.models.address_models import Address
 from backend.models.delivery_models import DeliveryMethod
-from backend.models.notification_models import NotificationType
 from backend.models.cart_models import Cart, CartItem
 
 from backend.services.product_service import ProductService
@@ -33,13 +32,13 @@ from backend.services.inventory_service import InventoryService
 from backend.services.notification_service import NotificationService
 from backend.services.loyalty_service import LoyaltyService, add_loyalty_points_for_purchase
 from backend.services.discount_service import DiscountService
-from backend.services.payment_service import PaymentService
+# from backend.services.payment_service import PaymentService
 from backend.services.pdf_service import PDFService
 from backend.services.background_task_service import BackgroundTaskService
 from backend.services.user_service import UserService
 from backend.services.address_service import AddressService
 from backend.utils.encryption import encrypt_data
-from backend.database import db_session as session
+from backend.extensions import db
 from .exceptions import CheckoutError, CartEmptyError, ProductNotFoundError, InsufficientStockError, PaymentError, LoyaltyError
 
 class CheckoutService:
@@ -49,7 +48,7 @@ class CheckoutService:
         self.inventory_service = InventoryService(logger)
         self.loyalty_service = LoyaltyService(logger)
         self.discount_service = DiscountService(logger)
-        self.payment_service = PaymentService(logger)
+#        self.payment_service = PaymentService(logger)
         self.pdf_service = PDFService(logger)
         self.background_task_service = BackgroundTaskService(logger)
         self.user_service = UserService(logger)
@@ -62,7 +61,7 @@ class CheckoutService:
         Processes a checkout request for any user type (guest, B2C, B2B).
         """
         cart_id = validated_data['cart_id']
-        cart = session.query(Cart).options(joinedload(Cart.items).joinedload(CartItem.product)).get(cart_id)
+        cart = db.session.query(Cart).options(joinedload(Cart.items).joinedload(CartItem.product)).get(cart_id)
         if not cart or not cart.items:
             raise CartEmptyError("Your cart is empty or could not be found.")
 
@@ -104,7 +103,7 @@ class CheckoutService:
             if not payment_successful:
                 raise PaymentError("Payment processing failed.")
             
-            is_first_order = not session.query(Order).filter_by(user_id=user.id).first()
+            is_first_order = not db.session.query(Order).filter_by(user_id=user.id).first()
 
             # Create the Order
             order = Order(
@@ -116,13 +115,13 @@ class CheckoutService:
                 payment_intent_id=payment_intent_id,
                 discount_id=cart.discount_id
             )
-            session.add(order)
-            session.flush()
+            db.session.add(order)
+            db.session.flush()
 
             for item in cart.items:
                 price = item.price if item.price is not None else item.product.price
                 order_item = OrderItem(order_id=order.id, product_id=item.product_id, quantity=item.quantity, price=price)
-                session.add(order_item)
+                db.session.add(order_item)
                 self.inventory_service.decrease_stock(item.product_id, item.quantity)
 
             if cart.discount_id:
@@ -134,22 +133,22 @@ class CheckoutService:
                     self.background_task_service.submit_task(self.referral_service.complete_referral_after_first_order, user.id)
 
             # Clear the cart
-            session.delete(cart)
-            session.commit()
+            db.session.delete(cart)
+            db.session.commit()
 
             self.background_task_service.submit_task(self.send_order_confirmation, order.id)
             self.logger.info(f"Order {order.id} created successfully for user {user.id}.")
             return order
 
         except (SQLAlchemyError, CartEmptyError, InsufficientStockError, PaymentError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Checkout failed for user {user.id}: {e}")
             raise CheckoutError(f"Checkout failed: {e}") from e
 
     def send_order_confirmation(self, order_id):
         # This method remains largely the same, but now correctly handles all user types
         try:
-            order = session.query(Order).options(
+            order = db.session.query(Order).options(
                 joinedload(Order.user),
                 joinedload(Order.items).joinedload(OrderItem.product),
                 joinedload(Order.shipping_address),
@@ -212,14 +211,14 @@ class CheckoutService:
         """
         try:
             # A guest cart won't have a user_id, so we filter by cart_id only
-            cart = session.query(Cart).filter_by(id=cart_id).first()
+            cart = db.session.query(Cart).filter_by(id=cart_id).first()
             if not cart or not cart.items:
                 raise CartEmptyError("Cannot create an order from an empty cart.")
 
             # Validate stock before creating the order
             for item in cart.items:
                 if not self.inventory_service.check_stock(item.product_id, item.quantity):
-                    product = session.query(Product).get(item.product_id)
+                    product = db.session.query(Product).get(item.product_id)
                     raise InsufficientStockError(f"Insufficient stock for product: {product.name}")
 
             # Process payment
@@ -239,13 +238,13 @@ class CheckoutService:
                 payment_intent_id=payment_intent_id,
                 discount_id=cart.discount_id
             )
-            session.add(order)
-            session.flush()
+            db.session.add(order)
+            db.session.flush()
 
             # Create order items and update inventory
             for item in cart.items:
                 order_item = OrderItem(order_id=order.id, product_id=item.product_id, quantity=item.quantity, price=item.product.price)
-                session.add(order_item)
+                db.session.add(order_item)
                 self.inventory_service.decrease_stock(item.product_id, item.quantity)
 
             if cart.discount_id:
@@ -258,10 +257,10 @@ class CheckoutService:
 
             # Clear the cart
             for item in cart.items:
-                session.delete(item)
-            session.delete(cart)
+                db.session.delete(item)
+            db.session.delete(cart)
             
-            session.commit()
+            db.session.commit()
 
             self.background_task_service.submit_task(self.send_order_confirmation, order.id)
 
@@ -269,7 +268,7 @@ class CheckoutService:
             return order
 
         except (SQLAlchemyError, CartEmptyError, InsufficientStockError, PaymentError, LoyaltyError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error during checkout for user {user_id}: {e}")
             raise CheckoutError(f"Checkout failed: {e}") from e
 
@@ -293,14 +292,14 @@ class CheckoutService:
         Creates an order from the user's cart.
         """
         try:
-            cart = session.query(Cart).filter_by(id=cart_id, user_id=user_id).first()
+            cart = db.session.query(Cart).filter_by(id=cart_id, user_id=user_id).first()
             if not cart or not cart.items:
                 raise CartEmptyError("Cannot create an order from an empty cart.")
 
             # Validate stock before creating the order
             for item in cart.items:
                 if not self.inventory_service.check_stock(item.product_id, item.quantity):
-                    product = session.query(Product).get(item.product_id)
+                    product = db.session.query(Product).get(item.product_id)
                     raise InsufficientStockError(f"Insufficient stock for product: {product.name}")
 
             # Process payment
@@ -320,8 +319,8 @@ class CheckoutService:
                 payment_intent_id=payment_intent_id,
                 discount_id=cart.discount_id
             )
-            session.add(order)
-            session.flush()  # Flush to get the order ID
+            db.session.add(order)
+            db.session.flush()  # Flush to get the order ID
 
             # Create order items and update inventory
             for item in cart.items:
@@ -331,7 +330,7 @@ class CheckoutService:
                     quantity=item.quantity,
                     price=item.product.price
                 )
-                session.add(order_item)
+                db.session.add(order_item)
                 self.inventory_service.decrease_stock(item.product_id, item.quantity)
 
             # Record discount usage and add loyalty points
@@ -341,8 +340,8 @@ class CheckoutService:
             self.loyalty_service.add_points(user_id, total_price)
 
             # Clear the cart
-            session.delete(cart)
-            session.commit()
+            db.session.delete(cart)
+            db.session.commit()
 
             # Send order confirmation email
             self.background_task_service.submit_task(self.send_order_confirmation, order.id)
@@ -351,7 +350,7 @@ class CheckoutService:
             return order
 
         except (SQLAlchemyError, CartEmptyError, InsufficientStockError, PaymentError, LoyaltyError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error during checkout for user {user_id}: {e}")
             raise CheckoutError(f"Checkout failed: {e}") from e
 
@@ -360,7 +359,7 @@ class CheckoutService:
         Retrieves the details of a specific order.
         """
         try:
-            order = session.query(Order).options(
+            order = db.session.query(Order).options(
                 db.joinedload(Order.user),
                 db.joinedload(Order.items).joinedload(OrderItem.product),
                 db.joinedload(Order.shipping_address),
@@ -380,7 +379,7 @@ class CheckoutService:
         Retrieves all orders for a specific user.
         """
         try:
-            orders = session.query(Order).filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
+            orders = db.session.query(Order).filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
             return orders
         except SQLAlchemyError as e:
             self.logger.error(f"Database error while retrieving orders for user {user_id}: {e}")
@@ -391,7 +390,7 @@ class CheckoutService:
         Applies a discount code to the cart.
         """
         try:
-            cart = session.query(Cart).filter_by(id=cart_id).first()
+            cart = db.session.query(Cart).filter_by(id=cart_id).first()
             if not cart:
                 raise CartEmptyError("Cart not found.")
 
@@ -400,11 +399,11 @@ class CheckoutService:
                 raise ValueError("Invalid or expired discount code.")
 
             cart.discount_id = discount.id
-            session.commit()
+            db.session.commit()
             self.logger.info(f"Discount '{discount_code}' applied to cart {cart_id}.")
             return cart
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error applying discount to cart {cart_id}: {e}")
             raise
             

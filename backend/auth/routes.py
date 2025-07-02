@@ -33,7 +33,7 @@ security_logger = logging.getLogger('security')
 
 
 @auth_bp.route('/login/verify-mfa', methods=['POST'])
-@rate_limiter(limit=5, per=60) # 5 requests per minute
+@limiter.limit(limit=5, per=60) # 5 requests per minute
 def verify_mfa():
     """Verifies the MFA token and returns JWTs upon success."""
     json_data = request.get_json()
@@ -192,7 +192,7 @@ def refresh():
 
 
 @auth_bp.route('/password/confirm-reset', methods=['POST'])
-@rate_limiter(limit=5, per=600) # 5 requests per 10 minutes
+@limiter.limit(limit=5, per=600) # 5 requests per 10 minutes
 def confirm_password_reset():
     """Resets the user's password using a valid token."""
     json_data = request.get_json()

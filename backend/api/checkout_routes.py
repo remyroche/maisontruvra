@@ -3,19 +3,17 @@ from flask import Blueprint, request, jsonify, g, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from marshmallow import ValidationError
 from ..services.discount_service import DiscountService 
-from ..utils.decorators import admin_required, roles_required
+from ..utils.decorators import admin_required, roles_required, api_resource_handler
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.services.exceptions import NotFoundException, ValidationException, DiscountInvalidException
+from backend.services.exceptions import NotFoundException, ValidationException, DiscountInvalidException, AuthorizationException
 from flask_login import current_user
 from backend.services.checkout_service import process_user_checkout, process_guest_checkout, process_b2b_checkout
 from backend.services.cart_service import get_cart_by_id_or_session
 from backend.models.enums import UserType
 from backend.schemas import ApplyDiscountSchema, CheckoutSchema, AddressSchema
 from backend.services.checkout_service import CheckoutService
-from marshmallow import ValidationError
-from backend.schemas import CheckoutSchema
-from backend.utils.decorators import login_required
-from backend.services.checkout_service import CheckoutService
+from backend.models.address_models import Address
+from backend.extensions import db
 from backend.services.exceptions import CheckoutError
 
 
@@ -161,52 +159,56 @@ def get_user_addresses():
         return jsonify(error=str(e)), 404
 
 @checkout_bp.route('/user/addresses', methods=['POST'])
+@api_resource_handler(
+    model=Address,
+    request_schema=AddressSchema,
+    response_schema=AddressSchema,
+    ownership_exempt_roles=[],  # Only the user themselves can create
+    cache_timeout=0,  # No caching for addresses
+    log_action=True
+)
 @jwt_required()
 def add_user_address():
     """Adds a new address for the currently authenticated user."""
     user_id = get_jwt_identity()
     
-    json_data = request.get_json()
-    if not json_data:
-        return jsonify(error="Invalid JSON data provided."), 400
+    # Create new address with validated data
+    address = Address()
+    address.user_id = user_id
+    for key, value in g.validated_data.items():
+        if hasattr(address, key):
+            setattr(address, key, value)
     
-    # Validate input using marshmallow schema
-    try:
-        schema = AddressSchema()
-        validated_data = schema.load(json_data)
-    except ValidationError as err:
-        return jsonify(error="Validation failed.", errors=err.messages), 400
-    
-    try:
-        address = CheckoutService.add_user_address(user_id, validated_data)
-        return jsonify(address=address.to_dict()), 201
-    except (ValidationException, NotFoundException) as e:
-        return jsonify(error=str(e)), 400
+    db.session.add(address)
+    return address
 
 @checkout_bp.route('/user/addresses/<int:address_id>', methods=['PUT'])
+@api_resource_handler(
+    model=Address,
+    request_schema=AddressSchema,
+    response_schema=AddressSchema,
+    ownership_exempt_roles=[],  # Only the owner can update
+    cache_timeout=0,  # No caching for addresses
+    log_action=True
+)
 @jwt_required()
 def update_user_address(address_id):
     """Updates an existing address for the currently authenticated user."""
     user_id = get_jwt_identity()
     
-    json_data = request.get_json()
-    if not json_data:
-        return jsonify(error="Invalid JSON data provided."), 400
+    # Address is already fetched and validated by decorator
+    address = g.target_object
     
-    # Validate input using marshmallow schema
-    try:
-        schema = AddressSchema()
-        validated_data = schema.load(json_data)
-    except ValidationError as err:
-        return jsonify(error="Validation failed.", errors=err.messages), 400
+    # Verify ownership
+    if address.user_id != user_id:
+        raise AuthorizationException("You do not have permission to update this address.")
     
-    try:
-        address = CheckoutService.update_user_address(user_id, address_id, validated_data)
-        return jsonify(address=address.to_dict())
-    except NotFoundException as e:
-        return jsonify(error=str(e)), 404
-    except ValidationException as e:
-        return jsonify(error=str(e)), 400
+    # Update address with validated data
+    for key, value in g.validated_data.items():
+        if hasattr(address, key):
+            setattr(address, key, value)
+    
+    return address
 
 @checkout_bp.route('/delivery/methods', methods=['GET'])
 def get_delivery_methods():

@@ -1,10 +1,12 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.b2b_service import B2BService
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.utils.decorators import staff_required, b2b_user_required, roles_required, permissions_required, b2b_admin_required
-from backend.models.b2b_models import B2BUser
-from backend.database import db
+from backend.utils.decorators import staff_required, b2b_user_required, roles_required, permissions_required, b2b_admin_required, api_resource_handler
+from backend.models.user_models import User
+from backend.models.address_models import Address
+from backend.schemas import UserSchema, AddressSchema
+from backend.extensions import db
 from backend.tasks import send_email_task
 
 b2b_profile_bp = Blueprint('b2b_profile_bp', __name__, url_prefix='/api/b2b/profile')
@@ -92,80 +94,119 @@ def remove_b2b_user():
     
     return jsonify({"message": "User removed successfully."}), 200
     
-# GET the B2B user's company profile
+# GET the B2B user's profile
 @b2b_profile_bp.route('/', methods=['GET'])
+@api_resource_handler(
+    model=User,
+    response_schema=UserSchema,
+    ownership_exempt_roles=[],  # Only the user themselves can access
+    cache_timeout=0,  # No caching for user profiles
+    log_action=True
+)
 @b2b_user_required
+@jwt_required()
 def get_b2b_profile():
     """
-    Get the company profile associated with the currently authenticated B2B user.
+    Get the profile of the currently authenticated B2B user.
     """
     user_id = get_jwt_identity()
-    try:
-        # Assumes the service can find the company profile linked to the user
-        profile = B2BService.get_company_profile_by_user(user_id)
-        if not profile:
-            return jsonify(status="error", message="B2B profile not found for this user."), 404
-        
-        return jsonify(status="success", data=profile.to_dict()), 200
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An error occurred while fetching the B2B profile."), 500
+    user = User.query.get(user_id)
+    if not user or user.user_type.value != 'B2B':
+        return None  # Will be handled by decorator as 404
+    return user
 
-# UPDATE the B2B user's company profile
+# UPDATE the B2B user's profile
 @b2b_profile_bp.route('/', methods=['PUT'])
+@api_resource_handler(
+    model=User,
+    request_schema=UserSchema,
+    response_schema=UserSchema,
+    ownership_exempt_roles=[],  # Only the user themselves can update
+    cache_timeout=0,  # No caching for user profiles
+    log_action=True
+)
 @b2b_user_required
+@jwt_required()
 def update_b2b_profile():
     """
-    Update the company profile information for the authenticated B2B user.
+    Update the profile information for the authenticated B2B user.
     """
     user_id = get_jwt_identity()
-    data = request.get_json()
-    if not data:
-        return jsonify(status="error", message="Invalid or missing JSON body"), 400
-
-    sanitized_data = InputSanitizer.sanitize_input(data)
+    user = User.query.get(user_id)
+    if not user or user.user_type.value != 'B2B':
+        return None  # Will be handled by decorator as 404
     
-    # Remove sensitive fields that should not be changed here
-    sanitized_data.pop('vat_number', None)
-    sanitized_data.pop('status', None) # Status should only be changed by an admin
-
-    try:
-        updated_profile = B2BService.update_company_profile_by_user(user_id, sanitized_data)
-        if not updated_profile:
-            return jsonify(status="error", message="B2B Profile not found or update failed"), 404
-        return jsonify(status="success", data=updated_profile.to_dict()), 200
-    except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400
-    except Exception as e:
-        # Log the error e
-        return jsonify(status="error", message="An internal error occurred while updating the B2B profile."), 500
+    # Update user with validated data from g.validated_data
+    for key, value in g.validated_data.items():
+        if hasattr(user, key) and key not in ['vat_number', 'status']:  # Exclude sensitive fields
+            setattr(user, key, value)
+    
+    return user
 
 
 @b2b_profile_bp.route('/address', methods=['POST'])
+@api_resource_handler(
+    model=Address,
+    request_schema=AddressSchema,
+    response_schema=AddressSchema,
+    ownership_exempt_roles=[],  # Only the user themselves can create
+    cache_timeout=0,  # No caching for addresses
+    log_action=True
+)
 @b2b_user_required
+@jwt_required()
 def add_b2b_address():
+    """Create a new address for the authenticated B2B user."""
     user_id = get_jwt_identity()
-    data = InputSanitizer.sanitize_input(request.get_json())
-    # Assuming B2BService has a method to handle address creation for a user
-    address = B2BService.add_address_for_user(user_id, data)
-    return jsonify(address.to_dict()), 201
+    
+    # Create new address with validated data
+    address = Address()
+    address.user_id = user_id
+    for key, value in g.validated_data.items():
+        if hasattr(address, key):
+            setattr(address, key, value)
+    
+    db.session.add(address)
+    return address
 
 @b2b_profile_bp.route('/address/<int:address_id>', methods=['PUT'])
+@api_resource_handler(
+    model=Address,
+    request_schema=AddressSchema,
+    response_schema=AddressSchema,
+    ownership_exempt_roles=[],  # Only the owner can update
+    cache_timeout=0,  # No caching for addresses
+    log_action=True
+)
 @b2b_user_required
+@jwt_required()
 def update_b2b_address(address_id):
-    user_id = get_jwt_identity()
-    data = InputSanitizer.sanitize_input(request.get_json())
-    # Assuming B2BService can update an address, checking ownership via user_id
-    address = B2BService.update_address_for_user(address_id, user_id, data)
-    return jsonify(address.to_dict())
+    """Update an existing address for the authenticated B2B user."""
+    # Address is already fetched and validated by decorator
+    address = g.target_object
+    
+    # Update address with validated data
+    for key, value in g.validated_data.items():
+        if hasattr(address, key):
+            setattr(address, key, value)
+    
+    return address
 
 @b2b_profile_bp.route('/address/<int:address_id>', methods=['DELETE'])
+@api_resource_handler(
+    model=Address,
+    ownership_exempt_roles=[],  # Only the owner can delete
+    cache_timeout=0,  # No caching for addresses
+    log_action=True
+)
 @b2b_user_required
+@jwt_required()
 def delete_b2b_address(address_id):
-    user_id = get_jwt_identity()
-    # Assuming B2BService can delete an address, checking ownership via user_id
-    B2BService.delete_address_for_user(address_id, user_id)
-    return jsonify({'message': 'Address deleted'})
+    """Delete an address for the authenticated B2B user."""
+    # Address is already fetched and validated by decorator
+    address = g.target_object
+    db.session.delete(address)
+    return None  # Decorator will handle the delete response
 
 @b2b_profile_bp.route('/invoices', methods=['GET'])
 @b2b_user_required

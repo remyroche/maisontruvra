@@ -7,7 +7,7 @@ from backend.services.exceptions import NotFoundException, ValidationException, 
 from backend.models import db, NewsletterSubscription
 from backend.services.email_service import EmailService
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from backend.database import db_session as session
+from backend.extensions import db
 
 
 logger = logging.getLogger(__name__)
@@ -24,13 +24,13 @@ class NewsletterService:
         """
         try:
             # Check if already subscribed
-            if session.query(NewsletterSubscription).filter_by(email=email).first():
+            if db.session.query(NewsletterSubscription).filter_by(email=email).first():
                 self.logger.warning(f"Email {email} is already subscribed to the newsletter.")
                 return None, "Email is already subscribed."
 
             subscription = NewsletterSubscription(email=email, source=source)
-            session.add(subscription)
-            session.commit()
+            db.session.add(subscription)
+            db.session.commit()
             
             # Send confirmation email
             subject = "Subscription Confirmed"
@@ -42,11 +42,11 @@ class NewsletterService:
             return subscription, "Successfully subscribed."
             
         except IntegrityError:
-            session.rollback()
+            db.session.rollback()
             self.logger.warning(f"Attempt to subscribe existing email {email} failed due to constraint.")
             return None, "Email is already subscribed."
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Database error during newsletter subscription for {email}: {e}")
             raise
 
@@ -55,17 +55,17 @@ class NewsletterService:
         Unsubscribes an email from the newsletter.
         """
         try:
-            subscription = session.query(NewsletterSubscription).filter_by(email=email).first()
+            subscription = db.session.query(NewsletterSubscription).filter_by(email=email).first()
             if subscription:
-                session.delete(subscription)
-                session.commit()
+                db.session.delete(subscription)
+                db.session.commit()
                 self.logger.info(f"Email {email} unsubscribed from the newsletter.")
                 return True
             else:
                 self.logger.warning(f"Attempt to unsubscribe non-existent email: {email}")
                 return False
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error during newsletter unsubscription for {email}: {e}")
             raise
 

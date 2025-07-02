@@ -6,7 +6,7 @@ from backend.services.order_service import OrderService
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.cart_service import CartService
 from backend.utils.decorators import login_required, api_resource_handler
-from backend.services.exceptions import ServiceError
+from backend.services.exceptions import ServiceError, AuthorizationException
 from backend.services.email_service import EmailService
 from backend.schemas import OrderSchema, GuestOrderSchema, AuthenticatedOrderSchema, CheckoutOrderSchema
 from backend.models.order_models import Order
@@ -14,21 +14,28 @@ from backend.models.order_models import Order
 orders_bp = Blueprint('orders_bp', __name__, url_prefix='/api/orders')
 
 @orders_bp.route('/<int:order_id>', methods=['GET'])
-@login_required
 @api_resource_handler(
     model=Order,
-    response_schema=OrderSchema, # Use OrderSchema for consistent serialization
-    check_ownership=True,
-    cache_timeout=0 # Ensure no caching for user-specific orders
+    response_schema=OrderSchema,
+    ownership_exempt_roles=[],  # Only the order owner can view
+    eager_loads=['items', 'shipping_address'],  # Eager load order details
+    cache_timeout=0,  # No caching for user-specific orders
+    log_action=True  # Log order access
 )
+@login_required
 def get_order_details(order_id):
     """
     Get details for a specific order.
     This endpoint is now protected against IDOR by the api_resource_handler decorator.
     """
-    # The order is now available as g.target_object, already validated for ownership.
-    # The decorator will handle serialization using OrderSchema.
-    return g.target_object
+    # Order is already fetched and validated by decorator
+    order = g.target_object
+    
+    # Verify ownership
+    if order.user_id != current_user.id:
+        raise AuthorizationException("You do not have permission to view this order")
+    
+    return order
 
 @orders_bp.route('/', methods=['GET'])
 @login_required

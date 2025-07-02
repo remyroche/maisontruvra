@@ -1,5 +1,5 @@
-from backend.models import db, User, Role, Product, Category, Collection, ReferralTier
-from backend.database import db_session as session
+from backend.models import User, Role, Product, Category, Collection, ReferralTier
+from backend.extensions import db
 from werkzeug.security import generate_password_hash
 
 def seed_database():

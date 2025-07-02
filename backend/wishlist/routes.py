@@ -2,17 +2,13 @@
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from marshmallow import ValidationError
-from backend.services.wishlist_service import WishlistService
+from backend.services.wishlist_service import WishlistService, WishlistItem
 from backend.utils.input_sanitizer import InputSanitizer
-# from backend.utils.decorators import api_resource_handler # Not using it currently for these routes
+from backend.utils.decorators import api_resource_handler
 from backend.schemas import AddToWishlistSchema, WishlistItemSchema
 from backend.models.product_models import Product
-# Assuming WishlistItem is properly imported or defined elsewhere and accessible via models.__init__
-# If WishlistItem is strictly within wishlist_service.py as a local class, it cannot be used as a model for decorators directly.
-# However, the schemas.py imports it as `from .models.product_models import Product, Variant, WishlistItem`.
-# This implies it should be moved to a proper models file if not already.
-# For now, let's assume `backend.models.product_models.WishlistItem` is the correct path.
-from backend.models.product_models import WishlistItem # Ensure WishlistItem is imported if it's truly a model
+from backend.extensions import db
+from backend.services.exceptions import NotFoundException, ValidationException, AuthorizationException
 
 wishlist_bp = Blueprint('wishlist_bp', __name__, url_prefix='/api/wishlist')
 
@@ -34,54 +30,88 @@ def get_wishlist():
 
 # ADD an item to the user's wishlist
 @wishlist_bp.route('/item', methods=['POST'])
+@api_resource_handler(
+    model=WishlistItem,
+    request_schema=AddToWishlistSchema,
+    response_schema=WishlistItemSchema,
+    ownership_exempt_roles=[],  # Only the user themselves can add to wishlist
+    cache_timeout=0,  # No caching for wishlist operations
+    log_action=True
+)
 @jwt_required()
-# Keeping as manual due to service returning dict and complex ownership for future @api_resource_handler
 def add_to_wishlist():
     """
     Add a product to the current user's wishlist.
     """
     user_id = get_jwt_identity()
-    json_data = request.get_json()
-    if not json_data:
-        return jsonify({"error": "Invalid JSON data provided"}), 400
+    product_id = g.validated_data['product_id']
     
-    try:
-        # Manually validate input using marshmallow schema
-        schema = AddToWishlistSchema()
-        validated_data = schema.load(json_data)
-    except ValidationError as err:
-        return jsonify({"error": "Validation failed", "errors": err.messages}), 400
-
-    product_id = validated_data['product_id']
-
-    try:
-        wishlist_item_data = WishlistService.add_to_wishlist(user_id, product_id)
-        if wishlist_item_data:
-            return jsonify(status="success", data=wishlist_item_data), 201
-        else:
-            # This case handles if the item was already in the wishlist (service might return None or raise exception)
-            # Based on service code, it raises ValidationException, which is caught below
-            return jsonify(status="success", message="Item is already in your wishlist."), 200
-    except ValueError as e: # Catches "Product not found" from service
-        return jsonify(status="error", message=str(e)), 404
-    except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An internal error occurred."), 500
+    # Check if product exists
+    product = Product.query.get(product_id)
+    if not product:
+        raise NotFoundException("Product not found")
+    
+    # Check if item already exists in wishlist
+    existing_item = WishlistItem.query.filter_by(
+        user_id=user_id, 
+        product_id=product_id
+    ).first()
+    
+    if existing_item:
+        raise ValidationException("Item is already in your wishlist")
+    
+    # Create new wishlist item
+    wishlist_item = WishlistItem()
+    wishlist_item.user_id = user_id
+    wishlist_item.product_id = product_id
+    
+    db.session.add(wishlist_item)
+    return wishlist_item
 
 # REMOVE an item from the user's wishlist
 @wishlist_bp.route('/item/<int:product_id>', methods=['DELETE'])
 @jwt_required()
-# Keeping as manual due to complex ownership check needing user_id AND product_id
 def remove_from_wishlist(product_id):
     """
     Remove a product from the current user's wishlist.
     """
     user_id = get_jwt_identity()
-    try:
-        if WishlistService.remove_from_wishlist(user_id, product_id):
-            return jsonify(status="success", message="Item removed from wishlist."), 200
-        else:
-            return jsonify(status="error", message="Item not found in wishlist."), 404
-    except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An internal error occurred."), 500
+    
+    # Find the wishlist item by user_id and product_id
+    wishlist_item = WishlistItem.query.filter_by(
+        user_id=user_id, 
+        product_id=product_id
+    ).first()
+    
+    if not wishlist_item:
+        raise NotFoundException("Item not found in wishlist")
+    
+    # Delete the wishlist item
+    db.session.delete(wishlist_item)
+    db.session.commit()
+    
+    return jsonify({"message": "Item removed from wishlist successfully"}), 200
+
+# Alternative endpoint using wishlist_item_id for direct access
+@wishlist_bp.route('/item/id/<int:item_id>', methods=['DELETE'])
+@api_resource_handler(
+    model=WishlistItem,
+    ownership_exempt_roles=[],  # Only the owner can delete
+    cache_timeout=0,  # No caching for wishlist operations
+    log_action=True
+)
+@jwt_required()
+def remove_wishlist_item_by_id(item_id):
+    """
+    Remove a wishlist item by its ID (alternative endpoint).
+    """
+    # WishlistItem is already fetched and validated by decorator
+    wishlist_item = g.target_object
+    
+    # Verify ownership
+    user_id = get_jwt_identity()
+    if wishlist_item.user_id != user_id:
+        raise AuthorizationException("You do not have permission to delete this wishlist item")
+    
+    db.session.delete(wishlist_item)
+    return None  # Decorator will handle the delete response

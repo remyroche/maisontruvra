@@ -32,7 +32,7 @@ class BlogService:
 
     def __init__(self, session: Session = db.session):
         """
-        Initializes the BlogService with a database session.
+        Initializes the BlogService with a database db.session.
 
         Args:
             session: The SQLAlchemy Session object.
@@ -89,7 +89,7 @@ class BlogService:
         
         slug = article_data.get('slug') or create_slug(sanitized_title)
         if BlogPost.query.filter_by(slug=slug).first():
-            slug = f"{slug}-{self.session.query(BlogPost).count() + 1}"
+            slug = f"{slug}-{self.db.session.query(BlogPost).count() + 1}"
 
         new_post = BlogPost(
             title=sanitized_title,
@@ -99,8 +99,8 @@ class BlogService:
             slug=slug,
             is_published=article_data.get('is_published', False)
         )
-        self.session.add(new_post)
-        self.session.commit()
+        self.db.session.add(new_post)
+        self.db.session.commit()
         
         clear_blog_cache() # Invalidate cache
         
@@ -112,7 +112,7 @@ class BlogService:
         cache_key = get_blog_post_list_key()
         posts = cache.get(cache_key)
         if posts is None:
-            posts = self.session.query(BlogPost).order_by(BlogPost.created_at.desc()).all()
+            posts = self.db.session.query(BlogPost).order_by(BlogPost.created_at.desc()).all()
             cache.set(cache_key, posts, timeout=3600)
         return posts
 
@@ -121,7 +121,7 @@ class BlogService:
         Retrieves a single blog post by its ID.
         Raises NotFoundException if not found.
         """
-        article = self.session.query(BlogPost).filter_by(id=article_id).first()
+        article = self.db.session.query(BlogPost).filter_by(id=article_id).first()
         if not article:
             raise NotFoundException(f"Article with id {article_id} not found.")
         return article
@@ -134,7 +134,7 @@ class BlogService:
         cache_key = get_blog_post_by_slug_key(slug)
         article = cache.get(cache_key)
         if not article:
-            article = self.session.query(BlogPost).filter_by(slug=slug).first()
+            article = self.db.session.query(BlogPost).filter_by(slug=slug).first()
             if not article:
                 raise NotFoundException(f"Article with slug '{slug}' not found.")
             cache.set(cache_key, article, timeout=3600)
@@ -142,7 +142,7 @@ class BlogService:
 
     def update_article(self, article_id: int, article_data: dict) -> BlogPost:
         """ Updates a blog post with sanitized fields. """
-        post = self.session.query(BlogPost).get(article_id)
+        post = self.db.session.query(BlogPost).get(article_id)
         if not post:
             raise NotFoundException(f"Article with id {article_id} not found.")
 
@@ -162,7 +162,7 @@ class BlogService:
         if 'is_published' in article_data:
             post.is_published = article_data['is_published']
         
-        self.session.commit()
+        self.db.session.commit()
 
         # Invalidate cache
         clear_blog_cache(slug=original_slug)
@@ -176,8 +176,8 @@ class BlogService:
         """Deletes a blog post."""
         article = self.get_article_by_id(article_id)
         article_slug = article.slug
-        self.session.delete(article)
-        self.session.commit()
+        self.db.session.delete(article)
+        self.db.session.commit()
         # Invalidate cache
         clear_blog_cache(slug=article_slug)
 
@@ -189,24 +189,24 @@ class BlogService:
         sanitized_name = InputSanitizer.sanitize_string(category_data['name'])
         
         # Check for uniqueness
-        if self.session.query(BlogCategory).filter_by(name=sanitized_name).first():
+        if self.db.session.query(BlogCategory).filter_by(name=sanitized_name).first():
             raise ValidationException(f"Category with name '{sanitized_name}' already exists.")
 
         new_category = BlogCategory(name=sanitized_name)
-        self.session.add(new_category)
-        self.session.commit()
+        self.db.session.add(new_category)
+        self.db.session.commit()
         return new_category
 
     def get_all_categories(self):
         """Retrieves all blog categories."""
-        return self.session.query(BlogCategory).order_by(BlogCategory.name).all()
+        return self.db.session.query(BlogCategory).order_by(BlogCategory.name).all()
 
     def get_category_by_id(self, category_id: int) -> BlogCategory:
         """
         Retrieves a single blog category by its ID.
         Raises NotFoundException if not found.
         """
-        category = self.session.query(BlogCategory).filter_by(id=category_id).first()
+        category = self.db.session.query(BlogCategory).filter_by(id=category_id).first()
         if not category:
             raise NotFoundException(f"Category with id {category_id} not found.")
         return category
@@ -220,11 +220,11 @@ class BlogService:
         sanitized_name = InputSanitizer.sanitize_string(category_data['name'])
         # Check for uniqueness if name is being changed
         if sanitized_name != category.name and \
-           self.session.query(BlogCategory).filter_by(name=sanitized_name).first():
+           self.db.session.query(BlogCategory).filter_by(name=sanitized_name).first():
             raise ValidationException(f"Category with name '{sanitized_name}' already exists.")
 
         category.name = sanitized_name
-        self.session.commit()
+        self.db.session.commit()
         return category
 
     def delete_category(self, category_id: int):
@@ -233,5 +233,5 @@ class BlogService:
         # Check if any blog posts are linked to this category
         if category.blog_posts and len(category.blog_posts) > 0:
             raise ValidationException(f"Cannot delete category '{category.name}' because it has associated blog posts.")
-        self.session.delete(category)
-        self.session.commit()
+        self.db.session.delete(category)
+        self.db.session.commit()

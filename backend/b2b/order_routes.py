@@ -1,11 +1,12 @@
 from flask import Blueprint, request, jsonify, g, current_user
 from marshmallow import ValidationError
 from backend.services.order_service import OrderService
+from backend.services.exceptions import NotFoundException, ValidationException
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import staff_required, roles_required, permissions_required, api_resource_handler
 from backend.models.order_models import Order
-from backend.schemas import OrderStatusUpdateSchema
-from backend.utils.input_sanitizer import InputSanitizer
+from backend.schemas import OrderStatusUpdateSchema, OrderSchema
+from backend.extensions import db
 from sqlalchemy.orm import joinedload, subqueryload
 
 order_routes = Blueprint('admin_order_routes', __name__, url_prefix='/api/admin/orders')
@@ -37,75 +38,52 @@ def list_all_orders():
     })
     
 @order_routes.route('/<int:order_id>', methods=['GET'])
-@api_resource_handler(Order, check_ownership=False)
+@api_resource_handler(
+    model=Order,
+    response_schema=OrderSchema,
+    ownership_exempt_roles=['Admin', 'Manager', 'Support'],  # Staff can view all orders
+    eager_loads=['items', 'user', 'shipping_address'],  # Eager load order details
+    cache_timeout=300,  # 5 minute cache for order details
+    log_action=True  # Log order access
+)
 @permissions_required('MANAGE_ORDERS')
-@roles_required ('Admin', 'Manager', 'Support')
+@roles_required('Admin', 'Manager', 'Support')
 def get_order_details(order_id):
     """
     Retrieves details for a specific order.
-    ---
-    tags:
-      - Admin Orders
-    parameters:
-      - in: path
-        name: order_id
-        required: true
-        schema:
-          type: integer
-    security:
-      - cookieAuth: []
-    responses:
-      200:
-        description: Detailed information about the order.
-      404:
-        description: Order not found.
     """
-    # Order is already validated and available as g.order
-    return jsonify(g.order.to_dict(include_details=True))
+    # Order is already fetched and validated by decorator
+    return g.target_object
 
 
 @order_routes.route('/<int:order_id>/status', methods=['PUT'])
-@api_resource_handler(Order, schema=OrderStatusUpdateSchema(), check_ownership=False)
+@api_resource_handler(
+    model=Order,
+    request_schema=OrderStatusUpdateSchema,
+    response_schema=OrderSchema,
+    ownership_exempt_roles=['Admin', 'Manager', 'Support'],  # Staff can update all orders
+    cache_timeout=0,  # No caching for status updates
+    log_action=True  # Log status changes
+)
 @permissions_required('MANAGE_ORDERS')
-@roles_required ('Admin', 'Manager', 'Support')
+@roles_required('Admin', 'Manager', 'Support')
 def update_order_status(order_id):
     """
     Updates the status of a specific order.
-    ---
-    tags:
-      - Admin Orders
-    parameters:
-      - in: path
-        name: order_id
-        required: true
-        schema:
-          type: integer
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          properties:
-            status:
-              type: string
-              description: The new status for the order.
-    security:
-      - cookieAuth: []
-    responses:
-      200:
-        description: Order status updated successfully.
-      400:
-        description: Invalid status provided.
-      404:
-        description: Order not found.
     """
+    # Order is already fetched and validated by decorator
+    order = g.target_object
+    
+    # Update order status using the service layer
     try:
         updated_order = OrderService.update_order_status(order_id, g.validated_data['status'])
         if not updated_order:
-            return jsonify({"error": "Order not found"}), 404
-        return jsonify(updated_order.to_dict())
+            raise NotFoundException("Order not found")
+        
+        # Return the updated order (decorator will handle serialization)
+        return updated_order
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        raise ValidationException(str(e))
         
 @order_routes.route('/', methods=['GET'])
 @permissions_required('MANAGE_ORDERS')
@@ -144,27 +122,58 @@ def get_orders():
 
 # DELETE an order
 @order_routes.route('/<int:order_id>', methods=['DELETE'])
-@api_resource_handler(Order, check_ownership=False)
+@api_resource_handler(
+    model=Order,
+    ownership_exempt_roles=['Admin', 'Manager'],  # Only Admin/Manager can delete orders
+    cache_timeout=0,  # No caching for delete operations
+    allow_hard_delete=True,  # Allow hard delete for orders
+    log_action=True  # Log order deletions
+)
 @permissions_required('MANAGE_ORDERS')
-@roles_required ('Admin', 'Manager', 'Support')
-def delete_order(order_id):
+@roles_required('Admin', 'Manager')  # More restrictive for deletion
+def delete_order(order_id, is_hard_delete=False):
     """
     Delete an order. This should be used with caution.
     """
-    hard_delete = request.args.get('hard', 'false').lower() == 'true'
-    if hard_delete:
-        if OrderService.hard_delete_order(order_id):
-            return jsonify(status="success", message="Order permanently deleted")
+    # Order is already fetched and validated by decorator
+    order = g.target_object
+    
+    if is_hard_delete:
+        # Hard delete - permanently remove from database
+        db.session.delete(order)
     else:
-        if OrderService.soft_delete_order(order_id):
-            return jsonify(status="success", message="Order soft-deleted successfully")
-    return jsonify(status="error", message="Order not found"), 404
+        # Soft delete - mark as deleted
+        if hasattr(order, 'deleted_at'):
+            from datetime import datetime
+            order.deleted_at = datetime.utcnow()
+        else:
+            # If no soft delete field, use service layer
+            OrderService.soft_delete_order(order_id)
+    
+    return None  # Decorator will handle the delete response
 
 @order_routes.route('/<int:order_id>/restore', methods=['PUT'])
-@api_resource_handler(Order, check_ownership=False)
+@api_resource_handler(
+    model=Order,
+    response_schema=OrderSchema,
+    ownership_exempt_roles=['Admin', 'Manager', 'Support'],  # Staff can restore orders
+    cache_timeout=0,  # No caching for restore operations
+    log_action=True  # Log order restorations
+)
 @permissions_required('MANAGE_ORDERS')
-@roles_required ('Admin', 'Manager', 'Support')
+@roles_required('Admin', 'Manager', 'Support')
 def restore_order(order_id):
-    if OrderService.restore_order(order_id):
-        return jsonify(status="success", message="Order restored successfully")
-    return jsonify(status="error", message="Order not found"), 404
+    """
+    Restore a soft-deleted order.
+    """
+    # Order is already fetched and validated by decorator
+    order = g.target_object
+    
+    # Restore the order
+    if hasattr(order, 'deleted_at'):
+        order.deleted_at = None
+    else:
+        # Use service layer if no direct field
+        OrderService.restore_order(order_id)
+    
+    return order

@@ -28,9 +28,8 @@ class Inventory(BaseModel):
     def __repr__(self):
         return f'<Inventory for Product {self.product_id}>'
 
-class StockNotificationRequest(Base):
+class StockNotificationRequest(BaseModel):
     __tablename__ = 'stock_notification_requests'
-    id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     email = db.Column(db.String(120), nullable=False)
     notified_at = db.Column(db.DateTime, nullable=True)

@@ -20,7 +20,7 @@ from backend.services.invoice_service import InvoiceService
 
 from backend.services.email_service import EmailService
 from sqlalchemy.exc import SQLAlchemyError
-from backend.database import db_session as session
+from backend.extensions import db
 
 
 
@@ -49,16 +49,16 @@ class OrderService:
         
     def get_order_by_id(self, order_id):
         """Retrieves a single order by its ID."""
-        return session.query(Order).get(order_id)
+        return db.session.query(Order).get(order_id)
 
 
     def get_all_orders(self, page=1, per_page=20):
         """Retrieves all orders with pagination."""
-        return session.query(Order).order_by(Order.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+        return db.session.query(Order).order_by(Order.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
 
     def get_user_orders(self, user_id):
         """Retrieves all orders for a specific user."""
-        return session.query(Order).filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
+        return db.session.query(Order).filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
 
     def update_order_status(self, order_id, new_status, notify_customer=True):
         """
@@ -71,7 +71,7 @@ class OrderService:
 
             original_status = order.status
             order.status = new_status
-            session.commit()
+            db.session.commit()
             self.logger.info(f"Order {order_id} status updated from '{original_status}' to '{new_status}'.")
 
             if notify_customer:
@@ -92,7 +92,7 @@ class OrderService:
 
             return order
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error updating order status for order {order_id}: {e}")
             raise
 
@@ -116,7 +116,7 @@ class OrderService:
             return self.update_order_status(order_id, 'cancelled', notify_customer=True)
 
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error cancelling order {order_id}: {e}")
             raise
             

@@ -14,7 +14,6 @@ RESERVATION_LIFETIME_MINUTES = 60
 
 class InventoryService:
 
-
     def __init__(self, logger):
         self.logger = logger
         self.background_task_service = BackgroundTaskService(logger)
@@ -22,7 +21,7 @@ class InventoryService:
 
     def get_stock_level(self, product_id):
         """Gets the current stock level for a product."""
-        inventory = session.query(Inventory).filter_by(product_id=product_id).first()
+        inventory = db.session.query(Inventory).filter_by(product_id=product_id).first()
         return inventory.quantity if inventory else 0
 
     def check_stock(self, product_id, quantity_needed):
@@ -33,16 +32,16 @@ class InventoryService:
     def decrease_stock(self, product_id, quantity):
         """Decreases stock for a product."""
         try:
-            inventory = session.query(Inventory).filter_by(product_id=product_id).first()
+            inventory = db.session.query(Inventory).filter_by(product_id=product_id).first()
             if inventory and inventory.quantity >= quantity:
                 inventory.quantity -= quantity
-                session.commit()
+                db.session.commit()
                 self.logger.info(f"Decreased stock for product {product_id} by {quantity}.")
                 return inventory
             else:
                 raise ValueError("Insufficient stock to decrease.")
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error decreasing stock for product {product_id}: {e}")
             raise
 
@@ -50,7 +49,7 @@ class InventoryService:
         """Creates a request for a back-in-stock notification."""
         try:
             # Check if product exists
-            product = session.query(Product).get(product_id)
+            product = db.session.query(Product).get(product_id)
             if not product:
                 raise ValueError("Product not found.")
 
@@ -59,28 +58,28 @@ class InventoryService:
                 return None, "Product is already in stock."
 
             notification_request = StockNotificationRequest(product_id=product_id, email=email)
-            session.add(notification_request)
-            session.commit()
+            db.session.add(notification_request)
+            db.session.commit()
             self.logger.info(f"Stock notification request created for product {product_id} by {email}.")
             return notification_request, "You will be notified when the product is back in stock."
         except IntegrityError:
-            session.rollback()
+            db.session.rollback()
             self.logger.warning(f"Duplicate stock notification request for product {product_id} by {email}.")
             return None, "You have already requested a notification for this product."
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error creating stock notification request: {e}")
             raise
 
     def process_stock_notifications(self, product_id):
         """Sends out back-in-stock emails for a given product."""
         try:
-            requests = session.query(StockNotificationRequest).filter_by(product_id=product_id, notified_at=None).all()
+            requests = db.session.query(StockNotificationRequest).filter_by(product_id=product_id, notified_at=None).all()
             if not requests:
                 self.logger.info(f"No pending stock notifications to process for product {product_id}.")
                 return
 
-            product = session.query(Product).get(product_id)
+            product = db.session.query(Product).get(product_id)
             if not product:
                 self.logger.error(f"Cannot process stock notifications for non-existent product {product_id}.")
                 return
@@ -95,11 +94,11 @@ class InventoryService:
                 self.email_service.send_email(req.email, subject, template, context)
                 req.notified_at = datetime.utcnow()
             
-            session.commit()
+            db.session.commit()
             self.logger.info(f"Finished processing stock notifications for product {product_id}.")
 
         except Exception as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"An error occurred during stock notification processing for product {product_id}: {e}")
 
 
@@ -111,11 +110,11 @@ class InventoryService:
         Triggers back-in-stock notifications if the product was previously out of stock.
         """
         try:
-            inventory = session.query(Inventory).filter_by(product_id=product_id).first()
+            inventory = db.session.query(Inventory).filter_by(product_id=product_id).first()
             if not inventory:
                 # This case might happen if a product was created without an inventory record
                 inventory = Inventory(product_id=product_id, quantity=0)
-                session.add(inventory)
+                db.session.add(inventory)
             
             was_out_of_stock = inventory.quantity <= 0
             inventory.quantity += quantity
@@ -128,11 +127,11 @@ class InventoryService:
             for _ in range(quantity_to_add):
                 PassportService.create_and_render_passport(inventory_item.product_id)
 
-            session.commit()
+            db.session.commit()
             self.logger.info(f"Increased stock for product {product_id} by {quantity}.")
             return inventory
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error increasing stock for product {product_id}: {e}")
             raise
 
@@ -153,7 +152,7 @@ class InventoryService:
             raise ServiceError("Insufficient stock available for reservation.", 409)
 
         # Use either the user_id or the Flask session ID for the reservation
-        session_identifier = session.sid if not user_id else None
+        session_identifier = db.session.sid if not user_id else None
         
         # Check for existing reservation for this user/session to just update it
         reservation = InventoryReservation.query.filter_by(
@@ -190,7 +189,7 @@ class InventoryService:
         if not inventory_item:
             return # Fails silently if inventory doesn't exist
 
-        session_identifier = session.sid if not user_id else None
+        session_identifier = db.session.sid if not user_id else None
         
         reservation = InventoryReservation.query.filter_by(
             inventory_id=inventory_item.id,
@@ -214,7 +213,7 @@ class InventoryService:
         Called when an order is successfully placed. This converts the reservation
         into a permanent stock decrement.
         """
-        session_identifier = session.sid if not order.user_id else None
+        session_identifier = db.session.sid if not order.user_id else None
         
         for item in order.items:
             inventory_item = Inventory.query.filter_by(product_id=item.product_id).with_for_update().first()

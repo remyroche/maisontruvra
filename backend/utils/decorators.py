@@ -1,14 +1,16 @@
 import logging
 from functools import wraps
 from typing import Callable, Any
-from flask import jsonify, request, g, Response, abort, jsonify
+from flask import jsonify, request, g, Response, abort, current_app  
 from flask_jwt_extended import get_jwt_identity, get_jwt, jwt_required
+from flask_login import current_user
 from backend.models.user_models import User
 from backend.services.audit_log_service import AuditLogService
 from backend.utils.csrf_protection import CSRFProtection
 from marshmallow import ValidationError
-from ..models import User, AdminAuditLog, db
+from ..models import AdminAuditLog
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 
 # Import the base class and all specific exceptions.
 from ..services.exceptions import (
@@ -19,7 +21,7 @@ from ..services.exceptions import (
     DuplicateProductError,
     InvalidAPIRequestError
 )
-from ..extensions import db
+from ..extensions import db, cache
 
 
 # Initialize loggers
@@ -129,7 +131,8 @@ def get_object_or_404(model):
 
 def api_resource_handler(model, request_schema=None, response_schema=None, 
                          ownership_exempt_roles=None, eager_loads=None, 
-                         log_action=True, cache_timeout=3600, allow_hard_delete=False):
+                         log_action=True, cache_timeout=3600, allow_hard_delete=False,
+                         lookup_field='id', ownership_field='user_id'):
     """
     An all-in-one decorator for API endpoints that handles:
     1.  Eager loading for performance.
@@ -137,6 +140,7 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
     3.  Conditional Ownership Checks.
     4.  Standardized Soft/Hard Delete logic.
     5.  Database session management, audit logging, and comprehensive error handling.
+    6.  Flexible resource lookup (by ID, slug, or other fields).
 
     Args:
         model: The SQLAlchemy model class (e.g., Product).
@@ -147,15 +151,56 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
         log_action: (Optional) If True, automatically logs the action.
         cache_timeout: (Optional) Timeout for caching GET requests. Set to 0 to disable caching.
         allow_hard_delete: (Optional) If False (default), any attempt to use `?hard=true` on a DELETE request will be rejected.
+        lookup_field: (Optional) Field to use for resource lookup ('id', 'slug', etc.). Defaults to 'id'.
+        ownership_field: (Optional) Field to check for ownership ('user_id', 'owner_id', etc.). Defaults to 'user_id'.
     """
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            object_id_key = f"{model.__name__.lower()}_id"
-            obj_id = kwargs.get(object_id_key) or kwargs.get('id')
+            # Determine the lookup value based on the lookup field
+            lookup_value = None
             
-            cache_key = f"resource::{model.__name__}::{obj_id}"
-            if request.method == 'GET' and obj_id and cache_timeout > 0:
+            if lookup_field == 'id':
+                # Try multiple ID patterns: model_id, id, user_id, etc.
+                model_name = model.__name__.lower()
+                possible_keys = [
+                    f"{model_name}_id",
+                    'id',
+                    'user_id' if model_name == 'user' else None,
+                    'product_id' if model_name == 'product' else None,
+                    'order_id' if model_name == 'order' else None,
+                    'quote_id' if model_name == 'quote' else None,
+                    'address_id' if model_name == 'address' else None,
+                    'item_id' if 'item' in model_name.lower() else None,
+                    'cart_id' if model_name == 'cart' else None,
+                    'review_id' if model_name == 'review' else None
+                ]
+                
+                for key in possible_keys:
+                    if key and key in kwargs:
+                        lookup_value = kwargs[key]
+                        break
+            elif lookup_field == 'slug':
+                # Handle slug patterns
+                possible_slug_keys = [
+                    'slug',
+                    'slug_id',
+                    f"{model.__name__.lower()}_slug"
+                ]
+                
+                for key in possible_slug_keys:
+                    if key in kwargs:
+                        lookup_value = kwargs[key]
+                        break
+            else:
+                # For other fields, use the field name directly
+                lookup_value = kwargs.get(lookup_field)
+                # Also try with _id suffix for consistency
+                if lookup_value is None:
+                    lookup_value = kwargs.get(f"{lookup_field}_id")
+            
+            cache_key = f"resource::{model.__name__}::{lookup_field}::{lookup_value}"
+            if request.method == 'GET' and lookup_value and cache_timeout > 0:
                 cached_response = cache.get(cache_key)
                 if cached_response:
                     return jsonify(cached_response)
@@ -163,24 +208,62 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
             try:
                 # --- Step 1: Resource Fetching and Validation (Setup) ---
                 target_object = None
-                if obj_id is not None:
+                if lookup_value is not None:
                     query = model.query
                     if eager_loads:
                         for relationship in eager_loads:
                             query = query.options(joinedload(relationship))
                     
-                    target_object = query.get(obj_id)
+                    # Use appropriate lookup method based on lookup_field
+                    if lookup_field == 'id':
+                        target_object = query.get(lookup_value)
+                    else:
+                        target_object = query.filter(getattr(model, lookup_field) == lookup_value).first()
+                    
                     if target_object is None:
-                        raise NotFoundException(f"{model.__name__} with ID {obj_id} not found.")
+                        raise NotFoundException(f"{model.__name__} with {lookup_field} {lookup_value} not found.")
                     g.target_object = target_object
 
+                # Enhanced ownership check with configurable ownership field
                 if ownership_exempt_roles is not None and target_object:
+                    # Get current user from JWT or Flask-Login
+                    current_user_id = None
+                    if hasattr(g, 'user') and g.user:
+                        current_user_id = g.user.id
+                    else:
+                        # Try to get from JWT
+                        try:
+                            current_user_id = get_jwt_identity()
+                        except:
+                            pass
+                        # Try to get from Flask-Login
+                        if not current_user_id and hasattr(current_user, 'id'):
+                            current_user_id = current_user.id
+                    
+                    if not current_user_id:
+                        raise AuthorizationException("Authentication required.")
+                    
+                    # Check if user has exempt roles
                     exempt_roles = {'Admin', 'Manager'}.union(set(ownership_exempt_roles))
-                    user_roles = {role.name for role in getattr(g, 'user', {}).get('roles', [])}
+                    user_roles = set()
+                    
+                    # Get user roles (try different methods)
+                    if hasattr(g, 'user') and g.user and hasattr(g.user, 'roles'):
+                        user_roles = {role.name for role in g.user.roles}
+                    else:
+                        # Fetch user to check roles
+                        from backend.models.user_models import User
+                        user = User.query.get(current_user_id)
+                        if user and hasattr(user, 'roles'):
+                            user_roles = {role.name for role in user.roles}
+                    
+                    # If user doesn't have exempt roles, check ownership
                     if not user_roles.intersection(exempt_roles):
-                        if not hasattr(g, 'user') or not g.user:
-                            raise AuthorizationException("Authentication required.")
-                        if not hasattr(target_object, 'user_id') or target_object.user_id != g.user.id:
+                        if not hasattr(target_object, ownership_field):
+                            raise ServiceError(f"Model {model.__name__} does not have ownership field '{ownership_field}'", 500)
+                        
+                        object_owner_id = getattr(target_object, ownership_field)
+                        if object_owner_id != current_user_id:
                             raise AuthorizationException("You do not have permission to access this resource.")
 
                 if request.method in ['POST', 'PUT']:
@@ -203,7 +286,7 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
                 # --- Step 3: Automatic Audit Logging ---
                 if log_action:
                     action_type = f"{model.__name__.upper()}_{request.method}"
-                    target_id = result_object.id if result_object else g.target_object.id
+                    target_id = getattr(result_object, 'id', None) if result_object else getattr(g.target_object, 'id', None)
                     AuditLogService.log_action(action_type, target_id=target_id, details=g.get('validated_data'))
 
                 # --- Step 4: Automatic Response Serialization & Caching ---
@@ -216,7 +299,7 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
                     status_code = 201 if request.method == 'POST' else 200
                     response = jsonify(response_data)
                     response.status_code = status_code
-                    if request.method == 'GET' and obj_id and cache_timeout > 0:
+                    if request.method == 'GET' and lookup_value and cache_timeout > 0:
                         cache.set(cache_key, response_data, timeout=cache_timeout)
                 else:
                     response = jsonify({"message": f"{model.__name__} deleted successfully."})
@@ -224,7 +307,7 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
                 
                 # --- Step 5: Commit Transaction & Invalidate Cache ---
                 db.session.commit()
-                if request.method in ['PUT', 'POST', 'DELETE'] and obj_id and cache_timeout > 0:
+                if request.method in ['PUT', 'POST', 'DELETE'] and lookup_value and cache_timeout > 0:
                     cache.delete(cache_key)
 
                 return response

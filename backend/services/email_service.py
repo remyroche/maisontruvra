@@ -14,7 +14,6 @@ from backend.extensions import mail
 from backend.services.monitoring_service import MonitoringService
 from flask import render_template, current_app
 
-from backend.models.b2b_models import B2BOrder, B2BUser
 from backend.models.order_models import Order
 from backend.models.user_models import User
 from backend.services.user_service import get_user_by_id
@@ -54,7 +53,7 @@ class EmailService:
     
     @staticmethod
     def send_b2b_order_confirmation_email(order_id):
-        order = B2BOrder.query.get(order_id)
+        order = Order.query.get(order_id)
         if order:
             EmailService.send_email(to=order.user.email, subject="Confirmation de votre commande B2B", template="b2b_order_confirmation.html", order=order)
 

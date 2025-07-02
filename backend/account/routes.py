@@ -41,11 +41,18 @@ order_service = OrderService()
 
 
 @account_bp.route('/', methods=['GET'])
+@api_resource_handler(
+    model=User,
+    response_schema=UserSchema,
+    ownership_exempt_roles=[],  # Only the user themselves can access
+    cache_timeout=0,  # No caching for user profiles
+    log_action=False  # No need to log profile views
+)
 @login_required
 def get_account_details():
     """Get current user's account details."""
-    # Use UserSchema for serialization
-    return jsonify(current_user.to_user_dict())
+    # Return the current user
+    return current_user
 
 
 @account_bp.route('/dashboard-data')
@@ -229,25 +236,26 @@ def get_profile(user_id):
 
 
 @account_bp.route('/profile', methods=['PUT'])
-@login_required
 @api_resource_handler(
     model=User,
     request_schema=UserProfileUpdateSchema,
-    response_schema=UserSchema, # Use UserSchema for full user object return
-    ownership_exempt_roles=[],
-    cache_timeout=0,
-    check_ownership=True
+    response_schema=UserSchema,
+    ownership_exempt_roles=[],  # Only the user themselves can update
+    cache_timeout=0,  # No caching for user profiles
+    log_action=True  # Log profile updates
 )
-def update_profile(user_id):
+@login_required
+def update_profile():
     """ Update user profile. """
-    # g.validated_data contains validated input
-    # g.target_object is the User object for the current user
-    try:
-        updated_user = user_service.update_profile(user_id, g.validated_data)
-        return updated_user # Decorator will serialize
-    except ValueError as e:
-        # Re-raise to be caught by api_resource_handler's error handling
-        raise e
+    # For profile updates, we work with the current user
+    user = current_user
+    
+    # Update user with validated data
+    for key, value in g.validated_data.items():
+        if hasattr(user, key) and key not in ['password', 'id']:  # Exclude sensitive fields
+            setattr(user, key, value)
+    
+    return user
 
 @account_bp.route('/change-password', methods=['POST'])
 @login_required
@@ -335,38 +343,52 @@ def get_addresses():
     return jsonify([address.to_dict() for address in addresses])
 
 @account_bp.route('/addresses', methods=['POST'])
-@login_required
-@api_resource_handler(
-    model=Address, # Creating an Address resource
-    request_schema=AddressSchema,
-    response_schema=AddressSchema,
-    ownership_exempt_roles=[], # User creates their own address
-    cache_timeout=0,
-    # check_ownership=True # Not applicable for creation, but can be used for update/delete later
-)
-def add_address():
-    """ Add a new address for the user. """
-    # g.validated_data contains address data
-    # current_user.id is available from login_required
-    address = address_service.create_address(user_id=current_user.id, data=g.validated_data)
-    return address # Return the created object for serialization
-
-@account_bp.route('/addresses/<int:address_id>', methods=['PUT'])
-@login_required
 @api_resource_handler(
     model=Address,
     request_schema=AddressSchema,
     response_schema=AddressSchema,
-    ownership_exempt_roles=[],
-    cache_timeout=0,
-    check_ownership=True # Crucial for addresses
+    ownership_exempt_roles=[],  # Only the user themselves can create
+    cache_timeout=0,  # No caching for addresses
+    log_action=True  # Log address creation
 )
+@login_required
+def add_address():
+    """ Add a new address for the user. """
+    # Create new address with validated data
+    address = Address()
+    address.user_id = current_user.id
+    for key, value in g.validated_data.items():
+        if hasattr(address, key):
+            setattr(address, key, value)
+    
+    db.session.add(address)
+    return address
+
+@account_bp.route('/addresses/<int:address_id>', methods=['PUT'])
+@api_resource_handler(
+    model=Address,
+    request_schema=AddressSchema,
+    response_schema=AddressSchema,
+    ownership_exempt_roles=[],  # Only the owner can update
+    cache_timeout=0,  # No caching for addresses
+    log_action=True  # Log address updates
+)
+@login_required
 def update_address(address_id):
     """ Update an existing address. """
-    # g.validated_data contains updated address data (partial=True handled by schema)
-    # user_id is implicit from login_required and check_ownership
-    address = address_service.update_address(address_id=address_id, user_id=current_user.id, data=g.validated_data)
-    return address # Return updated address for serialization
+    # Address is already fetched and validated by decorator
+    address = g.target_object
+    
+    # Verify ownership
+    if address.user_id != current_user.id:
+        raise AuthorizationException("You do not have permission to update this address")
+    
+    # Update address with validated data
+    for key, value in g.validated_data.items():
+        if hasattr(address, key):
+            setattr(address, key, value)
+    
+    return address
 
 @account_bp.route('/addresses/<int:address_id>', methods=['DELETE'])
 @login_required

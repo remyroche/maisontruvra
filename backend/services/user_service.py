@@ -3,14 +3,11 @@ from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
-from flask import current_app, request, g  # Ensure request is imported
+from flask import current_app, request, g
 from flask_jwt_extended import get_jwt_identity
-from backend.models.b2b_models import B2BUser  # Add this import
-from backend.services.audit_log_service import AuditLogService
-from backend.utils.input_sanitizer import sanitize_input
-from backend.models import db, User, Address, UserRole
+from backend.models import User, Address, UserRole
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
-from backend.database import db_session as session
+from backend.extensions import db
 
 
 class UserService:
@@ -21,7 +18,7 @@ class UserService:
     def get_user_by_id(self, user_id):
         """Retrieves a user by their ID."""
         try:
-            return session.query(User).get(user_id)
+            return db.session.query(User).get(user_id)
         except SQLAlchemyError as e:
             self.logger.error(f"Error retrieving user by ID {user_id}: {e}")
             raise
@@ -29,7 +26,7 @@ class UserService:
     def get_user_by_email(self, email):
         """Retrieves a user by their email address."""
         try:
-            return session.query(User).filter_by(email=email).first()
+            return db.session.query(User).filter_by(email=email).first()
         except SQLAlchemyError as e:
             self.logger.error(f"Error retrieving user by email {email}: {e}")
             raise
@@ -56,12 +53,12 @@ class UserService:
                 is_active=False, # Remains inactive
                 is_guest=True
             )
-            session.add(guest_user)
-            session.commit()
+            db.session.add(guest_user)
+            db.session.commit()
             self.logger.info(f"Created new guest user account for {email}.")
             return guest_user
         except (SQLAlchemyError, IntegrityError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error creating guest user for {email}: {e}")
             raise
 
@@ -73,19 +70,19 @@ class UserService:
                 user.email = profile_data.get('email', user.email)
                 user.first_name = profile_data.get('first_name', user.first_name)
                 user.last_name = profile_data.get('last_name', user.last_name)
-                session.commit()
+                db.session.commit()
                 self.logger.info(f"User profile for {user_id} updated.")
                 return user
             return None
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error updating profile for user {user_id}: {e}")
             raise
 
     def get_user_addresses(self, user_id):
         """Retrieves all addresses for a given user."""
         try:
-            return session.query(Address).filter_by(user_id=user_id).all()
+            return db.session.query(Address).filter_by(user_id=user_id).all()
         except SQLAlchemyError as e:
             self.logger.error(f"Error retrieving addresses for user {user_id}: {e}")
             raise
@@ -112,9 +109,9 @@ class UserService:
             raise ValueError("User not found")
 
         if 'first_name' in data:
-            user.first_name = sanitize_input(data['first_name'])
+            user.first_name = InputSanitizer.sanitize_input(data['first_name'])
         if 'last_name' in data:
-            user.last_name = sanitize_input(data['last_name'])
+            user.last_name = InputSanitizer.sanitize_input(data['last_name'])
         if 'email' in data:
             new_email = data['email'].lower()
             if new_email != user.email:
@@ -223,9 +220,9 @@ class UserService:
 
     def update_user_language(self, user_id, language, user_type='b2c'):
         if user_type == 'b2c':
-            user = self.session.get(User, user_id)
+            user = self.db.session.get(User, user_id)
         else:
-            user = self.session.get(B2BUser, user_id)
+            user = self.db.session.get(B2BUser, user_id)
             
         if not user:
             raise ValueError("User not found")
@@ -233,7 +230,7 @@ class UserService:
             raise ValueError("Unsupported language")
             
         user.language = language
-        self.session.commit()
+        self.db.session.commit()
         return user
     
 
@@ -264,3 +261,10 @@ class UserService:
             db.session.rollback()
             MonitoringService.log_info(f"User created successfully: {user.email} (ID: {user.id})", "UserService")
             raise ValidationException(f"Failed to delete user: {str(e)}")
+
+
+# Standalone functions for backward compatibility
+def get_user_by_id(user_id):
+    """Standalone function to get user by ID"""
+    service = UserService()
+    return service.get_user_by_id(user_id)

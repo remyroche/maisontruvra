@@ -4,27 +4,23 @@ from .enums import OrderStatus
 
 class Order(BaseModel, SoftDeleteMixin):
     __tablename__ = 'orders'
-    id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
     guest_email = db.Column(db.String(120), nullable=True)
     guest_phone = db.Column(db.String(20), nullable=True)
-    status = db.Column(db.String(50), nullable=False, default='pending')
-
+    
+    # B2B functionality
     b2b_account_id = db.Column(db.Integer, db.ForeignKey('b2b_accounts.id'), nullable=True)
-    b2b_account = db.relationship('B2BAccount', backref='orders')
-
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    creator_ip_address = db.Column(db.String(45), nullable=True)
+    
     total_cost = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
     shipping_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'), nullable=True)
     
-    # Link to the B2B Account instead of the individual user
-    b2b_account_id = db.Column(db.Integer, db.ForeignKey('b2b_account.id'), nullable=True)
-    
-    # Store the specific user who created the order
-    created_by_user_id = db.Column(db.Integer, db.ForeignKey('b2b_user.id'), nullable=True)
-    creator_ip_address = db.Column(db.String(45), nullable=True)
-    b2b_account = db.relationship('B2BAccount', backref=db.backref('orders', lazy=True))
-    created_by = db.relationship('B2BUser', backref=db.backref('orders_created', lazy=True))
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id])
+    b2b_account = db.relationship('B2BAccount', backref='orders')
+    created_by = db.relationship('User', foreign_keys=[created_by_user_id])
 
     items = db.relationship('OrderItem', back_populates='order', cascade="all, delete-orphan")
     shipping_address = db.relationship('Address')

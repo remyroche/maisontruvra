@@ -1,4 +1,5 @@
-from .base import Base, db, SoftDeleteMixin, BaseModel
+from .base import BaseModel, SoftDeleteMixin
+from backend.extensions import db
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLAlchemyEnum
 from sqlalchemy.orm import relationship
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -6,13 +7,9 @@ from .enums import UserType, UserStatus, NotificationFrequency, RoleType
 import datetime
 from backend.utils.encryption import decrypt_data, encrypt_data
 from sqlalchemy.ext.hybrid import hybrid_property
+import enum
 
-class UserType(enum.Enum):
-    B2C = "B2C"
-    B2B = "B2B"
-    Staff = "Staff"
-    
-class User(Base):
+class User(BaseModel):
     """
     Represents a user of the application.
     This model stores authentication details and personal information for both B2C and B2B customers.

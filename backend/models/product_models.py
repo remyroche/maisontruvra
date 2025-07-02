@@ -1,7 +1,6 @@
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
-from backend.models.base import Base
-from backend.database import db
+from backend.extensions import db
 from .base import BaseModel, SoftDeleteMixin
 
 
@@ -11,21 +10,9 @@ product_tier_visibility = db.Table('product_tier_visibility',
     db.Column('tier_id', db.Integer, db.ForeignKey('loyalty_tiers.id'), primary_key=True)
 )
 
-class StockNotificationRequest(BaseModel):
-    __tablename__ = 'stock_notification_requests'
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
-    product_id = db.Column(UUID(as_uuid=True), db.ForeignKey('products.id'), nullable=False)
-    
-    user = db.relationship('User')
-    product = db.relationship('Product')
-    
-    __table_args__ = (db.UniqueConstraint('user_id', 'product_id', name='_user_product_uc'),)
-
 
 class Product(BaseModel, SoftDeleteMixin):
     __tablename__ = 'products'
-    id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     slug = db.Column(db.String(100), unique=True, nullable=False, index=True)
     description = db.Column(db.Text, nullable=True)

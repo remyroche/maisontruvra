@@ -136,8 +136,8 @@ class POSService:
         try:
             # Create a new, empty cart for this transaction
             cart = Cart(user_id=user_id)
-            session.add(cart)
-            session.flush()
+            db.session.add(cart)
+            db.session.flush()
 
             for item_data in items_data:
                 price = item_data['price']
@@ -164,14 +164,14 @@ class POSService:
                     quantity=quantity,
                     price=price
                 )
-                session.add(cart_item)
+                db.session.add(cart_item)
 
-            session.commit()
+            db.session.commit()
             self.logger.info(f"POS Service created new cart {cart.id} for user {user_id} with custom items.")
             return cart
 
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error creating custom cart via POS service for user {user_id}: {e}")
             raise
             

@@ -22,11 +22,11 @@ from argon2.exceptions import VerifyMismatchError, InvalidHash
 from ..services.exceptions import ValidationError
 from backend.services.exceptions import UserAlreadyExistsError, InvalidCredentialsError
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
-from backend.utils.input_sanitizer import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.encryption import hash_password, check_password
 from sqlalchemy.exc import SQLAlchemyError
-from backend.database import db_session as session
-from backend.models import db, User, Role, UserRole
+from backend.extensions import db
+from backend.models import User, Role, UserRole
 from backend.services.email_service import EmailService
 from backend.services.user_service import UserService
 from backend.services.referral_service import ReferralService
@@ -49,7 +49,7 @@ class AuthService:
         Registers a new user, hashes their password, and sends a verification email.
         """
         try:
-            if session.query(User).filter_by(email=user_data['email']).first():
+            if db.session.query(User).filter_by(email=user_data['email']).first():
                 raise ValueError("User with this email already exists.")
 
             hashed_password = hash_password(user_data['password'])
@@ -60,15 +60,15 @@ class AuthService:
                 last_name=user_data.get('last_name'),
                 is_active=False  # User is inactive until email is verified
             )
-            session.add(user)
-            session.commit()
+            db.session.add(user)
+            db.session.commit()
 
             # Assign default role
-            default_role = session.query(Role).filter_by(name='user').first()
+            default_role = db.session.query(Role).filter_by(name='user').first()
             if default_role:
                 user_role = UserRole(user_id=user.id, role_id=default_role.id)
-                session.add(user_role)
-                session.commit()
+                db.session.add(user_role)
+                db.session.commit()
 
             # Send verification email
             token = self.generate_verification_token(user.email)
@@ -81,7 +81,7 @@ class AuthService:
             self.logger.info(f"User {user.email} registered successfully. Verification email sent.")
             return user
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error during user registration: {e}")
             raise
     def authenticate_user(self, email, password):
@@ -114,7 +114,7 @@ class AuthService:
             if user:
                 user.is_active = True
                 user.email_verified_at = db.func.now()
-                session.commit()
+                db.session.commit()
                 self.logger.info(f"Email verified successfully for user: {email}")
                 return user
             return None
@@ -127,7 +127,7 @@ class AuthService:
         user = self.user_service.get_user_by_id(user_id)
         if user and check_password(old_password, user.password_hash):
             user.password_hash = hash_password(new_password)
-            session.commit()
+            db.session.commit()
             self.logger.info(f"Password changed for user {user_id}.")
             return True
         self.logger.warning(f"Failed password change attempt for user {user_id}.")
@@ -152,7 +152,7 @@ class AuthService:
             user = self.user_service.get_user_by_email(email)
             if user:
                 user.password_hash = hash_password(new_password)
-                session.commit()
+                db.session.commit()
                 self.logger.info(f"Password has been reset for {email}.")
                 return True
             return False
@@ -212,7 +212,7 @@ class AuthService:
             if datetime.now() > session["expires_at"]:
                 del self.sessions[session_token]
                 MonitoringService.log_security_event(
-                    f"Expired session removed for user: {session.get('email', 'unknown')}",
+                    f"Expired session removed for user: {db.session.get('email', 'unknown')}",
                     "AuthService"
                 )
                 return None
@@ -504,10 +504,10 @@ class AuthService:
     @staticmethod
     def verify_and_complete_login(mfa_token):
         """
-        Verifies the MFA token for a user with a pending session.
+        Verifies the MFA token for a user with a pending db.session.
         If successful, it "upgrades" the session to be fully authenticated.
         """
-        user_id = session.get('mfa_pending_user_id')
+        user_id = db.session.get('mfa_pending_user_id')
         if not user_id:
             raise ServiceError("No MFA login attempt is pending.", 401)
 
@@ -520,7 +520,7 @@ class AuthService:
             # Success! Now we can fully log the user in. # Corrected: login_user was not defined
             login_user(user)
             session['mfa_authenticated'] = True
-            session.pop('mfa_pending_user_id', None) # Clean up the pending key
+            db.session.pop('mfa_pending_user_id', None) # Clean up the pending key
             MonitoringService.log_security_event(
                 f"MFA successful for user {user.email}",
                 "AuthService"

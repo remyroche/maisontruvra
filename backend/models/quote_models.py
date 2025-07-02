@@ -1,10 +1,9 @@
-from backend.models.base import Base
+from backend.models.base import BaseModel
 from backend.extensions import db
 from datetime import datetime, timedelta
 
-class Quote(Base):
+class Quote(BaseModel):
     __tablename__ = 'quotes'
-    id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     status = db.Column(db.String(50), default='pending') # pending, responded, accepted, expired
     responded_at = db.Column(db.DateTime, nullable=True)
@@ -16,9 +15,8 @@ class Quote(Base):
     def set_expiry(self, days=7):
         self.expires_at = datetime.utcnow() + timedelta(days=days)
 
-class QuoteItem(Base):
+class QuoteItem(BaseModel):
     __tablename__ = 'quote_items'
-    id = db.Column(db.Integer, primary_key=True)
     quote_id = db.Column(db.Integer, db.ForeignKey('quotes.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)

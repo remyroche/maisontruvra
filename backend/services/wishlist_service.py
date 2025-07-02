@@ -32,13 +32,13 @@ class WishlistService:
     """Service for managing user wishlists"""
     def get_wishlist(self, user_id):
         safe_user_id = InputSanitizer.sanitize_integer(user_id)
-        return self.db_session.query(Wishlist).filter_by(user_id=safe_user_id).first()
+        return self.db_db.session.query(Wishlist).filter_by(user_id=safe_user_id).first()
 
     @staticmethod
     def get_wishlist_items(user_id):
         """Get all wishlist items for a user"""
         try:
-            user_id = InputSanitizer.InputSanitizer.sanitize_input(user_id)
+            user_id = InputSanitizer.sanitize_input(user_id)
             
             # Verify user exists
             user = User.query.get(user_id)
@@ -80,8 +80,8 @@ class WishlistService:
     def add_to_wishlist(user_id, product_id):
         """Add a product to user's wishlist"""
         try:
-            user_id = InputSanitizer.InputSanitizer.sanitize_input(user_id)
-            product_id = InputSanitizer.InputSanitizer.sanitize_input(product_id)
+            user_id = InputSanitizer.sanitize_input(user_id)
+            product_id = InputSanitizer.sanitize_input(product_id)
             
             # Verify user exists
             user = User.query.get(user_id)
@@ -150,8 +150,8 @@ class WishlistService:
     def remove_from_wishlist(user_id, product_id):
         """Remove a product from user's wishlist"""
         try:
-            user_id = InputSanitizer.InputSanitizer.sanitize_input(user_id)
-            product_id = InputSanitizer.InputSanitizer.sanitize_input(product_id)
+            user_id = InputSanitizer.sanitize_input(user_id)
+            product_id = InputSanitizer.sanitize_input(product_id)
             
             # Find the wishlist item
             wishlist_item = WishlistItem.query.filter_by(
@@ -190,7 +190,7 @@ class WishlistService:
     def clear_wishlist(user_id):
         """Clear all items from user's wishlist"""
         try:
-            user_id = InputSanitizer.InputSanitizer.sanitize_input(user_id)
+            user_id = InputSanitizer.sanitize_input(user_id)
             
             # Verify user exists
             user = User.query.get(user_id)
@@ -225,8 +225,8 @@ class WishlistService:
     def is_in_wishlist(user_id, product_id):
         """Check if a product is in user's wishlist"""
         try:
-            user_id = InputSanitizer.InputSanitizer.sanitize_input(user_id)
-            product_id = InputSanitizer.InputSanitizer.sanitize_input(product_id)
+            user_id = InputSanitizer.sanitize_input(user_id)
+            product_id = InputSanitizer.sanitize_input(product_id)
             
             wishlist_item = WishlistItem.query.filter_by(
                 user_id=user_id,
@@ -243,7 +243,7 @@ class WishlistService:
     def get_wishlist_count(user_id):
         """Get the count of items in user's wishlist"""
         try:
-            user_id = InputSanitizer.InputSanitizer.sanitize_input(user_id)
+            user_id = InputSanitizer.sanitize_input(user_id)
             
             count = WishlistItem.query.filter_by(user_id=user_id).count()
             return count

@@ -1,9 +1,8 @@
-from backend.models.base import Base
+from backend.models.base import BaseModel
 from backend.extensions import db
 
-class Cart(Base):
+class Cart(BaseModel):
     __tablename__ = 'carts'
-    id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) # Can be null for guest carts
     discount_id = db.Column(db.Integer, db.ForeignKey('discounts.id'), nullable=True)
 
@@ -11,9 +10,8 @@ class Cart(Base):
     items = db.relationship('CartItem', back_populates='cart', cascade="all, delete-orphan")
     discount = db.relationship('Discount')
 
-class CartItem(Base):
+class CartItem(BaseModel):
     __tablename__ = 'cart_items'
-    id = db.Column(db.Integer, primary_key=True)
     cart_id = db.Column(db.Integer, db.ForeignKey('carts.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     quantity = db.Column(db.Integer, default=1)

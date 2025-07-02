@@ -13,7 +13,7 @@ from backend.services.email_service import EmailService
 from backend.services.pos_service import POSService # Changed import
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
-from backend.database import db_session as session
+from backend.extensions import db
 
 class QuoteService:
     def __init__(self, logger):
@@ -34,7 +34,7 @@ class QuoteService:
             # Prepare item data for the POS service
             items_for_pos = []
             for item_response in response_data['items']:
-                quote_item = session.query(QuoteItem).get(item_response['item_id'])
+                quote_item = db.session.query(QuoteItem).get(item_response['item_id'])
                 if not quote_item or quote_item.quote_id != quote.id:
                     continue
                 
@@ -57,13 +57,13 @@ class QuoteService:
 
             quote.status = 'accepted'
             quote.responded_at = datetime.utcnow()
-            session.commit()
+            db.session.commit()
 
             self.logger.info(f"Quote {quote_id} processed. POS service created cart for user {quote.user_id}.")
             return quote
 
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error in quote response for quote {quote_id}: {e}")
             raise
 
@@ -77,8 +77,8 @@ class QuoteService:
         """Creates a new quote request for a B2B user."""
         try:
             quote = Quote(user_id=user_id, status='pending')
-            session.add(quote)
-            session.flush()
+            db.session.add(quote)
+            db.session.flush()
 
             for item in items_data:
                 quote_item = QuoteItem(
@@ -86,14 +86,14 @@ class QuoteService:
                     product_id=item['product_id'],
                     quantity=item['quantity']
                 )
-                session.add(quote_item)
+                db.session.add(quote_item)
             
-            session.commit()
+            db.session.commit()
             self.logger.info(f"Quote request {quote.id} created for user {user_id}.")
             # TODO: Notify admin of new quote request
             return quote
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error creating quote request for user {user_id}: {e}")
             raise
 
@@ -105,21 +105,21 @@ class QuoteService:
                 raise ValueError("Quote not found.")
 
             for item_response in response_data['items']:
-                quote_item = session.query(QuoteItem).filter_by(id=item_response['item_id'], quote_id=quote_id).first()
+                quote_item = db.session.query(QuoteItem).filter_by(id=item_response['item_id'], quote_id=quote_id).first()
                 if quote_item:
                     quote_item.response_price = item_response['price']
 
             quote.status = 'responded'
             quote.responded_at = datetime.utcnow()
             quote.set_expiry(days=response_data.get('valid_for_days', 7))
-            session.commit()
+            db.session.commit()
 
             # Notify B2B user that their quote has a response
             # self.email_service.send_email(...)
             self.logger.info(f"Admin responded to quote {quote_id}.")
             return quote
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error responding to quote {quote_id}: {e}")
             raise
 
@@ -136,7 +136,7 @@ class QuoteService:
             user_id = quote.user_id
 
             for item_response in response_data['items']:
-                quote_item = session.query(QuoteItem).filter_by(id=item_response['item_id'], quote_id=quote_id).first()
+                quote_item = db.session.query(QuoteItem).filter_by(id=item_response['item_id'], quote_id=quote_id).first()
                 if not quote_item:
                     continue
 
@@ -165,7 +165,7 @@ class QuoteService:
 
             quote.status = 'accepted' # The quote is now considered fulfilled
             quote.responded_at = datetime.utcnow()
-            session.commit()
+            db.session.commit()
 
             # TODO: Notify B2B user that items have been added to their cart
             # self.email_service.send_email(...)
@@ -174,14 +174,14 @@ class QuoteService:
             return quote
 
         except (SQLAlchemyError, ValueError, PermissionError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error in respond_and_add_to_cart for quote {quote_id}: {e}")
             raise
 
     
             
     def get_quote_by_id(self, quote_id):
-        return session.query(Quote).options(
+        return db.session.query(Quote).options(
             joinedload(Quote.items).joinedload(QuoteItem.product),
             joinedload(Quote.user)
         ).filter_by(id=quote_id).first()
@@ -190,7 +190,7 @@ class QuoteService:
     def update_quote(quote_id, data):
         """Update a quote"""
         try:
-            quote_id = InputSanitizer.InputSanitizer.sanitize_input(quote_id)
+            quote_id = InputSanitizer.sanitize_input(quote_id)
             
             quote = Quote.query.get(quote_id)
             if not quote:
@@ -198,11 +198,11 @@ class QuoteService:
             
             # Update fields
             if 'total_amount' in data:
-                quote.total_amount = float(InputSanitizer.InputSanitizer.sanitize_input(data['total_amount']))
+                quote.total_amount = float(InputSanitizer.sanitize_input(data['total_amount']))
             if 'notes' in data:
-                quote.notes = InputSanitizer.InputSanitizer.sanitize_input(data['notes'])
+                quote.notes = InputSanitizer.sanitize_input(data['notes'])
             if 'status' in data:
-                quote.status = InputSanitizer.InputSanitizer.sanitize_input(data['status'])
+                quote.status = InputSanitizer.sanitize_input(data['status'])
             
             quote.updated_at = datetime.utcnow()
             
@@ -232,7 +232,7 @@ class QuoteService:
     def delete_quote(quote_id):
         """Delete a quote"""
         try:
-            quote_id = InputSanitizer.InputSanitizer.sanitize_input(quote_id)
+            quote_id = InputSanitizer.sanitize_input(quote_id)
             
             quote = Quote.query.get(quote_id)
             if not quote:
@@ -269,7 +269,7 @@ class QuoteService:
     def approve_quote(quote_id):
         """Approve a quote"""
         try:
-            quote_id = InputSanitizer.InputSanitizer.sanitize_input(quote_id)
+            quote_id = InputSanitizer.sanitize_input(quote_id)
             
             quote = Quote.query.get(quote_id)
             if not quote:
@@ -307,8 +307,8 @@ class QuoteService:
     def reject_quote(quote_id, reason=None):
         """Reject a quote"""
         try:
-            quote_id = InputSanitizer.InputSanitizer.sanitize_input(quote_id)
-            reason = InputSanitizer.InputSanitizer.sanitize_input(reason) if reason else None
+            quote_id = InputSanitizer.sanitize_input(quote_id)
+            reason = InputSanitizer.sanitize_input(reason) if reason else None
             
             quote = Quote.query.get(quote_id)
             if not quote:
@@ -348,7 +348,7 @@ class QuoteService:
     def get_quotes_by_account(b2b_account_id):
         """Get all quotes for a B2B account"""
         try:
-            b2b_account_id = InputSanitizer.InputSanitizer.sanitize_input(b2b_account_id)
+            b2b_account_id = InputSanitizer.sanitize_input(b2b_account_id)
             
             quotes = Quote.query.filter_by(b2b_account_id=b2b_account_id)\
                               .order_by(Quote.created_at.desc()).all()

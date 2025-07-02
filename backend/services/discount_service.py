@@ -11,12 +11,12 @@ from ..services.exceptions import DiscountInvalidException
 from backend.utils.input_sanitizer import sanitize_plaintext
 
 from backend.database import db
-from backend.utils.input_sanitizer import sanitize_input
+from backend.utils.input_sanitizer import InputSanitizer
 from flask import current_app
 
-from backend.models import db, Discount, Order
+from backend.models import Discount, Order
 from sqlalchemy.exc import SQLAlchemyError
-from backend.database import db_session as session
+from backend.extensions import db
 from datetime import datetime
 
 CACHE_TTL_SECONDS = 600
@@ -47,22 +47,22 @@ class DiscountService:
         """Creates a new discount."""
         try:
             discount = Discount(**discount_data)
-            session.add(discount)
-            session.commit()
+            db.session.add(discount)
+            db.session.commit()
             self.logger.info(f"Discount '{discount.code}' created successfully.")
             return discount
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error creating discount: {e}")
             raise
 
     def get_discount_by_code(self, code):
         """Retrieves a discount by its code."""
-        return session.query(Discount).filter_by(code=code).first()
+        return db.session.query(Discount).filter_by(code=code).first()
 
     def get_all_discounts(self):
         """Retrieves all discounts."""
-        return session.query(Discount).all()
+        return db.session.query(Discount).all()
 
     def is_discount_valid(self, discount):
         """Checks if a discount is active, not expired, and has uses left."""
@@ -81,48 +81,48 @@ class DiscountService:
         """
         try:
             # Lock the row for update to prevent race conditions
-            discount = session.query(Discount).with_for_update().filter_by(id=discount_id).first()
+            discount = db.session.query(Discount).with_for_update().filter_by(id=discount_id).first()
             
             if discount and discount.max_uses is not None:
                 discount.times_used = (discount.times_used or 0) + 1
                 if discount.times_used > discount.max_uses:
                     self.logger.warning(f"Discount {discount_id} usage has now exceeded its max limit.")
-                session.commit()
+                db.session.commit()
                 self.logger.info(f"Usage recorded for discount {discount_id}.")
             
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error recording usage for discount {discount_id}: {e}")
             raise
 
     def update_discount(self, discount_id, update_data):
         """Updates an existing discount."""
         try:
-            discount = session.query(Discount).get(discount_id)
+            discount = db.session.query(Discount).get(discount_id)
             if discount:
                 for key, value in update_data.items():
                     setattr(discount, key, value)
-                session.commit()
+                db.session.commit()
                 self.logger.info(f"Discount {discount_id} updated.")
                 return discount
             return None
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error updating discount {discount_id}: {e}")
             raise
 
     def delete_discount(self, discount_id):
         """Deletes a discount."""
         try:
-            discount = session.query(Discount).get(discount_id)
+            discount = db.session.query(Discount).get(discount_id)
             if discount:
-                session.delete(discount)
-                session.commit()
+                db.session.delete(discount)
+                db.session.commit()
                 self.logger.info(f"Discount {discount_id} deleted.")
                 return True
             return False
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error deleting discount {discount_id}: {e}")
             raise
 

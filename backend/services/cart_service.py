@@ -13,7 +13,7 @@ from backend.models import UserType
 from decimal import Decimal
 from backend.models import db, Cart, CartItem, Product, User, UserType
 from sqlalchemy.orm import joinedload
-from backend.database import db_session as session
+from backend.extensions import db
 from .exceptions import ProductNotFoundError, InsufficientStockError
 
 class CartService:
@@ -24,7 +24,7 @@ class CartService:
         """
         Retrieves a user's cart and calculates prices, including B2B tier discounts.
         """
-        user = session.query(User).options(
+        user = db.session.query(User).options(
             joinedload(User.tier),
             joinedload(User.carts).joinedload(Cart.items).joinedload(CartItem.product)
         ).get(user_id)
@@ -36,8 +36,8 @@ class CartService:
         if not cart:
             # Create a cart if one doesn't exist
             cart = Cart(user_id=user.id)
-            session.add(cart)
-            session.commit()
+            db.session.add(cart)
+            db.session.commit()
             return {'cart': cart, 'items_details': [], 'subtotal': 0, 'total': 0, 'tier_discount': 0}
 
         items_details = []
@@ -145,7 +145,7 @@ class CartService:
         """
         Adds an item to a user's cart. Includes ownership check for exclusive products.
         """
-        product = session.query(Product).get(product_id)
+        product = db.session.query(Product).get(product_id)
         if not product:
             raise ProductNotFoundError("Product not found.")
 
@@ -154,14 +154,14 @@ class CartService:
             self.logger.warning(f"User {user_id} tried to add exclusive product {product_id} owned by {product.owner_id}.")
             raise PermissionError("This product is not available.")
 
-        cart = session.query(Cart).filter_by(user_id=user_id).first()
+        cart = db.session.query(Cart).filter_by(user_id=user_id).first()
         if not cart:
             cart = Cart(user_id=user_id)
-            session.add(cart)
-            session.flush()
+            db.session.add(cart)
+            db.session.flush()
 
         # Check if item is already in cart
-        cart_item = session.query(CartItem).filter_by(cart_id=cart.id, product_id=product_id).first()
+        cart_item = db.session.query(CartItem).filter_by(cart_id=cart.id, product_id=product_id).first()
         if cart_item:
             cart_item.quantity += quantity
         else:
@@ -171,9 +171,9 @@ class CartService:
                 quantity=quantity,
                 price=custom_price if custom_price is not None else product.price
             )
-            session.add(cart_item)
+            db.session.add(cart_item)
         
-        session.commit()
+        db.session.commit()
         self.logger.info(f"Added/updated product {product_id} in cart for user {user_id}.")
         return cart
 

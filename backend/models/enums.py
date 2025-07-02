@@ -1,5 +1,17 @@
 import enum
 
+class UserType(enum.Enum):
+    B2C = "B2C"
+    B2B = "B2B"
+    Staff = "Staff"
+
+class NotificationFrequency(enum.Enum):
+    NEVER = 'never'
+    INSTANT = 'instant'
+    DAILY = 'daily'
+    WEEKLY = 'weekly'
+    MONTHLY = 'monthly'
+
 class OrderStatus(enum.Enum):
     PENDING = 'pending'
     PROCESSING = 'processing'
@@ -12,6 +24,7 @@ class UserStatus(enum.Enum):
     ACTIVE = 'active'
     INACTIVE = 'inactive'
     SUSPENDED = 'suspended'
+    PENDING_VERIFICATION = 'pending_verification'
 
 class RoleType(enum.Enum):
     ADMIN = 'admin'

@@ -4,7 +4,7 @@ from backend.services.email_service import EmailService
 from backend.services.user_service import UserService
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
-from backend.database import db_session as session
+from backend.extensions import db
 from backend.utils.encryption import hash_password
 
 class B2BService:
@@ -18,20 +18,20 @@ class B2BService:
         Creates a B2B user account, which is initially pending approval.
         """
         try:
-            if session.query(B2BUser).filter_by(email=data['email']).first():
+            if db.session.query(User).filter_by(email=data['email']).first():
                 raise ValueError("B2B user with this email already exists.")
 
             hashed_password = hash_password(data['password'])
             
-            b2b_user = B2BUser(
+            b2b_user = User(
                 email=data['email'],
                 password_hash=hashed_password,
                 company_name=data['company_name'],
                 contact_person=data['contact_person'],
                 status='pending'
             )
-            session.add(b2b_user)
-            session.commit()
+            db.session.add(b2b_user)
+            db.session.commit()
 
             # Send email to admin for approval and to user for confirmation
             subject = "Your B2B Account Application is Pending Approval"
@@ -44,7 +44,7 @@ class B2BService:
             self.logger.info(f"B2B account created for {data['email']} and is pending approval.")
             return b2b_user
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error creating B2B account: {e}")
             raise
 
@@ -53,22 +53,22 @@ class B2BService:
         Approves a B2B user account and assigns the 'b2b_user' role.
         """
         try:
-            b2b_user = session.query(B2BUser).get(b2b_user_id)
+            b2b_user = db.session.query(User).get(b2b_user_id)
             if not b2b_user:
                 raise ValueError("B2B user not found.")
 
             b2b_user.status = 'approved'
             
             # Assign 'b2b_user' role
-            b2b_role = session.query(Role).filter_by(name='b2b_user').first()
+            b2b_role = db.session.query(Role).filter_by(name='b2b_user').first()
             if b2b_role:
                 # Check if role is already assigned
-                existing_role = session.query(UserRole).filter_by(user_id=b2b_user.id, role_id=b2b_role.id).first()
+                existing_role = db.session.query(UserRole).filter_by(user_id=b2b_user.id, role_id=b2b_role.id).first()
                 if not existing_role:
                     user_role = UserRole(user_id=b2b_user.id, role_id=b2b_role.id)
-                    session.add(user_role)
+                    db.session.add(user_role)
             
-            session.commit()
+            db.session.commit()
 
             # Send approval email
             subject = "Your B2B Account has been Approved!"
@@ -79,14 +79,14 @@ class B2BService:
             self.logger.info(f"B2B account {b2b_user.email} has been approved.")
             return b2b_user
         except (SQLAlchemyError, ValueError) as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error approving B2B account: {e}")
             raise
 
 
     def get_all_b2b_users(self):
         """Retrieves all B2B users."""
-        return session.query(B2BUser).all()
+        return db.session.query(User).all()
 
 
     # --- Tier Management Logic ---
@@ -99,30 +99,30 @@ class B2BService:
                 discount_percentage=Decimal(discount_percentage),
                 minimum_spend=Decimal(minimum_spend) if minimum_spend else None
             )
-            session.add(new_tier)
-            session.commit()
+            db.session.add(new_tier)
+            db.session.commit()
             self.logger.info(f"Created new B2B tier: {name}")
             return new_tier
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error creating tier '{name}': {e}")
             raise
 
     def get_all_tiers(self) -> list[Tier]:
         """Retrieves all tiers."""
-        return session.query(Tier).order_by(Tier.minimum_spend.asc()).all()
+        return db.session.query(Tier).order_by(Tier.minimum_spend.asc()).all()
 
     def assign_tier_to_user(self, user_id: int, tier_id: int) -> User:
         """Manually assigns a pricing tier to a B2B user."""
         user = self.user_service.get_user_by_id(user_id)
-        tier = session.query(Tier).get(tier_id)
+        tier = db.session.query(Tier).get(tier_id)
         if not user or not user.is_b2b:
             raise ValueError("User is not a B2B account.")
         if not tier:
             raise ValueError("Tier not found.")
         
         user.tier_id = tier_id
-        session.commit()
+        db.session.commit()
         self.logger.info(f"Assigned tier '{tier.name}' to user {user.email}.")
         return user
 
@@ -135,10 +135,10 @@ class B2BService:
         if not user or not user.is_b2b:
             return None
 
-        total_spend = session.query(func.sum(Order.total_price)).filter(Order.user_id == user_id).scalar() or Decimal('0.00')
+        total_spend = db.session.query(func.sum(Order.total_price)).filter(Order.user_id == user_id).scalar() or Decimal('0.00')
 
         # Find the highest applicable tier the user qualifies for
-        applicable_tier = session.query(Tier)\
+        applicable_tier = db.session.query(Tier)\
             .filter(Tier.minimum_spend <= total_spend)\
             .order_by(Tier.minimum_spend.desc())\
             .first()
@@ -146,6 +146,6 @@ class B2BService:
         if applicable_tier and user.tier_id != applicable_tier.id:
             self.logger.info(f"User {user.email} (spend: {total_spend}) qualifies for new tier '{applicable_tier.name}'. Updating.")
             user.tier_id = applicable_tier.id
-            session.commit()
+            db.session.commit()
         
         return user

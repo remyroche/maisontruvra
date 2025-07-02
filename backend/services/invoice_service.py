@@ -2,7 +2,7 @@
 import os
 from flask import current_app, render_template
 from backend.database import db
-from backend.models.b2b_models import B2BOrder
+from backend.models.order_models import Order
 from backend.models.invoice_models import Invoice
 from backend.models.order_models import Order, OrderStatus
 from backend.services.pdf_service import create_invoice_pdf
@@ -38,7 +38,7 @@ def generate_invoice_pdf_for_order(order_id):
 
 def generate_invoice_pdf_for_b2b_order(order_id):
     """Generates a PDF invoice for a given B2B order."""
-    order = B2BOrder.query.get(order_id)
+    order = Order.query.get(order_id)
     if not order:
         current_app.logger.warning(
             f"Could not generate invoice for B2B order {order_id}. Order not found."

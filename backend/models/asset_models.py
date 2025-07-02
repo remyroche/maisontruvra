@@ -1,12 +1,12 @@
-from .base import db
-import datetime
+from .base import BaseModel
+from backend.extensions import db
+from datetime import datetime
 
-class Asset(db.Model):
+class Asset(BaseModel):
     """
     Represents an uploaded file (e.g., an image) in the media library.
     """
     __tablename__ = 'assets'
-    id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(255), nullable=False, unique=True)
     # The public URL to access the file
     url = db.Column(db.String(512), nullable=False)
@@ -14,7 +14,6 @@ class Asset(db.Model):
     mime_type = db.Column(db.String(100), nullable=False)
     # Could be 'product_image', 'blog_post_hero', 'logo', etc.
     usage_tag = db.Column(db.String(50), index=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {

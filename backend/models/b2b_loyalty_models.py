@@ -74,29 +74,9 @@ class LoyaltyPointLog(BaseModel):
             'created_at': self.created_at.isoformat()
         }
 
-class Referral(BaseModel):
-    __tablename__ = 'referrals'
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    referrer_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
-    referred_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
-    referral_code = db.Column(db.String(50), unique=True, nullable=False)
-    status = db.Column(db.String(50), default='pending')  # pending, completed
-    
-    referrer = db.relationship('User', foreign_keys=[referrer_id])
-    referred = db.relationship('User', foreign_keys=[referred_id])
-
-    def to_dict(self):
-        return {
-            'id': str(self.id),
-            'referral_code': self.referral_code,
-            'status': self.status,
-            'referred_user_email': self.referred.email if self.referred else None,
-            'created_at': self.created_at.isoformat()
-        }
 
 class ReferralRewardTier(BaseModel):
     __tablename__ = 'referral_rewards'
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     referral_count = db.Column(db.Integer, unique=True, nullable=False)
     reward_description = db.Column(db.String(255), nullable=False)
 

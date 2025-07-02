@@ -36,7 +36,7 @@ class SessionService:
     @staticmethod
     def terminate_session(session_id: str, performing_user_id: int):
         """
-        Terminates a specific user session.
+        Terminates a specific user db.session.
         
         :param session_id: The ID of the session to terminate.
         :param performing_user_id: The ID of the admin performing the action (for auditing).

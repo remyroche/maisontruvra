@@ -1,10 +1,12 @@
 # backend/blog/routes.py
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, g
 from backend.schemas import BlogPostSchema, BlogCategorySchema
 from backend.services.blog_service import BlogService
 from backend.services.exceptions import NotFoundException
 from backend.extensions import cache
+from backend.models.blog_models import BlogPost, BlogCategory
+from backend.utils.decorators import api_resource_handler
 
 blog_bp = Blueprint('blog_bp', __name__, url_prefix='/blog')
 blog_service = BlogService()
@@ -29,19 +31,25 @@ def get_public_articles():
 
 
 @blog_bp.route('/articles/<string:slug>', methods=['GET'])
-@cache.cached(timeout=21600)
+@api_resource_handler(
+    model=BlogPost,
+    response_schema=BlogPostSchema,
+    ownership_exempt_roles=None,  # Public endpoint, no ownership checks
+    eager_loads=['author', 'category'],  # Eager load related data
+    cache_timeout=21600,  # 6 hour cache for blog articles
+    log_action=False,  # No need to log public blog views
+    lookup_field='slug'  # Use slug for lookup instead of ID
+)
 def get_public_article_by_slug(slug):
     """Public endpoint to get a single published blog article by slug."""
-    try:
-        article = blog_service.get_article_by_slug(slug)
-        if not article.is_published:
-            raise NotFoundException("Article not found.")
-        return jsonify(blog_post_schema.dump(article))
-    except NotFoundException:
-        return jsonify({'error': 'Article not found'}), 404
-    except Exception as e:
-        # Add logging for unexpected errors
-        return jsonify({"error": "An error occurred while fetching the article."}), 500
+    # Article is already fetched and validated by decorator
+    article = g.target_object
+    
+    # Check if article is published
+    if not article.is_published:
+        raise NotFoundException("Article not found.")
+    
+    return article
 
 
 @blog_bp.route('/categories', methods=['GET'])

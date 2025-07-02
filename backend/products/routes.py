@@ -3,13 +3,14 @@ from backend.services.product_service import ProductService
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.exceptions import NotFoundException, ValidationException
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from backend.extensions import cache
+from backend.extensions import cache, db
 import logging
 from backend.services.review_service import ReviewService
-from backend.schemas import ProductSearchSchema, ReviewSchema
-from flask import Blueprint, request, jsonify, current_app
+from backend.schemas import ProductSearchSchema, ReviewSchema, ProductSchema
+from flask import Blueprint, request, jsonify, current_app, g
 from backend.services.inventory_service import InventoryService
-from backend.schemas import ProductSchema
+from backend.models.product_models import Product, Review
+from backend.utils.decorators import api_resource_handler
 
 products_bp = Blueprint('products', __name__, url_prefix='/api/products')
 product_schema = ProductSchema()
@@ -81,26 +82,35 @@ def get_products():
 
 # READ a single product by its slug
 @products_bp.route('/<string:slug>', methods=['GET'])
-@cache.cached(timeout=21600)
+@api_resource_handler(
+    model=Product,
+    response_schema=ProductSchema,
+    ownership_exempt_roles=None,  # Public endpoint, no ownership checks
+    eager_loads=['variants', 'category', 'images', 'reviews'],  # Eager load related data
+    cache_timeout=21600,  # 6 hour cache for public product data
+    log_action=False,  # No need to log public product views
+    lookup_field='slug'  # Use slug for lookup instead of ID
+)
 def get_product_by_slug(slug):
     """
     Get detailed information for a single product by its slug.
     """
-    clean_slug = InputSanitizer.InputSanitizer.sanitize_input(slug)
-    product = ProductService.get_product_by_slug(clean_slug)
-    if not product:
-        return jsonify(status="error", message="Product not found"), 404
-        
-    return jsonify(status="success", data=product.to_dict_for_public()), 200
+    # Product is already fetched and validated by decorator
+    return g.target_object
 
 @products_bp.route('/<int:product_id>', methods=['GET'])
+@api_resource_handler(
+    model=Product,
+    response_schema=ProductSchema,
+    ownership_exempt_roles=None,  # Public endpoint, no ownership checks
+    eager_loads=['variants', 'category', 'images', 'reviews'],  # Eager load related data
+    cache_timeout=3600,  # 1 hour cache for public product data
+    log_action=False  # No need to log public product views
+)
 def get_product(product_id):
-    logger = current_app.logger
-    product_service = ProductService(logger)
-    product = product_service.get_product_by_id(product_id)
-    if product:
-        return jsonify(product_schema.dump(product)), 200
-    return jsonify({"error": "Product not found"}), 404
+    """Get detailed information for a single product by ID."""
+    # Product is already fetched and validated by decorator
+    return g.target_object
 
 @products_bp.route('/<int:product_id>/notify-me', methods=['POST'])
 def request_stock_notification(product_id):
@@ -154,6 +164,14 @@ def get_product_reviews(product_id):
 
 # CREATE a new review for a product
 @products_bp.route('/<int:product_id>/reviews', methods=['POST'])
+@api_resource_handler(
+    model=Review,
+    request_schema=ReviewSchema,
+    response_schema=ReviewSchema,
+    ownership_exempt_roles=None,  # Public endpoint, but requires auth
+    cache_timeout=0,  # No caching for review creation
+    log_action=True  # Log review creation
+)
 @jwt_required()
 def create_product_review(product_id):
     """
@@ -161,24 +179,27 @@ def create_product_review(product_id):
     """
     user_id = get_jwt_identity()
     
-    json_data = request.get_json()
-    if not json_data:
-        return jsonify(status="error", message="Invalid JSON data provided."), 400
+    # Verify product exists
+    product = Product.query.get(product_id)
+    if not product:
+        raise NotFoundException(f"Product with ID {product_id} not found.")
     
-    # Validate input using marshmallow schema
+    # Create new review with validated data
+    review = Review()
+    review.user_id = user_id
+    review.product_id = product_id
+    for key, value in g.validated_data.items():
+        if hasattr(review, key):
+            setattr(review, key, value)
+    
+    # Additional business logic can be handled here
+    # e.g., check if user has purchased the product
     try:
-        schema = ReviewSchema()
-        validated_data = schema.load(json_data)
-    except ValidationError as err:
-        return jsonify(status="error", message="Validation failed.", errors=err.messages), 400
-
-    try:
-        # The service layer should handle validation, e.g., if the user has purchased the product
-        new_review = ReviewService.create_review(user_id, product_id, validated_data['rating'], validated_data.get('comment'))
-        return jsonify(status="success", data=new_review.to_dict_for_public()), 201
+        # The service layer should handle validation
+        ReviewService.validate_review_creation(user_id, product_id)
     except ValueError as e:
-        return jsonify(status="error", message=str(e)), 400 # Catches validation errors
-    except Exception as e:
-        # Log error e
-        return jsonify(status="error", message="An error occurred while submitting your review."), 500
+        raise ValidationException(str(e))
+    
+    db.session.add(review)
+    return review
 

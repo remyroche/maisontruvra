@@ -16,7 +16,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from ..models import Category, Collection, product_tags
 from backend.utils.input_sanitizer import sanitize_html
 from sqlalchemy.exc import SQLAlchemyError
-from backend.database import db_session as session
+from backend.extensions import db
 
 from slugify import slugify
 
@@ -41,7 +41,7 @@ class ProductService:
         if products is None:
             products = Product.query.options(joinedload(Product.category)).order_by(Product.name).all()
             cache.set(cache_key, products, timeout=3600)  # Cache for 1 hour
-        return products
+            return products
 
 
         # --- User-based Filtering (Visibility & Tier Restrictions) ---
@@ -299,15 +299,15 @@ class ProductService:
                 price=price,
                 sku=unique_sku,
                 is_active=True, # Active so it can be ordered
-                is_quotable_only=True # Hidden from public shop
-                owner_id=owner_id # Assign ownership
-            )
-            session.add(quote_product)
-            session.commit()
+                is_quotable_only=True, # Hidden from public shop
+                owner_id=owner_id # Assign ownership)
+                )
+            db.session.add(quote_product)
+            db.session.commit()
             self.logger.info(f"Created hidden product '{name}' for a quote.")
             return quote_product
         except SQLAlchemyError as e:
-            session.rollback()
+            db.session.rollback()
             self.logger.error(f"Error creating product for quote: {e}")
             raise
 

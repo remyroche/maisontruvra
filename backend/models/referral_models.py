@@ -1,6 +1,5 @@
 from .base import BaseModel
 from datetime import datetime
-from backend.models.base import Base
 from backend.extensions import db
 
 
@@ -18,9 +17,8 @@ class Referral(db.Model):
     referrer = db.relationship('User', foreign_keys=[referrer_id], back_populates='referrals_made')
     referred = db.relationship('User', foreign_keys=[referred_id])
 
-class ReferralTier(Base):
+class ReferralTier(BaseModel):
     __tablename__ = 'referral_tiers'
-    id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
     min_referrals = db.Column(db.Integer, nullable=False)
     points_multiplier = db.Column(db.Float, default=1.0)

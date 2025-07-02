@@ -2,7 +2,7 @@
 This module defines the API endpoints for delivery method management in the admin panel.
 It leverages the @api_resource_handler to create clean, secure, and consistent CRUD endpoints.
 """
-from flask import Blueprint, request, g, jsonify
+from flask import Blueprint, request, g, jsonify, jwt_required, get_jwt_identity
 from ..models import DeliveryMethod
 from ..schemas import DeliveryMethodSchema
 from ..utils.decorators import api_resource_handler, roles_required
