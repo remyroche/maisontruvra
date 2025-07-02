@@ -1,6 +1,65 @@
 from backend.database import db
 from .base import BaseModel
 from datetime import datetime
+import uuid
+
+class Item(db.Model):
+    """
+    Represents a specific, sellable instance or batch of a Product.
+    This is the core of our inventory.
+    """
+    __tablename__ = 'items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # A unique identifier for this specific item/batch (e.g., for passports)
+    uid = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    
+    # Foreign key to the parent Product template
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    
+    # Optional foreign key to a Collection
+    collection_id = db.Column(db.Integer, db.ForeignKey('collections.id'), nullable=True)
+    
+    # --- Item-Specific, Potentially Overridden Fields ---
+    
+    # If null, the item uses the parent product's value. If set, it overrides it.
+    price = db.Column(db.Float, nullable=True) 
+    producer_notes = db.Column(db.Text, nullable=True)
+    pairing_suggestions = db.Column(db.Text, nullable=True)
+    
+    # --- Item-Specific Fields ---
+    
+    stock_quantity = db.Column(db.Integer, nullable=False, default=1)
+    creation_date = db.Column(db.Date, nullable=False, default=db.func.current_date())
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    
+    # Relationships
+    product = db.relationship('Product', backref='items')
+    collection = db.relationship('Collection', backref='items')
+
+    def to_dict(self):
+        """Serializes the Item object to a dictionary."""
+        # Use parent product's info as a fallback for overridable fields
+        final_price = self.price if self.price is not None else self.product.price
+        final_producer_notes = self.producer_notes if self.producer_notes is not None else self.product.producer_notes
+        final_pairing_suggestions = self.pairing_suggestions if self.pairing_suggestions is not None else self.product.pairing_suggestions
+
+        return {
+            'id': self.id,
+            'uid': self.uid,
+            'product_id': self.product_id,
+            'product_name': self.product.name,
+            'product_sku': self.product.sku,
+            'collection_id': self.collection_id,
+            'collection_name': self.collection.name if self.collection else None,
+            'price': final_price,
+            'producer_notes': final_producer_notes,
+            'pairing_suggestions': final_pairing_suggestions,
+            'stock_quantity': self.stock_quantity,
+            'creation_date': self.creation_date.isoformat(),
+            'is_active': self.is_active
+        }
 
 class Inventory(BaseModel):
     __tablename__ = 'inventories'
