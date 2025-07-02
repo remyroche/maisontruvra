@@ -3,6 +3,11 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from marshmallow import ValidationError
+from flask import Blueprint, request, jsonify
+from backend.services.auth_service import AuthService
+from backend.services.exceptions import AuthorizationException
+from backend.utils.decorators import login_required, b2c_user_required
+from backend.models.user_models import User
 
 from backend.database import db
 from backend.models.user_models import User
