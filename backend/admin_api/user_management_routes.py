@@ -23,57 +23,94 @@ from backend.utils.decorators import api_resource_handler, roles_required
 # --- Blueprint Setup ---
 bp = Blueprint('user_management', __name__, url_prefix='/api/admin/users')
 
-@bp.route('/', methods=['GET'])
-@jwt_required()
-@roles_required('Admin')
+from flask import Blueprint, jsonify, request
+from backend.services.user_service import UserService
+from backend.services.auth_service import AuthService
+from backend.services.exceptions import UserNotFoundException, UpdateException
+from backend.utils.decorators import admin_required
+from backend.schemas import UserUpdateSchema
+from pydantic import ValidationError
+
+user_management_bp = Blueprint('user_management_bp', __name__, url_prefix='/api/admin/users')
+
+user_service = UserService()
+auth_service = AuthService()
+
+@user_management_bp.route('/', methods=['GET'])
+@roles_required('Admin', 'Manager', 'Staff')
 def get_all_users():
     """
-    Retrieves a list of all users.
-    This route is kept separate as it operates on a list, not a single resource.
+    Retrieves all users.
+    Accessible only by admins.
     """
-    try:
-        # The service layer handles fetching all users, including soft-deleted ones if needed.
-        # We can add a query param to include/exclude soft-deleted users.
-        include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'
-        users = UserService.get_all_users(include_deleted=include_deleted)
-        return jsonify(UserSchema(many=True).dump(users)), 200
-    except ServiceException as e:
-        return jsonify(e.to_dict()), e.status_code
+    users = user_service.get_all_users_with_details()
+    return jsonify([user.to_dict() for user in users]), 200
 
-@bp.route('/', methods=['POST'])
-@jwt_required()
-@roles_required('Admin')
-@api_resource_handler(model=User, request_schema=UserSchema, response_schema=UserSchema, log_action=True)
-def create_user():
-    """
-    Creates a new user.
-    The decorator handles validation, session management, and response serialization.
-    """
-    # The service call handles the business logic (e.g., password hashing).
-    return UserService.create_user(g.validated_data)
-
-@bp.route('/<int:user_id>', methods=['GET'])
-@jwt_required()
-@roles_required('Admin')
-@api_resource_handler(model=User, response_schema=UserSchema, eager_loads=['roles'])
+@user_management_bp.route('/<user_id>', methods=['GET'])
+@roles_required('Admin', 'Manager', 'Staff')
 def get_user(user_id):
     """
     Retrieves a single user by their ID.
-    The decorator handles fetching and serialization.
+    Accessible only by admins.
     """
-    return g.target_object
+    try:
+        user = user_service.get_user_by_id(user_id)
+        return jsonify(user.to_dict()), 200
+    except UserNotFoundException as e:
+        return jsonify({"error": str(e)}), 404
 
-@bp.route('/<int:user_id>', methods=['PUT'])
-@jwt_required()
-@roles_required('Admin')
-@api_resource_handler(model=User, request_schema=UserSchema, response_schema=UserSchema, eager_loads=['roles'], log_action=True)
+@user_management_bp.route('/<user_id>', methods=['PUT'])
+@roles_required('Admin', 'Manager')
 def update_user(user_id):
     """
-    Updates an existing user's details.
-    The decorator fetches the user, validates input, and handles the response.
+    Updates a user's details.
+    Accessible only by admins.
     """
-    # The service call handles the specific update logic.
-    return UserService.update_user(g.target_object, g.validated_data)
+    data = request.get_json()
+    try:
+        UserUpdateSchema.model_validate(data)
+        user = user_service.update_user(user_id, data)
+        return jsonify(user.to_dict()), 200
+    except ValidationError as e:
+        return jsonify({"error": e.errors()}), 400
+    except (UserNotFoundException, UpdateException) as e:
+        return jsonify({"error": str(e)}), 404
+
+@user_management_bp.route('/<user_id>/deactivate', methods=['POST'])
+@roles_required('Admin', 'Manager')
+def deactivate_user_account(user_id):
+    """
+    Deactivates a user's account.
+    Accessible only by admins.
+    """
+    try:
+        user_service.deactivate_user(user_id)
+        return jsonify({"message": "User deactivated successfully"}), 200
+    except UserNotFoundException as e:
+        return jsonify({"error": str(e)}), 404
+
+@user_management_bp.route('/<user_id>/activity', methods=['GET'])
+@roles_required('Admin', 'Manager', 'Dev')
+def get_user_activity_log(user_id):
+    """
+    Retrieves the activity log for a specific user.
+    Accessible only by admins.
+    """
+    try:
+        activity = user_service.get_user_activity(user_id)
+        return jsonify(activity), 200
+    except UserNotFoundException as e:
+        return jsonify({"error": str(e)}), 404
+
+@user_management_bp.route('/roles', methods=['GET'])
+@roles_required('Admin', 'Manager', 'Staff')
+def get_roles():
+    """
+    Retrieves all available roles.
+    Accessible only by admins.
+    """
+    roles = auth_service.get_all_roles()
+    return jsonify([role.to_dict() for role in roles]), 200
 
 @bp.route('/<int:user_id>', methods=['DELETE'])
 @jwt_required()
