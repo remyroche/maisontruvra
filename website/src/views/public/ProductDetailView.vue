@@ -44,7 +44,10 @@
                 <label for="quantity" class="text-sm font-medium text-gray-900">Quantité:</label>
                 <input type="number" id="quantity" v-model.number="quantity" min="1" :max="product.stock" class="w-20 rounded-md border-gray-300 text-center">
               </div>
-              <button type="submit" class="mt-6 flex w-full items-center justify-center rounded-md border border-transparent bg-indigo-600 px-8 py-3 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Ajouter au panier</button>
+               <div class="mt-6 flex items-center space-x-4">
+                <button type="submit" class="flex-1 flex w-full items-center justify-center rounded-md border border-transparent bg-indigo-600 px-8 py-3 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Ajouter au panier</button>
+                <AddToWishlistButton v-if="userStore.isAuthenticated" :product-id="product.id" />
+              </div>
               <p class="text-sm text-center text-gray-500 mt-2">{{ product.stock }} en stock</p>
             </div>
             
@@ -110,15 +113,19 @@ import { onMounted, computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { useProductStore } from '@/stores/products';
 import { useCartStore } from '@/stores/cart';
+import { useUserStore } from '@/stores/user'; // Import user store
 import { useCurrencyFormatter } from '@/composables/useCurrencyFormatter';
 import StockNotificationForm from '@/components/products/StockNotificationForm.vue';
 import ProductReviews from '@/components/products/ProductReviews.vue';
+import AddToWishlistButton from '@/components/products/AddToWishlistButton.vue'; // Import wishlist button
+
 // Assuming you have a notification store for user feedback
 // import { useNotificationStore } from '@/stores/notification';
 
 const route = useRoute();
 const productStore = useProductStore();
 const cartStore = useCartStore();
+const userStore = useUserStore(); // Initialize user store
 // const notificationStore = useNotificationStore();
 const { formatCurrency } = useCurrencyFormatter();
 
