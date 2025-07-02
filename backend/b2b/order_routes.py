@@ -11,6 +11,19 @@ from sqlalchemy.orm import joinedload, subqueryload
 
 order_routes = Blueprint('admin_order_routes', __name__, url_prefix='/api/admin/orders')
 
+@b2b_order_bp.route('/', methods=['POST'])
+@jwt_required()
+@api_resource_handler(model=Order, request_schema=B2BOrderCreationSchema, response_schema=OrderSchema, log_action=True)
+def create_b2b_order():
+    """
+    Creates a new B2B order.
+    The decorator handles input validation and response serialization.
+    The service call is retained to perform complex business logic.
+    """
+    user_id = get_jwt_identity()
+    new_order = B2BService.create_order(user_id, g.validated_data)
+    return new_order
+
 @order_routes.route('/orders', methods=['GET'])
 @permissions_required('MANAGE_ORDERS')
 @roles_required ('Admin', 'Manager', 'Support')
