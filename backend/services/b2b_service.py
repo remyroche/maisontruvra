@@ -7,12 +7,14 @@ from sqlalchemy import func
 from backend.extensions import db
 from backend.utils.encryption import hash_password
 from backend.models.enums import RoleType
+from backend.services.audit_log_service import AuditLogService
 
 class B2BService:
     def __init__(self, logger):
         self.logger = logger
         self.email_service = EmailService(logger)
         self.user_service = UserService(logger)
+        self.audit_log_service = AuditLogService()
 
     def create_b2b_account(self, data):
         """
@@ -84,14 +86,37 @@ class B2BService:
             self.logger.error(f"Error approving B2B account: {e}")
             raise
 
+    def get_b2b_account_by_user_id(self, user_id):
+        """Retrieves a B2B account by user ID."""
+        b2b_account = B2BAccount.query.filter_by(user_id=user_id).first()
+        if not b2b_account:
+            raise NotFoundException("B2B account not found for this user.")
+        return b2b_account
 
-    def get_b2b_user_by_id(self, user_id: int):
-        """Récupère un utilisateur B2B par ID."""
-        user = self.session.query(User).get(user_id)
-        # Vérifie si l'utilisateur est bien un utilisateur B2B
-        if user and user.is_b2b_user():
-            return user
-        return None
+    def request_b2b_account_deletion(self, user_id):
+        """
+        Allows a B2B user to soft-delete their own account.
+        This will also soft-delete the associated user record.
+        """
+        b2b_account = self.get_b2b_account_by_user_id(user_id)
+        user = self.user_service.get_user_by_id(user_id)
+
+        try:
+            b2b_account.soft_delete()
+            user.soft_delete() # Also soft-delete the underlying user
+            db.session.commit()
+            
+            self.audit_log_service.add_entry(
+                f"B2B User requested account deletion for '{b2b_account.company_name}'",
+                user_id=user.id,
+                target_type='b2b_account',
+                target_id=b2b_account.id,
+                action='soft_delete'
+            )
+        except Exception as e:
+            db.session.rollback()
+            raise DeletionException(f"Could not process B2B account deletion: {e}")
+
 
     def get_all_b2b_users(self):
         """Récupère tous les utilisateurs avec un rôle B2B."""
