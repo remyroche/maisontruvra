@@ -14,7 +14,9 @@ class UserService:
 
     def __init__(self, logger):
         self.logger = logger
-
+        self.audit_log_service = AuditLogService(session=self.session)
+        self.monitoring_service = MonitoringService()
+        
     def get_user_by_id(self, user_id):
         """Retrieves a user by their ID."""
         try:
