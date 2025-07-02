@@ -15,6 +15,7 @@ from backend.services.checkout_service import CheckoutService
 from backend.models.address_models import Address
 from backend.extensions import db
 from backend.services.exceptions import CheckoutError
+from backend.utils.decorators import login_required
 
 
 
