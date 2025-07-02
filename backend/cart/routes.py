@@ -68,49 +68,23 @@ def add_to_cart():
         return jsonify({'message': str(e)}), 400
 
 @cart_bp.route('/item/<int:item_id>', methods=['PUT'])
-@api_resource_handler(
-    model=CartItem,
-    request_schema=UpdateCartItemSchema,
-    response_schema=UpdateCartItemSchema,
-    ownership_exempt_roles=[],  # Only the cart owner can update
-    cache_timeout=0,  # No caching for cart operations
-    log_action=True,
-    eager_loads=['cart']  # Need to load cart to check ownership
-)
 @login_required
+@api_resource_handler(model=CartItem, request_schema=CartItemUpdateSchema, response_schema=CartSchema, ownership_exempt_roles=[])
 def update_cart_item_route(item_id):
-    """Updates quantity of a specific item in the cart."""
-    # CartItem is already fetched and validated by decorator
-    cart_item = g.target_object
-    
-    # Custom ownership check through cart
-    if cart_item.cart.user_id != current_user.id:
-        raise AuthorizationException("You do not have permission to update this cart item.")
-    
-    # Update cart item with validated data
-    for key, value in g.validated_data.items():
-        if hasattr(cart_item, key):
-            setattr(cart_item, key, value)
-    
-    return cart_item
+    updated_cart = CartService.update_item_quantity(
+        user_id=current_user.id,
+        item_id=item_id,
+        new_quantity=g.validated_data['quantity']
+    )
+    return updated_cart
 
 @cart_bp.route('/item/<int:item_id>', methods=['DELETE'])
-@api_resource_handler(
-    model=CartItem,
-    ownership_exempt_roles=[],  # Only the cart owner can delete
-    cache_timeout=0,  # No caching for cart operations
-    log_action=True,
-    eager_loads=['cart']  # Need to load cart to check ownership
-)
 @login_required
+@api_resource_handler(model=CartItem, response_schema=CartSchema, ownership_exempt_roles=[])
 def remove_cart_item_route(item_id):
     """Removes a specific item from the cart."""
-    # CartItem is already fetched and validated by decorator
-    cart_item = g.target_object
-    
-    # Custom ownership check through cart
-    if cart_item.cart.user_id != current_user.id:
-        raise AuthorizationException("You do not have permission to delete this cart item.")
-    
-    db.session.delete(cart_item)
-    return None  # Decorator will handle the delete response
+    updated_cart = CartService.remove_item(
+        user_id=current_user.id,
+        item_id=item_id
+    )
+    return updated_cart
