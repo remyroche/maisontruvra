@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, g
+from flask import Blueprint, request, jsonify, session, g, redirect, url_for, flash, render_template
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.b2b_service import B2BService
 from backend.utils.input_sanitizer import InputSanitizer
@@ -8,92 +8,108 @@ from backend.models.address_models import Address
 from backend.schemas import UserSchema, AddressSchema
 from backend.extensions import db
 from backend.tasks import send_email_task
+from backend.utils.decorators import b2b_user_required
+from flask_login import current_user
+from backend.models import db, User, Company
+from backend.services.b2b_service import B2BService
+from backend.utils.decorators import login_required
 
 b2b_profile_bp = Blueprint('b2b_profile_bp', __name__, url_prefix='/api/b2b/profile')
+b2b_service = B2BService()
+user_service = UserService()
+
 
 @b2b_profile_bp.route('/users', methods=['GET'])
+@login_required
 @b2b_user_required
 def get_b2b_users():
-    """Fetches all users associated with the current user's company account."""
-    b2b_user_id = get_jwt_identity()
-    current_user = db.session.get(B2BUser, b2b_user_id)
+    """Récupère tous les utilisateurs associés à l'entreprise de l'utilisateur actuel."""
+    if not current_user.company_id:
+        return jsonify({"error": "L'utilisateur n'est pas associé à une entreprise."}), 400
+
+    users = User.query.filter_by(company_id=current_user.company_id).all()
     
-    users = B2BUser.query.filter_by(account_id=current_user.account_id).all()
     user_list = [{
-        'id': user.id, 
+        'id': user.id,
         'first_name': user.first_name,
         'last_name': user.last_name,
-        'email': user.email, 
-        'role': user.role
+        'email': user.email,
+        'roles': [role.name.value for role in user.roles] # Utilise la relation de rôles
     } for user in users]
     
     return jsonify(user_list)
 
 @b2b_profile_bp.route('/users/add', methods=['POST'])
-@b2b_admin_required # Only admins of the company can add new users
+@login_required
+@b2b_admin_required # Seuls les admins de l'entreprise peuvent ajouter de nouveaux utilisateurs
 def add_b2b_user():
-    """Adds a new user to the company account."""
+    """Ajoute un nouvel utilisateur au compte de l'entreprise."""
     data = request.get_json()
-    b2b_user_id = get_jwt_identity()
-    current_user = db.session.get(B2BUser, b2b_user_id)
-    
-    # Check for existing user with the same email
-    existing_user = B2BUser.query.filter_by(email=data['email']).first()
-    if existing_user:
-        return jsonify({"error": "User with this email already exists."}), 409
+    if not current_user.company_id:
+        return jsonify({"error": "L'utilisateur admin n'est pas associé à une entreprise."}), 400
 
-    new_user = B2BUser(
-        account_id=current_user.account_id,
-        first_name=data['first_name'],
-        last_name=data['last_name'],
-        email=data['email'],
-        role=data.get('role', 'member') # Default to 'member' role
-    )
-    new_user.set_password(data['password'])
-    
-    db.session.add(new_user)
-    db.session.commit()
-    
-    # Send an invitation/welcome email to the new user asynchronously.
-    email_context = {
-        'inviter_name': current_user.first_name,
-        'company_name': current_user.account.name, # Assuming 'account' relationship exists
-        'new_user_name': new_user.first_name
-    }
-    send_email_task.delay(
-        recipient=new_user.email,
-        subject=f"Invitation to join {current_user.account.name} on Maison Truvrā",
-        template_name='emails/b2b_user_invitation.html',
-        context=email_context
-    )
-    
-    return jsonify({"message": "User added successfully.", "user_id": new_user.id}), 201
+    try:
+        # Utilise le service utilisateur qui contient la logique de création robuste
+        new_user = user_service.create_b2b_user(
+            user_data=data,
+            company_id=current_user.company_id
+        )
+        
+        # Envoyer un e-mail d'invitation de manière asynchrone.
+        email_context = {
+            'inviter_name': current_user.first_name,
+            'company_name': current_user.company.name,
+            'new_user_name': new_user.first_name
+        }
+        send_async_email.delay(
+            to_email=new_user.email,
+            subject=f"Invitation à rejoindre {current_user.company.name} sur Maison Truvrā",
+            template='emails/b2b_user_invitation.html',
+            **email_context
+        )
+        
+        return jsonify({"message": "Utilisateur ajouté avec succès.", "user_id": new_user.id}), 201
+        
+    except ValidationException as e:
+        return jsonify({"error": str(e)}), 409
+    except Exception as e:
+        # Log l'erreur pour le débogage
+        return jsonify({"error": "Une erreur inattendue est survenue."}), 500
 
 @b2b_profile_bp.route('/users/remove', methods=['POST'])
+@login_required
 @b2b_admin_required
 def remove_b2b_user():
-    """Removes a user from the company account."""
+    """Supprime un utilisateur du compte de l'entreprise."""
     data = request.get_json()
     user_to_remove_id = data.get('user_id')
     
-    b2b_user_id = get_jwt_identity()
-    current_user = db.session.get(B2BUser, b2b_user_id)
+    if not user_to_remove_id:
+        return jsonify({"error": "L'ID de l'utilisateur est requis."}), 400
 
-    user_to_remove = db.session.get(B2BUser, user_to_remove_id)
+    if not current_user.company_id:
+        return jsonify({"error": "L'utilisateur admin n'est pas associé à une entreprise."}), 400
+
+    user_to_remove = user_service.get_user_by_id(user_to_remove_id)
     
-    # Ensure the user exists and belongs to the same company
-    if not user_to_remove or user_to_remove.account_id != current_user.account_id:
-        return jsonify({"error": "User not found or not part of this account."}), 404
+    # S'assurer que l'utilisateur existe et appartient à la même entreprise
+    if not user_to_remove or user_to_remove.company_id != current_user.company_id:
+        return jsonify({"error": "Utilisateur non trouvé ou ne faisant pas partie de cette entreprise."}), 404
         
-    # Prevent the admin from removing themselves
+    # Empêcher un admin de se supprimer lui-même
     if user_to_remove.id == current_user.id:
-        return jsonify({"error": "You cannot remove yourself from the account."}), 403
+        return jsonify({"error": "Vous ne pouvez pas vous supprimer vous-même du compte."}), 403
 
-    db.session.delete(user_to_remove)
-    db.session.commit()
-    
-    return jsonify({"message": "User removed successfully."}), 200
-    
+    try:
+        db.session.delete(user_to_remove)
+        db.session.commit()
+        return jsonify({"message": "Utilisateur supprimé avec succès."}), 200
+    except Exception as e:
+        db.session.rollback()
+        # Log l'erreur pour le débogage
+        return jsonify({"error": "Échec de la suppression de l'utilisateur."}), 500
+
+
 # GET the B2B user's profile
 @b2b_profile_bp.route('/', methods=['GET'])
 @api_resource_handler(
@@ -115,6 +131,7 @@ def get_b2b_profile():
         return None  # Will be handled by decorator as 404
     return user
 
+
 # UPDATE the B2B user's profile
 @b2b_profile_bp.route('/', methods=['PUT'])
 @api_resource_handler(
@@ -127,7 +144,7 @@ def get_b2b_profile():
 )
 @b2b_user_required
 @jwt_required()
-def update_b2b_profile():
+def edit_profile():
     """
     Update the profile information for the authenticated B2B user.
     """
@@ -224,6 +241,26 @@ def get_b2b_invoices():
         })
     except Exception as e:
         return jsonify(error=str(e)), 500
+
+
+@b2b_profile_bp.route('/company/profile')
+@api_resource_handler(
+    model=Company,
+    response_schema=UserSchema,
+    ownership_exempt_roles=[],  # Only the user themselves can access
+    cache_timeout=0,  # No caching for company profiles
+    log_action=True
+)
+@b2b_user_required
+def company_profile():
+    """Affiche le profil de l'entreprise de l'utilisateur B2B."""
+    # La logique est correcte car elle utilise `current_user.company`
+    company = current_user.company
+    if not company:
+        flash("Profil d'entreprise non trouvé.", 'warning')
+        return redirect(url_for('b2b_dashboard_bp.dashboard'))
+    return render_template('b2b/company_profile.html', company=company)
+
 
 @b2b_profile_bp.route('/cart', methods=['GET'])
 @b2b_user_required
