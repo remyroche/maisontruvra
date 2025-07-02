@@ -35,10 +35,22 @@ class Product(BaseModel, SoftDeleteMixin):
     reviews = db.relationship('Review', back_populates='product', lazy=True, cascade="all, delete-orphan")
     inventory = db.relationship('Inventory', back_populates='product', uselist=False, cascade="all, delete-orphan")
     passport = db.relationship('ProductPassport', back_populates='product', uselist=False, cascade="all, delete-orphan")
-    
+
     stock = db.Column(db.Integer, default=0)
     internal_note = db.Column(db.Text, nullable=True) # Note for staff
+    
+    # Passport Enhancement Fields
+    passport_hd_image_url = db.Column(db.String(255), nullable=True)
+    sourcing_production_place = db.Column(db.String(255), nullable=True)
+    
+    # Producer Notes and Pairing Suggestions
+    producer_notes = db.Column(db.Text, nullable=True)
+    pairing_suggestions = db.Column(db.Text, nullable=True)
 
+    # Relationship to Reviews
+    # This creates a 'product' back-reference on the Review model
+    reviews = db.relationship('Review', backref='product', lazy='dynamic')
+    
     @property
     def image_url(self):
         """
@@ -142,14 +154,19 @@ class ProductVariant(BaseModel, SoftDeleteMixin):
     def to_dict(self):
         return {
             'id': self.id,
-            'product_id': self.product_id,
+            'name': self.name,
+            'description': self.description,
+            'price': self.price,
+            'stock': self.stock,
             'sku': self.sku,
-            'price': str(self.price), # Return as string for consistency
-            'attributes': self.attributes,
-            'available_stock': self.stock.quantity if self.stock else 0,
-            'is_deleted': self.is_deleted,
+            'image_url': self.image_url,
+            'category_id': self.category_id,
+            'collection_id': self.collection_id,
+            'passport_hd_image_url': self.passport_hd_image_url,
+            'sourcing_production_place': self.sourcing_production_place,
+            'producer_notes': self.producer_notes,
+            'pairing_suggestions': self.pairing_suggestions
         }
-
     def __repr__(self):
         return f'<ProductVariant {self.sku}>'
 
