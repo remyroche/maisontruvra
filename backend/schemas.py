@@ -41,17 +41,20 @@ class RoleSchema(BaseSchema):
     """Schema for serializing Role data."""
     id = fields.Int(dump_only=True)
     name = fields.Str(dump_only=True)
+class AddressSchema(BaseModel):
+    id: Optional[int] = None
+    address_line_1: str
+    address_line_2: Optional[str] = None
+    city: str
+    state_province_region: str
+    postal_code: str
+    country: str
+    is_default_shipping: Optional[bool] = False
+    is_default_billing: Optional[bool] = False
 
-class AddressSchema(BaseSchema):
-    """Schema for shipping/billing addresses."""
-    id = fields.Int(dump_only=True)
-    street = fields.Str(required=True, validate=validate.Length(min=1, max=100))
-    city = fields.Str(required=True, validate=validate.Length(min=1, max=50))
-    postal_code = fields.Str(required=True, validate=validate.Length(min=1, max=20))
-    country = fields.Str(required=True, validate=validate.Length(min=1, max=50))
-    address_type = fields.Str(validate=validate.OneOf(["shipping", "billing"]))
-    is_default = fields.Bool(default=False)
-
+    class Config:
+        from_attributes = True
+        
 class CategorySchema(BaseSchema):
     """Schema for Product Categories."""
     id = fields.Int(dump_only=True)
@@ -97,14 +100,17 @@ class ReviewSchema(BaseSchema):
 
 # --- User & Auth Schemas ---
 
-class UserSchema(BaseSchema):
-    """Base User schema for serialization."""
-    id = fields.Int(dump_only=True)
-    email = fields.Email(required=True)
-    first_name = fields.Str(required=True)
-    last_name = fields.Str(required=True)
-    is_active = fields.Bool(dump_only=True)
-    roles = fields.List(fields.Nested(RoleSchema), dump_only=True)
+class UserSchema(BaseModel):
+    id: int
+    email: EmailStr
+    first_name: str
+    last_name: str
+    is_active: bool
+    is_b2b: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 class UserRegistrationSchema(BaseSchema):
     """Schema for new user registration."""
@@ -118,11 +124,19 @@ class LoginSchema(BaseSchema):
     email = fields.Email(required=True)
     password = fields.Str(required=True)
 
-class UserProfileUpdateSchema(BaseSchema):
-    """Schema for users updating their own profile."""
-    first_name = fields.Str(validate=validate.Length(min=1, max=50))
-    last_name = fields.Str(validate=validate.Length(min=1, max=50))
+class UserProfileUpdateSchema(BaseModel):
+    """
+    Schema for validating data when a user updates their own profile.
+    They can only update a limited set of fields.
+    """
+    email: Optional[EmailStr] = None
+    first_name: Optional[constr(min_length=1)] = None
+    last_name: Optional[constr(min_length=1)] = None
     language = fields.Str(validate=validate.Length(min=2, max=10))
+
+    class Config:
+        from_attributes = True
+
 
 class ChangePasswordSchema(BaseSchema):
     """Schema for changing a password."""
@@ -196,13 +210,19 @@ class BlogPostSchema(BaseSchema):
 
 # --- Admin-Specific Schemas ---
 
-class AdminUserUpdateSchema(BaseSchema):
-    """Schema for admins updating user profiles."""
-    email = fields.Email()
-    first_name = fields.Str(validate=validate.Length(min=1, max=50))
-    last_name = fields.Str(validate=validate.Length(min=1, max=50))
-    is_active = fields.Bool()
-    role_ids = fields.List(fields.Int())
+class UserUpdateSchema(BaseModel):
+    """
+    More permissive schema for admins updating a user.
+    """
+    email: Optional[EmailStr] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_b2b: Optional[bool] = None
+    roles: Optional[List[str]] = None
+
+    class Config:
+        from_attributes = True
 
 class OrderUpdateSchema(BaseSchema):
     """Schema for admins updating an order's status."""
