@@ -11,52 +11,98 @@ from ..services.user_service import UserService
 from ..services.rbac_service import RBACService
 from ..services.discount_service import DiscountService
 
+from flask import Blueprint, request, g, jsonify
+from flask_jwt_extended import jwt_required
+
+from backend.models.user_models import User
+from backend.schemas import UserSchema, UserUpdateSchema
+from backend.services.user_service import UserService
+from backend.services.exceptions import ServiceException
+from backend.utils.decorators import api_resource_handler, roles_required
+
 # --- Blueprint Setup ---
 bp = Blueprint('user_management', __name__, url_prefix='/api/admin/users')
 
-@bp.route('/', methods=['GET', 'POST'])
-@bp.route('/<int:user_id>', methods=['GET', 'PUT', 'DELETE'])
-@roles_required('Admin') # IMPORTANT: Only Admins can manage users.
-@api_resource_handler(
-    model=User,
-    request_schema=AdminUserSchema,
-    response_schema=AdminUserSchema,
-    eager_loads=['roles'], # Eager load roles for performance
-    log_action=True,
-    allow_hard_delete=False # Default to soft delete for safety
-)
-def handle_users(user_id=None, is_hard_delete=False):
-    """Handles all CRUD operations for Users from an admin perspective."""
-    
-    if request.method == 'GET' and user_id is None:
-        all_users = UserService.get_all_users()
-        return jsonify(AdminUserSchema(many=True).dump(all_users))
+@bp.route('/', methods=['GET'])
+@jwt_required()
+@roles_required('Admin')
+def get_all_users():
+    """
+    Retrieves a list of all users.
+    This route is kept separate as it operates on a list, not a single resource.
+    """
+    try:
+        # The service layer handles fetching all users, including soft-deleted ones if needed.
+        # We can add a query param to include/exclude soft-deleted users.
+        include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'
+        users = UserService.get_all_users(include_deleted=include_deleted)
+        return jsonify(UserSchema(many=True).dump(users)), 200
+    except ServiceException as e:
+        return jsonify(e.to_dict()), e.status_code
 
-    if request.method == 'GET':
-        return g.target_object
+@bp.route('/', methods=['POST'])
+@jwt_required()
+@roles_required('Admin')
+@api_resource_handler(model=User, request_schema=UserSchema, response_schema=UserSchema, log_action=True)
+def create_user():
+    """
+    Creates a new user.
+    The decorator handles validation, session management, and response serialization.
+    """
+    # The service call handles the business logic (e.g., password hashing).
+    return UserService.create_user(g.validated_data)
 
-    elif request.method == 'POST':
-        return UserService.create_user(g.validated_data)
+@bp.route('/<int:user_id>', methods=['GET'])
+@jwt_required()
+@roles_required('Admin')
+@api_resource_handler(model=User, response_schema=UserSchema, eager_loads=['roles'])
+def get_user(user_id):
+    """
+    Retrieves a single user by their ID.
+    The decorator handles fetching and serialization.
+    """
+    return g.target_object
 
-    elif request.method == 'PUT':
-        return UserService.update_user(g.target_object, g.validated_data)
+@bp.route('/<int:user_id>', methods=['PUT'])
+@jwt_required()
+@roles_required('Admin')
+@api_resource_handler(model=User, request_schema=UserSchema, response_schema=UserSchema, eager_loads=['roles'], log_action=True)
+def update_user(user_id):
+    """
+    Updates an existing user's details.
+    The decorator fetches the user, validates input, and handles the response.
+    """
+    # The service call handles the specific update logic.
+    return UserService.update_user(g.target_object, g.validated_data)
 
-    elif request.method == 'DELETE':
-        if is_hard_delete:
-            UserService.hard_delete_user(user_id)
-        else:
-            UserService.soft_delete_user(user_id)
-        return None
+@bp.route('/<int:user_id>', methods=['DELETE'])
+@jwt_required()
+@roles_required('Admin')
+@api_resource_handler(model=User, allow_hard_delete=True, log_action=True)
+def delete_user(user_id):
+    """
+    Deletes a user.
+    - Soft-delete by default.
+    - Use ?hard=true for a permanent, irreversible delete.
+    The decorator handles all fetching and deletion logic automatically.
+    """
+    # The function body is intentionally empty as the decorator handles the full operation.
+    return None
+
+@bp.route('/<int:user_id>/restore', methods=['POST'])
+@jwt_required()
+@roles_required('Admin')
+@api_resource_handler(model=User, response_schema=UserSchema, log_action=True)
+def restore_user(user_id):
+    """
+    Restores a soft-deleted user.
+    The decorator handles all fetching and restoration logic automatically.
+    """
+    # The function body is intentionally empty as the decorator handles the full operation.
+    return g.target_object
+
 
 # --- Specialized User Actions ---
-
-@bp.route('/<int:user_id>/restore', methods=['PUT'])
-@roles_required('Admin', 'Manager')
-@api_resource_handler(model=User) # Use decorator just to fetch the user securely
-def restore_user(user_id):
-    """Restores a soft-deleted user."""
-    UserService.restore_user(g.target_object)
-    return jsonify({"message": "User restored successfully"})
 
 @bp.route('/<int:user_id>/roles', methods=['POST'])
 @roles_required('Admin', 'Manager')
