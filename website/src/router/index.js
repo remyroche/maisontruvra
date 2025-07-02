@@ -100,6 +100,8 @@ const routes = [
   { path: '/admin/site-settings', name: 'SiteSettings', component: () => import('@/views/admin/SiteSettingsView.vue'), meta: { requiresAuth: true, requiredRoles: ['Admin', 'Manager', 'Dev'] } },
   { path: '/admin/manage-sessions', name: 'ManageSessions', component: () => import('@/views/admin/ManageSessionsView.vue'), meta: { requiresAuth: true, requiredRoles: ['Admin', 'Manager', 'Dev'] } },
   { path: '/admin/manage-roles', name: 'ManageRoles', component: () => import('@/views/admin/ManageRolesView.vue'), meta: { requiresAuth: true, requiredRoles: ['Admin', 'Manager', 'Dev'] } },
+ 
+  { path: 'recycling-bin', name: 'admin-recycling-bin', component: () => import('@/views/admin/RecyclingBinView.vue'), meta: { requiresAdmin: true } }
   
   // Catch-all
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('@/views/public/NotFoundView.vue') }
