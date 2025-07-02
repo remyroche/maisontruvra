@@ -66,6 +66,44 @@
       </div>
     </div>
 
+    <!-- --- NEW ENHANCED FIELDS START --- -->
+    <div class="space-y-6 pt-6 mt-6 border-t border-gray-200">
+        <h3 class="text-lg font-medium leading-6 text-gray-900">Passport & Notes</h3>
+        
+        <div>
+            <label for="passport_hd_image_url" class="block text-sm font-medium text-gray-700">Passport HD Image URL</label>
+            <Field name="passport_hd_image_url" type="text" id="passport_hd_image_url" v-model="localProduct.passport_hd_image_url"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                   :class="{ 'border-red-500': errors.passport_hd_image_url }" />
+            <ErrorMessage name="passport_hd_image_url" class="mt-2 text-sm text-red-600" />
+        </div>
+
+        <div>
+            <label for="sourcing_production_place" class="block text-sm font-medium text-gray-700">Sourcing / Production Place</label>
+            <Field name="sourcing_production_place" type="text" id="sourcing_production_place" v-model="localProduct.sourcing_production_place"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                   :class="{ 'border-red-500': errors.sourcing_production_place }" />
+            <ErrorMessage name="sourcing_production_place" class="mt-2 text-sm text-red-600" />
+        </div>
+
+        <div>
+            <label for="producer_notes" class="block text-sm font-medium text-gray-700">Producer's Notes</label>
+            <Field name="producer_notes" as="textarea" id="producer_notes" v-model="localProduct.producer_notes" rows="4"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                   :class="{ 'border-red-500': errors.producer_notes }"/>
+            <ErrorMessage name="producer_notes" class="mt-2 text-sm text-red-600" />
+        </div>
+
+        <div>
+            <label for="pairing_suggestions" class="block text-sm font-medium text-gray-700">Pairing Suggestions</label>
+            <Field name="pairing_suggestions" as="textarea" id="pairing_suggestions" v-model="localProduct.pairing_suggestions" rows="4"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                   :class="{ 'border-red-500': errors.pairing_suggestions }"/>
+            <ErrorMessage name="pairing_suggestions" class="mt-2 text-sm text-red-600" />
+        </div>
+    </div>
+    <!-- --- NEW ENHANCED FIELDS END --- -->
+
     <div class="mt-8 flex justify-end">
       <button type="button" @click="$emit('cancel')"
               class="rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
@@ -81,10 +119,8 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-// --- START: Recommendations Implementation ---
 import { Form, Field, ErrorMessage } from 'vee-validate';
 import * as yup from 'yup';
-// --- END: Recommendations Implementation ---
 
 const props = defineProps({
   product: {
@@ -96,9 +132,13 @@ const props = defineProps({
       stock_quantity: 0,
       category_id: null,
       description: '',
+      // Add defaults for new fields
+      passport_hd_image_url: '',
+      sourcing_production_place: '',
+      producer_notes: '',
+      pairing_suggestions: '',
     }),
   },
-  // Example categories, in a real app this would come from a Pinia store
   categories: {
       type: Array,
       default: () => [
@@ -113,13 +153,11 @@ const emit = defineEmits(['submit', 'cancel']);
 
 const localProduct = ref({ ...props.product });
 
-// Watch for changes in the product prop to update the local state
 watch(() => props.product, (newVal) => {
   localProduct.value = { ...newVal };
 }, { deep: true });
 
-// --- START: Recommendations Implementation ---
-// Define the validation schema using Yup
+// Define the validation schema using Yup, including new fields
 const schema = yup.object({
   name: yup.string().required('Product name is required').max(255),
   sku: yup.string().required('SKU is required').max(100),
@@ -127,12 +165,14 @@ const schema = yup.object({
   stock_quantity: yup.number().typeError('Stock must be a number').required('Stock quantity is required').integer('Stock must be a whole number').min(0, 'Stock cannot be negative'),
   category_id: yup.number().required('A category must be selected'),
   description: yup.string().notRequired(),
+  // Validation for new fields (optional)
+  passport_hd_image_url: yup.string().url('Must be a valid URL').notRequired(),
+  sourcing_production_place: yup.string().notRequired(),
+  producer_notes: yup.string().notRequired(),
+  pairing_suggestions: yup.string().notRequired(),
 });
-// --- END: Recommendations Implementation ---
 
-// The handleSubmit function is called by VeeValidate on successful validation
 const handleSubmit = (values) => {
-  // `values` is the validated form data from VeeValidate
   emit('submit', values);
 };
 </script>
