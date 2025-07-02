@@ -65,6 +65,26 @@ class TagSchema(BaseSchema):
     id = fields.Int(dump_only=True)
     name = fields.Str(required=True)
 
+class B2BUserSchema(BaseModel):
+    """
+    Schema for representing a user associated with a B2B account.
+    """
+    id: int
+    email: EmailStr
+    first_name: str
+    last_name: str
+    roles: List[str] = []
+
+    class Config:
+        from_attributes = True
+
+
+class B2BUserRemoveSchema(BaseModel):
+    """
+    Schema for removing a user from a B2B account.
+    """
+    user_id: int
+    
 class VariantSchema(BaseSchema):
     """Schema for Product Variants."""
     id = fields.Int(dump_only=True)
