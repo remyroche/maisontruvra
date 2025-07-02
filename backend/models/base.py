@@ -1,45 +1,54 @@
-
+"""
+This module defines the base model and common mixins for all SQLAlchemy models.
+"""
 from backend.extensions import db
-from datetime import datetime
+from sqlalchemy import event
+from sqlalchemy.orm import Query
+
+class SoftDeleteQuery(Query):
+    """
+    A custom query class that automatically filters for `is_deleted = False`
+    unless explicitly told otherwise.
+    """
+    def get(self, ident):
+        # Override get() to also apply the is_deleted filter.
+        return self.with_for_update(read=True).filter_by(is_deleted=False).get(ident)
+
+    def __iter__(self):
+        # Apply the filter for all iteration-based queries (e.g., .all(), .first())
+        return super(SoftDeleteQuery, self.filter_by(is_deleted=False)).__iter__()
 
 class SoftDeleteMixin:
     """
-    A mixin that adds soft delete functionality to a model.
+    A mixin that adds soft-delete capabilities to a model.
+    It includes an `is_deleted` column and sets up a custom query class
+    to automatically exclude soft-deleted records from queries.
     """
     is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)
-    deleted_at = db.Column(db.DateTime, nullable=True)
+    query_class = SoftDeleteQuery
 
     def soft_delete(self):
-        """Mark the record as deleted."""
+        """Marks the instance as deleted."""
         self.is_deleted = True
-        self.deleted_at = datetime.utcnow()
         db.session.add(self)
 
     def restore(self):
-        """Restore a soft-deleted record."""
+        """Restores a soft-deleted instance."""
         self.is_deleted = False
-        self.deleted_at = None
         db.session.add(self)
-        
-    @classmethod
-    def query_active(cls):
-        """Returns a query for non-deleted records of this model."""
-        return cls.query.filter_by(is_deleted=False)
 
-    @classmethod
-    def query_with_deleted(cls):
-        """Returns a query for all records of this model, including deleted ones."""
-        return cls.query
-
+class TimestampMixin:
+    """
+    A mixin that adds `created_at` and `updated_at` timestamp columns
+    to a model, which are automatically managed.
+    """
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp(), nullable=False)
+    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp(), nullable=False)
 
 class BaseModel(db.Model):
     """
-    An abstract base model that provides common columns.
-    Models inheriting from this should define their own `to_dict` methods
-    for serialization, as context can vary greatly between models.
+    Base model for all other models in the application.
+    It includes an `id` primary key and can be extended with mixins.
     """
     __abstract__ = True
-    
     id = db.Column(db.Integer, primary_key=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
