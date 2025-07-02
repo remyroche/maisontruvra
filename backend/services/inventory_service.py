@@ -7,7 +7,11 @@ from .passport_service import PassportService
 from .notification_service import NotificationService
 from .monitoring_service import MonitoringService
 from ..extensions import cache
-
+from backend.models import db, Inventory, Product, StockNotificationRequest
+from backend.services.email_service import EmailService
+from backend.services.background_task_service import BackgroundTaskService
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from sqlalchemy import select
 
 # Updated reservation lifetime to 1 hour (60 minutes)
 RESERVATION_LIFETIME_MINUTES = 60
