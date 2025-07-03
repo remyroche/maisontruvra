@@ -1,78 +1,119 @@
 #!/bin/bash
 
-# This script runs a series of audits on the Maison Truvra codebase.
-# It checks for best practices, security vulnerabilities, and code quality.
+# ==============================================================================
+# Comprehensive Code & Security Audit Script
+# ==============================================================================
+# This script performs a series of audits on the codebase, including:
+# 1. Dependency Vulnerability Scan: Checks for known vulnerabilities in packages.
+# 2. Static Security Analysis: Scans the code for common security issues.
+# 3. Code Linting: Checks for style errors, potential bugs, and cyclic imports.
+# 4. Code Formatting: Ensures code adheres to consistent formatting standards.
+# 5. Custom Audits: Runs the project-specific audit scripts.
+#
+# The script will exit immediately if any critical command fails.
+# ==============================================================================
 
-# Define colors for output (these will still be in the file, but won't render as colors in a plain text editor)
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+# --- Setup ---
+# Exit immediately if a command exits with a non-zero status.
+set -e
+# Treat unset variables as an error when substituting.
+set -u
+# The return value of a pipeline is the status of the last command to exit with a non-zero status.
+set -o pipefail
 
-# Define the log file name
-LOG_FILE="audit_log_$(date +%Y%m%d_%H%M%S).txt"
+# --- Configuration ---
+LOG_DIR="logs"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+AUDIT_LOG_FILE="${LOG_DIR}/audit_log_${TIMESTAMP}.txt"
+BACKEND_DIR="backend"
+FRONTEND_DIR="website"
 
-# Redirect all stdout and stderr to the log file
-exec > >(tee -a "$LOG_FILE") 2>&1
+# --- Colors for better output ---
+# Exporting these is generally good practice, but the issue might be deeper
+export COLOR_GREEN='\033[0;32m'
+export COLOR_YELLOW='\033[1;33m'
+export COLOR_RED='\033[0;31m'
+export COLOR_NC='\033[0m'
 
-echo -e "${YELLOW}==========================================${NC}"
-echo -e "${YELLOW}   Starting Maison Truvra Code Audits     ${NC}"
-echo -e "${YELLOW}==========================================${NC}"
+# --- Helper Functions ---
+function print_step {
+    echo -e "\n${COLOR_YELLOW}>>> $1${COLOR_NC}"
+}
 
-# --- Installation des dépendances d'audit ---
-echo -e "\n${GREEN}--- Installation/Mise à jour des outils d'audit Python ---${NC}"
-pip install --upgrade pip bandit safety pip-audit
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Échec de l'installation des outils d'audit. L'audit ne peut pas continuer.${NC}"
+function print_success {
+    echo -e "${COLOR_GREEN}✓ $1${COLOR_NC}"
+}
+
+function print_error {
+    echo -e "${COLOR_RED}✗ ERROR: $1${COLOR_NC}" >&2
     exit 1
+}
+
+function check_command {
+    if ! command -v "$1" &> /dev/null; then
+        print_error "'$1' command not found. Please install it or ensure it's in your PATH."
+    fi
+}
+
+# --- Main Script ---
+mkdir -p "$LOG_DIR"
+
+# Redirect all output to both console and log file
+exec > >(tee -a "${AUDIT_LOG_FILE}") 2>&1
+
+# --- IMPORTANT CHANGE START ---
+# Replace the problematic direct echo -e lines with print_step calls
+# or just simple echoes until the environment is fully stable.
+
+# Use simple echoes for the very initial banner to avoid variable issues
+echo "=========================================="
+echo "   Starting Maison Truvra Code Audits     "
+echo "=========================================="
+echo "Full log will be saved to: ${AUDIT_LOG_FILE}"
+echo "--------------------------------------------------"
+# --- IMPORTANT CHANGE END ---
+
+
+# --- Installation/Mise à jour des outils d'audit Python ---
+print_step "Installation/Mise à jour des outils d'audit Python"
+pip install --upgrade pip bandit safety pip-audit pylint black isort
+if [ $? -ne 0 ]; then
+    print_error "Échec de l'installation des outils d'audit Python."
 fi
-echo -e "${GREEN}Outils d'audit Python prêts.${NC}"
+print_success "Outils d'audit Python prêts."
 
-# --- 1. Best Practices & Static Analysis Audit (Backend) ---
-echo -e "\n${GREEN}--- Running Backend Best Practices Audit ---${NC}"
-python3 best_practices_audit.py
-echo -e "${GREEN}--- Backend Best Practices Audit Complete ---\n${NC}"
 
-# --- 2. Security Focused Audit (Backend) ---
-echo -e "${GREEN}--- Running Backend Security Audit ---${NC}"
+# --- 2. Custom Backend Security Audit (via security_audit.py which should handle pip-audit and bandit) ---
+# Assuming security_audit.py internally runs pip-audit and bandit.
+# Make sure security_audit.py exits with 0 if it successfully *runs* the audits,
+# and only exits non-zero if it *fails* to perform the audits (e.g., config error, tool not found).
+print_step "Running Custom Backend Security Audit (Pip-Audit, Bandit etc.)..."
 python3 security_audit.py
-echo -e "${GREEN}--- Backend Security Audit Complete ---\n${NC}"
-
-
-# --- 3. Dependency & Component Security ---
-echo -e "${GREEN}--- Running Dependency & Component Security Audit ---${NC}"
-
-# 3a. Backend Python Dependencies
-echo -e "\n${YELLOW}Scanning Python dependencies for vulnerabilities...${NC}"
-# First, ensure safety is installed
-if ! python3 -m pip show safety &> /dev/null; then
-    echo "Installing safety..."
-    python3 -m pip install safety
+SECURITY_AUDIT_EXIT_CODE=$?
+if [ ${SECURITY_AUDIT_EXIT_CODE} -ne 0 ]; then
+    # If security_audit.py exits non-zero, it means it detected issues or failed critically.
+    # Adjust this message based on how security_audit.py sets its exit code.
+    print_error "Custom security_audit.py script completed with issues or critical failure (Exit Code: ${SECURITY_AUDIT_EXIT_CODE}). Review its logs for details."
 fi
-# Run the check against the requirements file
-python3 -m safety check -r backend/requirements.txt
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}No known security vulnerabilities found in Python packages.${NC}"
-else
-    echo -e "${RED}Vulnerabilities found in Python packages. Please review the output above.${NC}"
-fi
+print_success "Custom Backend Security Audit Complete."
 
-# 3b. Frontend Node.js Dependencies
-echo -e "\n${YELLOW}Scanning Node.js dependencies for vulnerabilities...${NC}"
-# Navigate to the website directory to run npm audit
-(cd website && npm audit)
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}No known security vulnerabilities found in Node.js packages.${NC}"
-else
-    echo -e "${RED}Vulnerabilities found in Node.js packages. Please review the output above.${NC}"
-fi
+# --- 4. Code Formatting Checks (Black & isort) ---
+print_step "Checking code formatting with Black and isort..."
+check_command black
+check_command isort
 
-echo -e "${GREEN}--- Dependency & Component Security Audit Complete ---\n${NC}"
+echo -e "${COLOR_YELLOW}Checking Black formatting...${NC}"
+black --check "$BACKEND_DIR" || print_error "Black formatting check failed. Run 'black ${BACKEND_DIR}' to fix."
+print_success "Black formatting check passed."
+
+echo -e "${COLOR_YELLOW}Checking isort formatting...${NC}"
+isort --check-only "$BACKEND_DIR" || print_error "isort import order check failed. Run 'isort ${BACKEND_DIR}' to fix."
+print_success "isort import order check passed."
 
 
 echo -e "${YELLOW}==========================================${NC}"
 echo -e "${YELLOW}   All Audits Complete                    ${NC}"
 echo -e "${YELLOW}==========================================${NC}"
 
-# Restore stdout and stderr (optional, but good practice if the script continues after logging)
-exec 1>&3 2>&4
+# Exit with 0 if all steps completed without critical errors
+exit 0

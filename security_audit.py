@@ -1,364 +1,136 @@
-#!/usr/bin/env python3
-import os
-import re
-import subprocess
-import json
-import sys
-import datetime
-import argparse
-import ast
-from pathlib import Path
-from typing import List, Dict, Tuple, Optional, Any
-from dataclasses import dataclass, asdict
 import logging
+import os
+import sys
+import json
+import subprocess
+import tempfile
+import ast # Required for analyze_file and check_missing_permissions
+import datetime # Required for dynamic log file naming
+import re
+from collections import defaultdict
 
-# --- DATA STRUCTURES ---
+# --- Configure logging to console and a file ---
+# Define a dynamic log file path based on a timestamp
+log_file_path = f"security_audit_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 
-@dataclass
-class SecurityFinding:
-    """A dataclass to hold the details of a single security finding."""
-    severity: str  # e.g., HIGH, MEDIUM, LOW
-    category: str  # e.g., "Authentication", "Input Validation"
-    title: str
-    description: str
-    file_path: str
-    line_number: int
-    code_snippet: str = ""
-    recommendation: str = ""
-    cwe_id: Optional[str] = None  # Common Weakness Enumeration ID
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s', # Include timestamp in log format
+    handlers=[
+        logging.StreamHandler(sys.stdout), # Keep console output
+        logging.FileHandler(log_file_path) # Add file output
+    ]
+)
+logging.info(f"All Python logging output will also be written to: {log_file_path}")
 
-    def to_dict(self):
-        return asdict(self)
-
-# --- UTILITIES ---
-
-class Colors:
-    """ANSI color codes for console output."""
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-
-# --- MAIN AUDITOR CLASS ---
 
 class SecurityAuditor:
-    """
-    A comprehensive security auditor that scans for vulnerabilities in
-    a Python (Flask) and JavaScript (Vue) project.
-    """
-
-    def __init__(self, config: argparse.Namespace):
-        """
-        Initializes the SecurityAuditor with given configuration.
-
-        Args:
-            config: An argparse Namespace object with configuration options.
-        """
+    def __init__(self, config, project_root, backend_dir, frontend_dir):
         self.config = config
-        self.findings: List[SecurityFinding] = []
-        self.project_root = os.path.abspath(os.path.dirname(__file__))
+        self.project_root = project_root
+        self.backend_dir = backend_dir
+        self.frontend_dir = frontend_dir
+        self.findings = [] # This list will store your audit findings
+        # Define permission decorators relevant to your Flask application
+        self.permission_decorators = {
+            'login_required', 'b2b_user_required', 'staff_required',
+            'admin_required', 'roles_required', 'permissions_required',
+            'b2b_admin_required', 'jwt_required'
+        }
 
-        # --- PATHS CONFIGURATION ---
-        self.backend_dir = os.path.join(self.project_root, 'backend')
-        self.frontend_dir = os.path.join(self.project_root, 'website')
+    def _print_header(self, text):
+        """Prints a styled header for audit steps."""
+        logging.info(f"\n--- {text} ---")
 
-        self.scan_directories = [self.backend_dir, self.frontend_dir]
-        self.excluded_paths = [
-            os.path.abspath(os.path.join(self.project_root, p)) for p in [
-                'backend/migrations',
-                'backend/tests',
-                'backend/__pycache__',
-                'website/node_modules',
-                'website/dist',
-                '.venv',
-                '.git',
-            ]
-        ]
-
-        # --- RULES CONFIGURATION ---
-        self.permission_decorators = [
-            '@jwt_required', '@roles_required', '@permissions_required',
-            '@admin_required', '@staff_required', '@b2b_user_required',
-            '@b2b_admin_required', '@login_required'
-        ]
-        self.public_routes = [
-            r"@auth_bp\.route\('/login'", r"@auth_bp\.route\('/register'",
-            r"@auth_bp\.route\('/refresh'", r"@csrf_bp\.route\('/get-csrf-token'"
-        ]
-
-    def _print_header(self, title: str):
-        """Prints a styled header to the console."""
-        print(f"\n{Colors.HEADER}{Colors.BOLD}===== {title.upper()} ====={Colors.ENDC}")
-
-    def _run_command(self, command: List[str], cwd: str = '.') -> Optional[str]:
-        """
-        Runs a shell command and returns its standard output.
-
-        Args:
-            command: The command to run as a list of strings.
-            cwd: The working directory for the command.
-
-        Returns:
-            The stdout from the command, or None if an error occurred.
-        """
-        try:
-            logging.info(f"Running command: {' '.join(command)} in {cwd}")
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=True,
-                cwd=cwd
-            )
-            return result.stdout
-        except FileNotFoundError:
-            logging.error(f"Command '{command[0]}' not found.")
-            if command[0] == 'npm':
-                logging.warning("Please ensure Node.js and npm are installed and in your system's PATH.")
-            elif 'bandit' in command[0]:
-                logging.warning("Please install bandit: pip install bandit")
-            elif 'pip_audit' in command[0]:
-                logging.warning("Please install pip-audit: pip install pip-audit")
-            return None
-        except subprocess.CalledProcessError as e:
-            # Tools like npm audit and pip-audit return non-zero exit codes on finding vulnerabilities.
-            # This is expected, so we return the output for parsing.
-            if e.stdout:
-                return e.stdout
-            logging.error(f"Error executing command: {' '.join(command)}")
-            logging.error(e.stderr)
-            return None
-
-    def add_finding(self, **kwargs: Any):
-        """Adds a security finding to the internal list."""
-        finding = SecurityFinding(**kwargs)
+    def add_finding(self, severity, category, title, description, file_path, line_number, recommendation=None, code_snippet=None, cwe_id=None):
+        """Adds a new security finding to the auditor's list."""
+        finding = {
+            'severity': severity,
+            'category': category,
+            'title': title,
+            'description': description,
+            'file_path': file_path,
+            'line_number': line_number,
+            'recommendation': recommendation,
+            'code_snippet': code_snippet,
+            'cwe_id': cwe_id
+        }
         self.findings.append(finding)
-        color = {
-            "HIGH": Colors.RED, "MEDIUM": Colors.YELLOW, "LOW": Colors.BLUE
-        }.get(finding.severity.upper(), Colors.ENDC)
-        print(f"[{color}{finding.severity.upper()}{Colors.ENDC}] {finding.title}\n  -> {finding.file_path}:{finding.line_number}")
+        logging.info(f"NEW FINDING: {title} in {file_path}:{line_number} (Severity: {severity})")
 
-    # --- EXTERNAL TOOL SCANNERS ---
-
-    def run_bandit_scan(self):
-        """Runs Bandit static analysis on the backend directory."""
-        if self.config.skip_static_analysis:
-            logging.info("Skipping Bandit scan as per configuration.")
-            return
-
-        self._print_header("Backend Security Scan (Bandit)")
-        if not os.path.isdir(self.backend_dir):
-            logging.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Bandit scan.")
-            return
-
-        bandit_cmd = [sys.executable, '-m', 'bandit', '-r', self.backend_dir, '-f', 'json', '-ll']
-        output = self._run_command(bandit_cmd)
-        if not output:
-            return
-
+    def _run_command(self, cmd_parts, cwd=None, env=None, stdout_target=subprocess.PIPE, stderr_target=subprocess.PIPE):
+        """
+        Helper to run a command, capturing stdout and stderr.
+        It returns a tuple: (stdout_str, return_code).
+        Warnings/errors printed to stderr by the command are logged separately.
+        Does NOT raise CalledProcessError by default.
+        """
         try:
-            report = json.loads(output)
-            for issue in report.get('results', []):
-                self.add_finding(
-                    severity=issue['issue_severity'],
-                    category="Static Analysis (Bandit)",
-                    title=issue['issue_text'],
-                    description=f"Confidence: {issue['issue_confidence']}. More Info: {issue['more_info']}",
-                    file_path=issue['filename'],
-                    line_number=issue['line_number'],
-                    code_snippet=issue['code'].strip(),
-                    cwe_id=issue['test_id'] # Bandit IDs are CWE compatible
-                )
-        except json.JSONDecodeError:
-            logging.error("Could not decode Bandit JSON output.")
-
-    def run_npm_audit(self):
-        """Runs npm audit to check for frontend dependency vulnerabilities."""
-        if self.config.skip_dependency_check:
-            logging.info("Skipping npm audit as per configuration.")
-            return
-
-        self._print_header("Frontend Dependency Scan (npm audit)")
-        if not os.path.isdir(self.frontend_dir):
-            logging.warning(f"Frontend directory '{self.frontend_dir}' not found. Skipping npm audit.")
-            return
-
-        npm_cmd = ['npm', 'audit', '--json']
-        output = self._run_command(npm_cmd, cwd=self.frontend_dir)
-        if not output:
-            return
-
-        try:
-            report = json.loads(output)
-            vulnerabilities = report.get('vulnerabilities', {})
-            for name, details in vulnerabilities.items():
-                via = [v['name'] for v in details.get('via', []) if isinstance(v, dict)]
-                self.add_finding(
-                    severity=details['severity'].upper(),
-                    category="Dependency Vulnerability (npm)",
-                    title=f"Vulnerable package: {name}",
-                    description=f"Affected versions: {details['range']}. Dependency of: {', '.join(via)}.",
-                    file_path=os.path.join(self.frontend_dir, 'package.json'),
-                    line_number=1,
-                    recommendation=f"Run 'npm audit fix' or update '{name}' manually."
-                )
-        except json.JSONDecodeError:
-            logging.error("Could not decode npm audit JSON output. Is npm installed?")
-
-    def run_pip_audit(self):
-        """Runs pip-audit to check for backend dependency vulnerabilities."""
-        if self.config.skip_dependency_check:
-            logging.info("Skipping pip-audit as per configuration.")
-            return
-            
-        self._print_header("Backend Dependency Scan (pip-audit)")
-        req_file = os.path.join(self.backend_dir, 'requirements.txt')
-        if not os.path.exists(req_file):
-            req_file = os.path.join(self.project_root, 'requirements.txt')
-            if not os.path.exists(req_file):
-                logging.warning("Could not find requirements.txt. Skipping pip-audit.")
-                return
-
-        command = [sys.executable, '-m', 'pip_audit', '--json', '-r', req_file]
-        output = self._run_command(command)
-        if not output:
-            return
-
-        try:
-            report = json.loads(output)
-            for dep in report.get('dependencies', []):
-                if dep.get('vulns'):
-                    for vuln in dep['vulns']:
-                        self.add_finding(
-                            severity="HIGH", # pip-audit doesn't provide severity, default to high
-                            category="Dependency Vulnerability (pip)",
-                            title=f"Vulnerable package: {dep['name']}=={dep['version']}",
-                            description=f"{vuln['id']}: {vuln['description']}",
-                            file_path=req_file,
-                            line_number=1,
-                            recommendation=f"Upgrade to a fixed version: {', '.join(vuln.get('fix_versions', ['N/A']))}"
-                        )
-        except json.JSONDecodeError:
-            logging.error("Could not decode pip-audit JSON output.")
-
-
-    # --- CUSTOM STATIC ANALYSIS CHECKS ---
-
-    def find_files_to_scan(self) -> List[str]:
-        """Finds all relevant files, excluding specified paths."""
-        allowed_extensions = ('.py', '.js', '.vue', '.html')
-        found_files = []
-        for directory in self.scan_directories:
-            if not os.path.isdir(directory):
-                logging.warning(f"Scan directory '{directory}' does not exist, skipping.")
-                continue
-            for root, _, files in os.walk(directory):
-                current_path_abs = os.path.abspath(root)
-                if any(current_path_abs.startswith(excluded) for excluded in self.excluded_paths):
-                    continue
-
-                for file in files:
-                    if file.endswith(allowed_extensions):
-                        found_files.append(os.path.join(root, file))
-        return found_files
-
-    def analyze_file(self, file_path: str):
-        """Runs all applicable checks on a single file."""
-        try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-                lines = content.splitlines()
-        except Exception as e:
-            logging.error(f"Could not read file {file_path}: {e}")
-            return
-
-        # Python-specific checks
-        if file_path.endswith('.py'):
-            self.check_hardcoded_secrets(file_path, content, lines)
-            self.check_sql_injection_patterns(file_path, content, lines)
-            self.check_weak_crypto(file_path, content, lines)
-            self.check_debug_info(file_path, content, lines)
-            self.check_missing_permissions(file_path, content, lines)
-            self.check_secure_cookies(file_path, content, lines)
-
-        # Frontend-specific checks
-        if file_path.endswith(('.vue', '.html')):
-            self.check_xss_vulnerabilities(file_path, content, lines)
-        if file_path.endswith(('.js', '.vue')):
-            self.check_for_var_keyword(file_path, lines)
-
-        # General checks
-        self.check_https_enforcement(file_path, content, lines)
-
-
-    def check_hardcoded_secrets(self, file_path: str, content: str, lines: List[str]):
-        secret_patterns = [
-            (r'password\s*=\s*["\'][^"\']{8,}["\']', "Hardcoded Password", "CWE-798"),
-            (r'api[_-]?key\s*=\s*["\'][^"\']{16,}["\']', "Hardcoded API Key", "CWE-798"),
-            (r'secret[_-]?key\s*=\s*["\'][^"\']{16,}["\']', "Hardcoded Secret Key", "CWE-798"),
-        ]
-        for pattern, title, cwe_id in secret_patterns:
-            for match in re.finditer(pattern, content, re.IGNORECASE):
-                line_num = content.count('\n', 0, match.start()) + 1
-                self.add_finding(
-                    severity="HIGH", category="Secrets Management", title=title,
-                    description=f"Potential hardcoded secret found: {match.group()}",
-                    file_path=file_path, line_number=line_num,
-                    code_snippet=lines[line_num - 1].strip(),
-                    recommendation="Use environment variables or a secret management system.",
-                    cwe_id=cwe_id
-                )
-
-    def check_sql_injection_patterns(self, file_path: str, content: str, lines: List[str]):
-        sql_patterns = [
-            (r'execute\s*\(\s*f["\']', "f-string in SQL execute"),
-            (r'SELECT.*FROM.*\+.*', "String concatenation in SELECT query"),
-        ]
-        for pattern, description in sql_patterns:
-            for match in re.finditer(pattern, content, re.IGNORECASE):
-                line_num = content.count('\n', 0, match.start()) + 1
-                self.add_finding(
-                    severity="HIGH", category="Input Validation", title="Potential SQL Injection",
-                    description=f"{description}: {lines[line_num - 1].strip()}",
-                    file_path=file_path, line_number=line_num,
-                    code_snippet=lines[line_num - 1].strip(),
-                    recommendation="Use parameterized queries or an ORM.", cwe_id="CWE-89"
-                )
-
-    def check_weak_crypto(self, file_path: str, content: str, lines: List[str]):
-        weak_patterns = [
-            (r'hashlib\.md5\(', "MD5 hash usage", "CWE-327"),
-            (r'hashlib\.sha1\(', "SHA-1 hash usage", "CWE-327"),
-            (r'random\.random\(\)', "Insecure random number generation", "CWE-338"),
-        ]
-        for pattern, title, cwe in weak_patterns:
-            for match in re.finditer(pattern, content):
-                line_num = content.count('\n', 0, match.start()) + 1
-                self.add_finding(
-                    severity="MEDIUM", category="Cryptography", title=title,
-                    description="Usage of a weak or insecure cryptographic algorithm.",
-                    file_path=file_path, line_number=line_num,
-                    code_snippet=lines[line_num-1].strip(),
-                    recommendation="Use stronger, modern alternatives (e.g., SHA-256, secrets module).", cwe_id=cwe
-                )
-
-    def check_debug_info(self, file_path: str, content: str, lines: List[str]):
-        if 'config.py' in file_path and 'DEBUG = True' in content:
-            line_num = content.find('DEBUG = True')
-            line_num = content.count('\n', 0, line_num) + 1
-            self.add_finding(
-                severity="HIGH", category="Configuration", title="Debug Mode Enabled",
-                description="The application may be running in debug mode, which can expose sensitive information.",
-                file_path=file_path, line_number=line_num,
-                code_snippet="DEBUG = True",
-                recommendation="Ensure DEBUG is set to False in production environments.", cwe_id="CWE-215"
+            # Add a timeout to prevent the script from hanging indefinitely.
+            # 3 minutes should be more than enough for these tools.
+            process = subprocess.run(
+                cmd_parts,
+                stdout=stdout_target,
+                stderr=stderr_target,
+                text=True,
+                check=False,
+                encoding='utf-8',
+                cwd=cwd,
+                env=env,
+                timeout=180
             )
+            
+            if stderr_target == subprocess.PIPE and process.stderr:
+                logging.warning(f"Command '{' '.join(cmd_parts)}' produced stderr:\n{process.stderr.strip()}")
 
+            stdout_content = process.stdout if stdout_target == subprocess.PIPE else ""
+            return stdout_content, process.returncode
 
-    def check_missing_permissions(self, tree, file_path):
+        except subprocess.TimeoutExpired as e:
+            logging.error(f"Command '{' '.join(cmd_parts)}' timed out after 180 seconds. This can happen due to network issues or if the tool is unresponsive.")
+            # Log any partial output that was captured
+            if e.stdout:
+                logging.error(f"Partial STDOUT from timed-out command:\n{e.stdout}")
+            if e.stderr:
+                logging.error(f"Partial STDERR from timed-out command:\n{e.stderr}")
+            return None, 1
+        except FileNotFoundError:
+            logging.error(f"Command not found: '{cmd_parts[0]}'. Please ensure it's in your PATH.")
+            return None, 1
+        except Exception as e:
+            logging.error(f"An unexpected error occurred while running command '{' '.join(cmd_parts)}': {e}")
+            return None, 1
+
+    def _find_files(self, directory, extensions):
+        """Helper to find all files with given extensions in a directory."""
+        matches = []
+        for root, _, filenames in os.walk(directory):
+            for filename in filenames:
+                if any(filename.endswith(ext) for ext in extensions):
+                    matches.append(os.path.join(root, filename))
+        return matches
+
+    def analyze_file(self, file_path):
+        """Analyzes a single Python file for various security issues using AST."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Parse the file content into an AST
+            tree = ast.parse(content, filename=file_path)
+            
+            # Call various check methods, passing the AST and other relevant data
+            self.check_missing_permissions(file_path, tree)
+            # Add other AST-based checks here as needed
+
+        except FileNotFoundError:
+            logging.error(f"File not found: {file_path}")
+        except SyntaxError as e:
+            logging.error(f"Syntax error in {file_path}: {e}")
+        except Exception as e:
+            logging.error(f"Error analyzing {file_path}: {e}")
+
+    def check_missing_permissions(self, file_path, tree):
         """
         Vérifie les routes Flask pour les permissions manquantes en utilisant l'AST.
         C'est une méthode beaucoup plus fiable que l'analyse textuelle.
@@ -390,148 +162,645 @@ class SecurityAuditor:
                     break
             
             if not has_auth:
-                self._add_issue(
-                    file_path,
-                    node.lineno,
-                    'Endpoint Missing Permissions',
-                    f"L'endpoint '{node.name}' semble ne pas avoir de décorateur d'autorisation.",
-                    'HIGH'
+                self.add_finding(
+                    severity='HIGH',
+                    category='Endpoint Missing Permissions',
+                    title=f"L'endpoint '{node.name}' semble ne pas avoir de décorateur d'autorisation.",
+                    description="This Flask endpoint does not appear to have any authorization decorator, which could lead to unauthorized access.",
+                    file_path=file_path,
+                    line_number=node.lineno,
+                    recommendation="Ensure all Flask endpoints have appropriate authorization decorators (e.g., @login_required, @role_required)."
+                    # code_snippet can be added here if 'content' is passed to this method
                 )
-                
 
-    def check_secure_cookies(self, file_path: str, content: str, lines: List[str]):
-        if 'config.py' not in file_path:
+    # --- Start of merged code from backend_code_scanner.py ---
+
+    def run_code_integrity_scan(self):
+        """Runs syntax checks and detects circular imports."""
+        self._print_header("Backend Code Integrity (Syntax & Circular Imports)")
+
+        backend_files = self._find_files(self.backend_dir, ['.py'])
+        if not backend_files:
+            logging.warning("No Python files found in backend to scan for integrity.")
             return
+
+        # 1. Syntax Check
+        syntax_errors_found = False
+        for file_path in backend_files:
+            is_valid, error_msg = self._check_syntax(file_path)
+            if not is_valid:
+                syntax_errors_found = True
+                self.add_finding(
+                    severity='CRITICAL',
+                    category='Code Integrity',
+                    title='Syntax Error',
+                    description=error_msg,
+                    file_path=file_path,
+                    line_number=0, # The error message contains the line number
+                    recommendation="Fix the syntax error to allow the application to run."
+                )
+        if not syntax_errors_found:
+            logging.info("Syntax check passed for all backend files.")
+
+        # 2. Circular Import Check
+        dependency_graph = self._build_dependency_graph(backend_files)
+        circular_imports = self._find_circular_imports(dependency_graph)
+
+        if circular_imports:
+            for i, cycle in enumerate(circular_imports):
+                cycle_path = ' ->\n    '.join(cycle)
+                self.add_finding(
+                    severity='HIGH',
+                    category='Code Integrity',
+                    title=f'Circular Import Detected (Cycle {i+1})',
+                    description=f"A circular import dependency was found. This can lead to runtime errors and difficult-to-maintain code.",
+                    file_path=cycle[0].replace('.', '/') + '.py', # Best guess for file path
+                    line_number=1,
+                    code_snippet=cycle_path,
+                    recommendation="Refactor the code to break the import cycle. This often involves moving models, creating service locators, or using local imports within functions."
+                )
+        else:
+            logging.info("No circular imports detected.")
+
+    def _check_syntax(self, file_path):
+        """Vérifie la syntaxe d'un fichier Python en utilisant AST."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                source_code = f.read()
+                ast.parse(source_code, filename=file_path)
+            return True, None
+        except SyntaxError as e:
+            return False, f"Syntax error in {file_path} at line {e.lineno}: {e.msg}"
+        except Exception as e:
+            return False, f"Unexpected error while parsing {file_path}: {e}"
+
+    def _build_dependency_graph(self, python_files):
+        """Builds a dependency graph from a list of Python files."""
+        dependency_graph = defaultdict(set)
+        for file_path in python_files:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    source = f.read()
+                    tree = ast.parse(source, filename=file_path)
+                    visitor = self._DependencyVisitor(file_path)
+                    visitor.visit(tree)
+                    
+                    module_name = visitor.current_module_name
+                    internal_deps = {dep for dep in visitor.dependencies if dep.startswith(os.path.basename(self.backend_dir))}
+                    if internal_deps:
+                        dependency_graph[module_name].update(internal_deps)
+            except Exception as e:
+                logging.error(f"Could not analyze dependencies for {file_path}: {e}")
+        return dependency_graph
+
+    def _find_circular_imports(self, dependency_graph):
+        """Finds circular imports in a dependency graph using DFS."""
+        cycles = []
+        path = set()
+        visited = set()
+
+        def visit(node):
+            if node in visited:
+                return
+            path.add(node)
+            visited.add(node)
+            for neighbour in dependency_graph.get(node, []):
+                if neighbour in path:
+                    try:
+                        cycle_start_index = list(path).index(neighbour)
+                        cycle = list(path)[cycle_start_index:] + [neighbour]
+                        sorted_cycle = tuple(sorted(cycle[:-1]))
+                        if sorted_cycle not in [tuple(sorted(c[:-1])) for c in cycles]:
+                            cycles.append(cycle)
+                    except ValueError:
+                        cycles.append(list(path) + [neighbour])
+                visit(neighbour)
+            path.remove(node)
+
+        for node in list(dependency_graph.keys()):
+            visit(node)
+        return cycles
+
+    class _DependencyVisitor(ast.NodeVisitor):
+        """AST visitor to find all import statements."""
+        def __init__(self, current_module_path):
+            self.dependencies = set()
+            self.current_module_path = current_module_path
+            self.current_module_name = self._path_to_module(current_module_path)
+
+        def _path_to_module(self, path):
+            path = os.path.splitext(path)[0]
+            return path.replace(os.path.sep, '.')
+
+        def visit_Import(self, node):
+            for alias in node.names:
+                self.dependencies.add(alias.name)
+            self.generic_visit(node)
+
+        def visit_ImportFrom(self, node):
+            module_name = node.module
+            if node.level > 0:
+                parts = self.current_module_name.split('.')
+                base_path = '.'.join(parts[:-(node.level)])
+                if module_name:
+                    module_name = f"{base_path}.{module_name}"
+                else:
+                    module_name = base_path
+            if module_name:
+                self.dependencies.add(module_name)
+            self.generic_visit(node)
+
+    # --- End of merged code from backend_code_scanner.py ---
+
+    def run_safety_scan(self):
+        """Runs Safety to check for backend dependency vulnerabilities."""
+        self._print_header("Backend Dependency Scan (Safety)")
+        logging.info("This scan may take a moment as it might need to fetch the latest vulnerability database...")
+        req_file = os.path.join(self.backend_dir, 'requirements.txt')
+        if not os.path.exists(req_file):
+            logging.warning(f"Could not find requirements.txt at '{self.backend_dir}'. Skipping Safety scan.")
+            return
+
+        command = [sys.executable, '-m', 'safety', 'scan', f'--file={req_file}', '--json']
+        output, _ = self._run_command(command)
+        if not output:
+            logging.error("Safety command could not be run or produced no output.")
+            return
+
+        try:
+            report = json.loads(output)
+            for vuln_id, vuln_data in report.get('vulnerabilities', {}).items():
+                self.add_finding(
+                    severity="HIGH",
+                    category="Dependency Vulnerability (Safety)",
+                    title=f"Vulnerable package: {vuln_data.get('package_name')} ({vuln_data.get('analyzed_version')})",
+                    description=f"ID: {vuln_id}. {vuln_data.get('advisory')}",
+                    file_path=req_file,
+                    line_number=1,
+                    recommendation=f"Upgrade to a version > {vuln_data.get('vulnerable_version')}. Fixed in: {vuln_data.get('fixed_versions')}",
+                    cwe_id=vuln_id
+                )
+            logging.info(f"Safety scan found {len(report.get('vulnerabilities', {}))} vulnerabilities.")
+        except json.JSONDecodeError as e:
+            logging.error(f"Could not decode Safety JSON output: {e}")
+
+    def run_pip_audit(self):
+        """Runs pip-audit to check for backend dependency vulnerabilities."""
+        if self.config.skip_dependency_check:
+            logging.info("Skipping pip-audit as per configuration.")
+            return
+            
+        self._print_header("Backend Dependency Scan (pip-audit)")
+        req_file = os.path.join(self.backend_dir, 'requirements.txt')
+        if not os.path.exists(req_file):
+            req_file = os.path.join(self.project_root, 'requirements.txt')
+            if not os.path.exists(req_file):
+                logging.warning(f"Could not find requirements.txt at '{self.backend_dir}' or '{self.project_root}'. Skipping pip-audit.")
+                return
+
+        command = [sys.executable, '-m', 'pip_audit', '-f', 'json', '-r', req_file]
         
-        secure_settings = {
-            "SESSION_COOKIE_SECURE": 'True',
-            "SESSION_COOKIE_HTTPONLY": 'True',
-            "SESSION_COOKIE_SAMESITE": "'Strict'",
-        }
-        for key, expected in secure_settings.items():
-            if key not in content:
+        output, return_code = self._run_command(command)
+        
+        if output is None:
+            logging.error("pip-audit command could not be run or produced no parsable output.")
+            return
+
+        try:
+            report = json.loads(output)
+            
+            if 'vulnerabilities' in report and report['vulnerabilities']:
+                for vuln_data in report['vulnerabilities']:
+                    package_name = vuln_data.get('affected_package', {}).get('name', 'N/A')
+                    package_version = vuln_data.get('affected_package', {}).get('version', 'N/A')
+                    
+                    vuln_id = vuln_data.get('id', 'N/A')
+                    description = vuln_data.get('details', 'No description provided.')
+                    fixed_versions = ', '.join(vuln_data.get('fixed_versions', ['N/A']))
+                    
+                    self.add_finding(
+                        severity="HIGH",
+                        category="Dependency Vulnerability (pip-audit)",
+                        title=f"Vulnerable package: {package_name}=={package_version}",
+                        description=f"Vulnerability ID: {vuln_id}. Details: {description}",
+                        file_path=req_file,
+                        line_number=1,
+                        recommendation=f"Upgrade to a fixed version: {fixed_versions}",
+                        cwe_id=vuln_id
+                    )
+                logging.info(f"pip-audit found {len(report['vulnerabilities'])} vulnerabilities.")
+            else:
+                logging.info("pip-audit completed with no vulnerabilities found.")
+
+            if return_code != 0 and (not report.get('vulnerabilities')):
+                logging.warning(f"pip-audit exited with non-zero code ({return_code}) but reported no vulnerabilities in its JSON output. Check stderr logs for details.")
+
+        except json.JSONDecodeError as e:
+            logging.error(f"Could not decode pip-audit JSON output. Error: {e}")
+            logging.error(f"Raw pip-audit output that failed to decode (first 500 chars):\n{output[:500]}...")
+        except KeyError as e:
+            logging.error(f"Missing expected key in pip-audit JSON output: {e}. Ensure pip-audit JSON format matches expectations.")
+            logging.error(f"Problematic JSON (full output, if short enough): {output}")
+
+    def run_npm_audit(self):
+        """Runs npm audit to check for frontend dependency vulnerabilities."""
+        if self.config.skip_dependency_check:
+            logging.info("Skipping npm audit as per configuration.")
+            return
+
+        self._print_header("Frontend Dependency Scan (npm audit)")
+        
+        if not os.path.isdir(self.frontend_dir):
+            logging.warning(f"Frontend directory '{self.frontend_dir}' not found. Skipping npm audit.")
+            return
+
+        npm_cmd = ['npm', 'audit', '--json']
+
+        output_str, return_code = self._run_command(npm_cmd, cwd=self.frontend_dir)
+        
+        if output_str is None:
+            logging.error("npm audit command could not be run or produced no output.")
+            return
+
+        try:
+            report = json.loads(output_str)
+
+            vulnerabilities_found = 0
+            if 'advisories' in report:
+                for advisory_id, advisory_data in report['advisories'].items():
+                    self.add_finding(
+                        severity=advisory_data.get('severity', 'UNKNOWN').upper(),
+                        category="Dependency Vulnerability (npm)",
+                        title=advisory_data.get('title', 'N/A'),
+                        description=advisory_data.get('overview', 'No overview provided.') + f"\nMore info: {advisory_data.get('url', 'N/A')}",
+                        file_path=os.path.join(self.frontend_dir, 'package.json'),
+                        line_number=1,
+                        recommendation=f"Upgrade: {advisory_data.get('fixString', 'Manual fix needed.')}",
+                        cwe_id=advisory_id
+                    )
+                    vulnerabilities_found += 1
+            elif 'vulnerabilities' in report and report['vulnerabilities']:
+                for pkg_name, pkg_data in report['vulnerabilities'].items():
+                    for vuln_info in pkg_data.get('via', []):
+                        if isinstance(vuln_info, dict):
+                            self.add_finding(
+                                severity=vuln_info.get('severity', 'UNKNOWN').upper(),
+                                category="Dependency Vulnerability (npm)",
+                                title=f"Vulnerable package: {pkg_name}",
+                                description=f"{vuln_info.get('title', 'N/A')}. {vuln_info.get('url', 'N/A')}",
+                                file_path=os.path.join(self.frontend_dir, 'package.json'),
+                                line_number=1,
+                                recommendation=f"Affected versions: {vuln_info.get('range', 'N/A')}. Fix: npm audit fix",
+                                cwe_id=vuln_info.get('id', 'N/A')
+                            )
+                            vulnerabilities_found += 1
+
+            if vulnerabilities_found > 0:
+                logging.info(f"npm audit found {vulnerabilities_found} vulnerabilities.")
+            else:
+                logging.info("npm audit completed with no vulnerabilities found.")
+
+            if return_code != 0 and vulnerabilities_found == 0:
+                logging.warning(f"npm audit exited with non-zero code ({return_code}) but reported no vulnerabilities in its JSON output or parsing failed. Check stderr logs for details.")
+
+        except json.JSONDecodeError as e:
+            logging.error(f"Could not decode npm audit JSON output. Error: {e}")
+            logging.error(f"Raw npm audit output that failed to decode (first 500 chars):\n{output_str[:500]}...")
+        except KeyError as e:
+            logging.error(f"Missing expected key in npm audit JSON output: {e}. Ensure npm audit JSON format matches expectations.")
+            logging.error(f"Problematic JSON (full output, if short enough): {output_str}")
+
+    def run_bandit_scan(self):
+        """Runs Bandit static analysis on the backend directory."""
+        if self.config.skip_static_analysis:
+            logging.info("Skipping Bandit scan as per configuration.")
+            return
+
+        self._print_header("Backend Security Scan (Bandit)")
+        if not os.path.isdir(self.backend_dir):
+            logging.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Bandit scan.")
+            return
+
+        # Command is now more exhaustive by removing the severity filter '-ll'.
+        # It will now report issues of ALL severities (LOW, MEDIUM, HIGH).
+        # Confidence level defaults to MEDIUM and HIGH, which is a good balance.
+        # To include LOW confidence, add: '--confidence-level', 'low'
+        bandit_cmd = [sys.executable, '-m', 'bandit', '-r', self.backend_dir, '-f', 'json']
+
+        output_str, return_code = self._run_command(
+            bandit_cmd,
+            stdout_target=subprocess.PIPE,
+            stderr_target=subprocess.DEVNULL
+        )
+
+        logging.info("\n--- Raw Bandit Output (captured by Python) ---")
+        logging.info(f"Length of raw output: {len(output_str)}")
+        logging.info(f"First 200 chars of raw output:\n{output_str[:200]}")
+        logging.info(f"Last 200 chars of raw output:\n{output_str[-200:]}")
+        logging.info("--- End Raw Bandit Output ---")
+
+        clean_json_str = ""
+        try:
+            json_start_index = -1
+            for i, char in enumerate(output_str):
+                if char == '{' or char == '[':
+                    json_start_index = i
+                    break
+
+            json_end_index = -1
+            for i in range(len(output_str) - 1, -1, -1):
+                char = output_str[i]
+                if char == '}' or char == ']':
+                    json_end_index = i
+                    break
+
+            if json_start_index != -1 and json_end_index != -1 and json_end_index > json_start_index:
+                clean_json_str = output_str[json_start_index : json_end_index + 1]
+                logging.info(f"Extracted potential JSON substring from Bandit output (length: {len(clean_json_str)}).")
+                
+                clean_json_str = ''.join(c for c in clean_json_str if c.isprintable() or c.isspace())
+                clean_json_str = clean_json_str.strip()
+            else:
+                logging.warning("No complete JSON structure ({...} or [...]) found in Bandit output after initial capture.")
+                clean_json_str = ""
+
+        except Exception as e:
+            logging.error(f"Error trying to extract JSON substring from Bandit output: {e}")
+            clean_json_str = ""
+
+        logging.info("\n--- Cleaned JSON String (before json.loads) ---")
+        logging.info(f"Length of cleaned JSON: {len(clean_json_str)}")
+        logging.info(f"First 200 chars of cleaned JSON:\n{clean_json_str[:200]}")
+        logging.info(f"Last 200 chars of cleaned JSON:\n{clean_json_str[-200:]}")
+        logging.info("--- End Cleaned JSON String ---")
+
+
+        if not clean_json_str.strip():
+            logging.info("Bandit scan completed with no issues found (empty or non-parsable JSON after cleaning).")
+            if return_code != 0:
+                 logging.warning(f"Bandit exited with non-zero code ({return_code}) but produced no parsable JSON output.")
+            return
+
+        try:
+            report = json.loads(clean_json_str)
+
+            if 'results' in report and report['results']:
+                for issue in report['results']:
+                    # --- Enhanced and more specific finding details ---
+                    test_name = issue.get('test_name', 'N/A')
+                    confidence = issue.get('issue_confidence', 'UNKNOWN').upper()
+                    more_info_url = issue.get('more_info', 'N/A')
+
+                    # Create a more detailed description
+                    description = (
+                        f"Bandit Test: {test_name} ({issue.get('test_id', 'N/A')})\n"
+                        f"Confidence: {confidence}\n"
+                        f"This issue was flagged by Bandit, a static analysis tool for finding common security issues in Python code."
+                    )
+
+                    # Create a more helpful recommendation
+                    recommendation = f"Review the issue and the guidance available at: {more_info_url}"
+
+                    # Format the code snippet with line numbers for better context
+                    code_lines = issue.get('code', '').split('\n')
+                    line_range = issue.get('line_range', [issue.get('line_number', 0)])
+                    start_line = line_range[0]
+                    formatted_code = "\n".join(
+                        f"{start_line + i: >4}: {line}" for i, line in enumerate(code_lines)
+                    )
+
+                    self.add_finding(
+                        severity=issue.get('issue_severity', 'UNKNOWN').upper(),
+                        category="Static Analysis (Bandit)",
+                        title=issue.get('issue_text', 'No issue description'),
+                        description=description,
+                        file_path=issue.get('filename', 'N/A'),
+                        line_number=issue.get('line_number', 'N/A'),
+                        code_snippet=formatted_code,
+                        recommendation=recommendation,
+                        cwe_id=issue.get('test_id', 'N/A')
+                    )
+                logging.info(f"Bandit scan found {len(report['results'])} issues.")
+            else:
+                logging.info("Bandit scan completed with no security issues found in 'results' section.")
+
+            if 'metrics' in report and report['metrics']:
+                for file_path_metric, metrics_data in report['metrics'].items():
+                    for severity_key in ['SEVERITY.HIGH', 'SEVERITY.MEDIUM', 'SEVERITY.LOW', 'SEVERITY.UNDEFINED']:
+                        if metrics_data.get(severity_key, 0) > 0:
+                            self.add_finding(
+                                severity=severity_key.replace('SEVERITY.', ''),
+                                category="Static Analysis (Bandit Metrics)",
+                                title=f"Bandit detected {metrics_data[severity_key]} {severity_key} issues in {file_path_metric}",
+                                description=f"Summary metrics for {file_path_metric} show {metrics_data[severity_key]} issues with {severity_key.replace('SEVERITY.', '')} severity. Review the detailed 'results' section if available.",
+                                file_path=file_path_metric,
+                                line_number=0,
+                                recommendation="Review the file for potential security vulnerabilities identified by Bandit."
+                            )
+                            break
+            else:
+                logging.info("No 'metrics' section found in Bandit report or it's empty.")
+
+
+            if return_code != 0 and not (report.get('results') or report.get('metrics')):
+                logging.warning(f"Bandit exited with non-zero code ({return_code}) but reported no vulnerabilities in its JSON output (after parsing). This might indicate a configuration error or other non-finding issue. Please check Bandit's configuration and execution context.")
+
+        except json.JSONDecodeError as e:
+            logging.error(f"Could not decode Bandit JSON output. Error: {e}")
+            logging.error(f"Problematic JSON (first 500 chars):\n{clean_json_str[:500]}...")
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, encoding='utf-8') as tmp_file:
+                tmp_file.write(clean_json_str)
+                logging.error(f"Problematic Bandit JSON saved to: {tmp_file.name} for manual inspection.")
+            raise
+        except KeyError as e:
+            logging.error(f"Missing expected key in Bandit JSON output: {e}. Ensure Bandit JSON format matches expectations.")
+            logging.error(f"Problematic JSON (full output, if short enough): {clean_json_str}")
+            raise
+
+    def run_pylint_scan(self):
+        """Runs Pylint static analysis on the backend directory and parses the JSON output."""
+        self._print_header("Backend Code Linting (Pylint)")
+        if not os.path.isdir(self.backend_dir):
+            logging.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Pylint scan.")
+            return
+
+        # Using a temporary file for JSON output is more robust
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".json", encoding='utf-8') as tmp_file:
+            pylint_output_file = tmp_file.name
+
+        pylint_cmd = [
+            sys.executable, '-m', 'pylint',
+            self.backend_dir,
+            '--output-format=json'
+        ]
+
+        # Run Pylint and direct its JSON output to the temp file
+        # We capture stderr to see any Pylint configuration errors
+        _, return_code = self._run_command(pylint_cmd, stdout_target=open(pylint_output_file, 'w'), stderr_target=subprocess.PIPE)
+
+        if not os.path.exists(pylint_output_file) or os.path.getsize(pylint_output_file) == 0:
+            logging.error(f"Pylint did not generate an output file at {pylint_output_file}. Pylint might have crashed. Check stderr logs.")
+            os.remove(pylint_output_file)
+            return
+
+        try:
+            with open(pylint_output_file, 'r', encoding='utf-8') as f:
+                report = json.load(f)
+
+            if not report:
+                logging.info("Pylint scan completed with no issues found.")
+                return
+
+            # Map Pylint message types to our severity levels
+            severity_map = {
+                'fatal': 'CRITICAL', 'error': 'HIGH', 'warning': 'MEDIUM',
+                'convention': 'LOW', 'refactor': 'LOW',
+            }
+
+            for issue in report:
                 self.add_finding(
-                    severity="MEDIUM", category="Configuration", title=f"Missing Secure Cookie Setting: {key}",
-                    description=f"The setting {key} is not defined, which can lead to session vulnerabilities.",
-                    file_path=file_path, line_number=1, recommendation=f"Set {key} = {expected} in your Flask config.", cwe_id="CWE-614"
+                    severity=severity_map.get(issue.get('type', 'convention'), 'LOW'),
+                    category="Code Quality (Pylint)",
+                    title=f"{issue.get('symbol')} ({issue.get('message-id')})",
+                    description=issue.get('message', 'No message provided.'),
+                    file_path=issue.get('path', 'N/A'),
+                    line_number=issue.get('line', 0),
+                    code_snippet=f"Module: {issue.get('module')}, Object: {issue.get('obj')}",
+                    recommendation=f"Review Pylint rule {issue.get('message-id')} for best practices."
                 )
+            logging.info(f"Pylint scan found {len(report)} issues.")
+        except (json.JSONDecodeError, Exception) as e:
+            logging.error(f"An unexpected error occurred while parsing Pylint report from {pylint_output_file}: {e}")
+        finally:
+            os.remove(pylint_output_file)
 
-    def check_xss_vulnerabilities(self, file_path: str, content: str, lines: List[str]):
-        # Simple check for v-html, a common source of XSS in Vue
-        for match in re.finditer(r'v-html=', content):
-            line_num = content.count('\n', 0, match.start()) + 1
-            line = lines[line_num - 1]
-            # A more advanced check would trace the variable, but for now, we flag all uses.
-            self.add_finding(
-                severity="HIGH", category="XSS", title="Potential XSS with v-html",
-                description="The 'v-html' directive can expose your application to XSS if the content is user-provided.",
-                file_path=file_path, line_number=line_num,
-                code_snippet=line.strip(),
-                recommendation="Avoid v-html. If necessary, use a library like DOMPurify to sanitize the HTML.",
-                cwe_id="CWE-79"
-            )
+    def run_best_practices_audit(self):
+        """Runs various best practice checks from the best_practices_audit.py script."""
+        self._print_header("Best Practices Audit")
+        all_files = self._find_files(self.project_root, ['.py', '.js', '.vue', '.css', '.scss'])
+        
+        for file_path in all_files:
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                
+                # Check for hardcoded secrets
+                secret_keywords = ['password', 'secret', 'api_key', 'token']
+                if any(keyword in content.lower() for keyword in secret_keywords):
+                    for i, line in enumerate(content.splitlines(), 1):
+                        if any(keyword in line.lower() for keyword in secret_keywords) and ('=' in line):
+                            if not (line.strip().startswith('#') or 'secret_key' in line):
+                                self.add_finding(
+                                    severity='HIGH', category='Security', title='Potential Hardcoded Secret',
+                                    description=f"Line contains a keyword that might indicate a hardcoded secret.",
+                                    file_path=file_path, line_number=i, code_snippet=line.strip(),
+                                    recommendation="Store secrets in environment variables or a secure vault, not in code."
+                                )
 
-    def check_https_enforcement(self, file_path: str, content: str, lines: List[str]):
-        # Finds hardcoded http:// links
-        for match in re.finditer(r'["\']http://(?!localhost|127\.0\.0\.1)', content):
-             line_num = content.count('\n', 0, match.start()) + 1
-             self.add_finding(
-                severity="MEDIUM", category="Transport Security", title="Insecure HTTP URL",
-                description="A hardcoded HTTP URL was found. All external resources should be loaded over HTTPS.",
-                file_path=file_path, line_number=line_num,
-                code_snippet=lines[line_num-1].strip(),
-                recommendation="Replace 'http://' with 'https://'.", cwe_id="CWE-319"
-             )
-    
-    def check_for_var_keyword(self, file_path: str, lines: List[str]):
-        for i, line in enumerate(lines):
-            # A simple regex to find 'var' but not as part of another word like 'variable'.
-            if re.search(r'\bvar\b', line):
-                self.add_finding(
-                    severity="LOW", category="Code Quality", title="Outdated 'var' keyword",
-                    description="The 'var' keyword is outdated and has function-scoping issues.",
-                    file_path=file_path, line_number=i + 1,
-                    code_snippet=line.strip(),
-                    recommendation="Use 'let' for variables that will be reassigned, or 'const' for constant variables."
-                )
+                # Check for insecure HTTP URLs
+                http_patterns = [r'http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0)']
+                for pattern in http_patterns:
+                    for match in re.finditer(pattern, content, re.IGNORECASE):
+                        line_num = content.count('\n', 0, match.start()) + 1
+                        self.add_finding(
+                            severity="HIGH", category="HTTPS", title="Insecure HTTP URL",
+                            description=f"Insecure HTTP URL found: {match.group()}",
+                            file_path=file_path, line_number=line_num,
+                            recommendation="Use HTTPS for all external connections."
+                        )
 
-    # --- MAIN EXECUTION METHOD ---
+                # Check for bare except clauses
+                bare_except_pattern = r'except\s*:'
+                for match in re.finditer(bare_except_pattern, content):
+                    line_num = content.count('\n', 0, match.start()) + 1
+                    self.add_finding(
+                        severity="MEDIUM", category="Error Handling", title="Bare Except Clause",
+                        description="Bare except clause catches all exceptions, which can hide bugs.",
+                        file_path=file_path, line_number=line_num,
+                        recommendation="Catch specific exceptions instead of using a bare except."
+                    )
+
+            except Exception as e:
+                logging.warning(f"Could not process file {file_path} for best practices audit: {e}")
+
+        logging.info("Best practices audit checks completed.")
+
 
     def run_audit(self):
-        """Runs the complete security audit."""
-        self._print_header("Starting Comprehensive Security Audit")
+        """Orchestrates the full suite of security and best practices audits."""
+        self._print_header("STARTING COMPREHENSIVE SECURITY AUDIT")
 
-        # 1. Dependency and Tool Scans
+        # Run backend dependency scan (pip-audit)
         self.run_pip_audit()
-        self.run_npm_audit()
-        self.run_bandit_scan()
-        
-        # 2. Custom Static Code Analysis
-        self._print_header("Running Custom Static Code Analysis")
-        files_to_scan = self.find_files_to_scan()
-        logging.info(f"Found {len(files_to_scan)} files to analyze.")
-        
-        for file_path in files_to_scan:
-            logging.debug(f"Scanning: {file_path}")
-            self.analyze_file(file_path)
-            
-        # 3. Final Report
-        self._print_header("Audit Summary")
-        if not self.findings:
-            print(f"{Colors.GREEN}✔ No security issues found.{Colors.ENDC}")
-        else:
-            print(f"{Colors.RED}Found {len(self.findings)} potential issues.{Colors.ENDC}")
-            
-            # Sort findings by severity
-            severity_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
-            self.findings.sort(key=lambda f: severity_order.get(f.severity, 99))
-            
-            # Optionally, write to a file
-            if self.config.output_file:
-                output_data = [f.to_dict() for f in self.findings]
-                try:
-                    with open(self.config.output_file, 'w') as f:
-                        json.dump(output_data, f, indent=4)
-                    print(f"Report saved to {self.config.output_file}")
-                except Exception as e:
-                    logging.error(f"Failed to write report to file: {e}")
 
-        print(f"\n{Colors.HEADER}{Colors.BOLD}===== Audit Finished ====={Colors.ENDC}")
+        # Run frontend dependency scan (npm audit)
+        self.run_npm_audit()
+        
+        # Run another backend dependency scan (safety)
+        self.run_safety_scan()
+
+        # Run static security analysis (Bandit)
+        self.run_bandit_scan()
+
+        # Run Pylint scan for code quality and potential bugs
+        self.run_pylint_scan()
+
+        # Run code integrity checks (syntax, circular imports)
+        self.run_code_integrity_scan()
+
+        # Run best practices audit
+        self.run_best_practices_audit()
+
+        # Add other audit steps here as needed
+        # Example: self.run_code_linting()
+        # Example: self.run_code_formatting_checks()
+
+        self._print_header("AUDIT SUMMARY")
+        if self.findings:
+            # Sort findings by severity (assuming severity_order is defined elsewhere or in __init__)
+            severity_order = {'HIGH': 1, 'MEDIUM': 2, 'LOW': 3, 'UNKNOWN': 4, 'UNDEFINED': 5}
+            # Ensure 'severity' key exists in finding dictionary before sorting
+            self.findings.sort(key=lambda f: severity_order.get(f.get('severity', 'UNKNOWN'), 99))
+            
+            logging.info(f"Found {len(self.findings)} potential issues:")
+            for i, finding in enumerate(self.findings):
+                logging.info(f"  {i+1}. [{finding.get('severity', 'UNKNOWN')}] {finding.get('title', 'No Title')}")
+                logging.info(f"     Category: {finding.get('category', 'N/A')}")
+                logging.info(f"     File: {finding.get('file_path', 'N/A')}:{finding.get('line_number', 'N/A')}")
+                logging.info(f"     Description: {finding.get('description', 'N/A')}")
+                if finding.get('recommendation'):
+                    logging.info(f"     Recommendation: {finding['recommendation']}")
+                if finding.get('code_snippet'):
+                    logging.info(f"     Code Snippet:\n{finding['code_snippet']}")
+                logging.info("-" * 20)
+        else:
+            logging.info("No issues found during the audit.")
+
         return len(self.findings)
 
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Comprehensive Security Audit Tool.")
-    parser.add_argument(
-        '-o', '--output-file',
-        help="Path to save the JSON report file."
-    )
-    parser.add_argument(
-        '--skip-dependency-check',
-        action='store_true',
-        help="Skip pip-audit and npm-audit scans."
-    )
-    parser.add_argument(
-        '--skip-static-analysis',
-        action='store_true',
-        help="Skip the Bandit scan."
-    )
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help="Enable verbose logging."
-    )
-    
-    args = parser.parse_args()
+    # This block allows the script to be run directly from the command line,
+    # which is how it's called from `run_audits.sh`.
 
-    log_level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(level=log_level, format='[%(levelname)s] %(message)s')
+    # Define a simple default configuration for direct execution.
+    # In a real application, this might come from command-line arguments.
+    class SimpleConfig:
+        skip_dependency_check = False
+        skip_static_analysis = False
 
-    auditor = SecurityAuditor(config=args)
-    num_issues = auditor.run_audit()
+    config = SimpleConfig()
 
-    # Exit with a non-zero status code if issues were found
-    if num_issues > 0:
+    # Determine project paths based on this script's location
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    backend_dir = os.path.join(project_root, 'backend')
+    frontend_dir = os.path.join(project_root, 'website')
+
+    logging.info("Security audit script is being run directly.")
+
+    # Instantiate and run the auditor
+    auditor = SecurityAuditor(config, project_root, backend_dir, frontend_dir)
+    num_findings = auditor.run_audit()
+
+    # Exit with a non-zero status code if findings are present
+    if num_findings > 0:
         sys.exit(1)
-    else:
-        sys.exit(0)

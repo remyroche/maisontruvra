@@ -1,0 +1,16 @@
+2025-07-03 18:07:14,647 - INFO - All Python logging output will also be written to: security_audit_log_20250703_180714.txt
+2025-07-03 18:07:14,647 - INFO - Security audit script is being run directly.
+2025-07-03 18:07:14,647 - INFO - 
+--- STARTING COMPREHENSIVE SECURITY AUDIT ---
+2025-07-03 18:07:14,647 - INFO - 
+--- Backend Dependency Scan (pip-audit) ---
+2025-07-03 18:07:45,472 - WARNING - Command '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m pip_audit -f json -r /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/requirements.txt' produced stderr:
+Found 26 known vulnerabilities in 11 packages
+2025-07-03 18:07:45,473 - INFO - pip-audit completed with no vulnerabilities found.
+2025-07-03 18:07:45,473 - WARNING - pip-audit exited with non-zero code (1) but reported no vulnerabilities in its JSON output. Check stderr logs for details.
+2025-07-03 18:07:45,473 - INFO - 
+--- Frontend Dependency Scan (npm audit) ---
+2025-07-03 18:07:47,177 - INFO - NEW FINDING: Vulnerable package: esbuild in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/package.json:1 (Severity: MODERATE)
+2025-07-03 18:07:47,178 - INFO - npm audit found 1 vulnerabilities.
+2025-07-03 18:07:47,178 - INFO - 
+--- Backend Dependency Scan (Safety) ---

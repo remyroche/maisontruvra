@@ -1,0 +1,22 @@
+{% extends "general_base_template.html" %}
+
+{% block title %}Your Magic Link - Maison Truvra{% endblock %}
+
+{% block content %}
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Points de fidélité gagnés</title>
+</head>
+<body>
+    <p>Bonjour {{ user_name }},</p>
+    <p>Bonne nouvelle ! Vous venez de gagner <strong>{{ points_earned }}</strong> points de fidélité grâce à votre récente commande.</p>
+    <p>Votre solde total est maintenant de <strong>{{ total_points }}</strong> points.</p>
+    <p>Utilisez vos points pour obtenir des réductions sur vos prochains achats. Merci de votre fidélité !</p>
+    <p>À bientôt,<br>L'équipe Maison Truvra</p>
+</body>
+</html>
+
+{% endblock %}

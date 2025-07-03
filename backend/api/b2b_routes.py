@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app, g
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.services.b2b_service import B2BService
 from backend.services.quote_service import QuoteService
 from backend.utils.decorators import admin_required, login_required, api_resource_handler

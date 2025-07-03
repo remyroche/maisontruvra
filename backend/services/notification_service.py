@@ -7,12 +7,6 @@ from .exceptions import ServiceError, NotFoundException, ValidationException
 from flask import current_app
 import logging
 
-from ..tasks import (
-    send_back_in_stock_notifications_task,
-    send_order_confirmation_email_task,
-    send_order_status_update_task
-)
-
 logger = logging.getLogger(__name__)
 
 class NotificationService:
@@ -97,6 +91,37 @@ class NotificationService:
         except Exception as e:
             MonitoringService.log_info(f"Failed to queue tier upgrade email: {e}", exc_info=True)
 
+    def send_loyalty_points_notification(self, user_id, points_earned):
+        """
+        Prepares and sends an email to the user about newly earned loyalty points.
+        """
+        try:
+            user = self.user_service.get_user_by_id(user_id)
+            if not user or not user.email:
+                logger.warning(f"User with ID {user_id} not found or has no email for loyalty notification.")
+                return
+
+            # Ensure the user has a loyalty account to get the total points
+            total_points = user.loyalty_account.points if hasattr(user, 'loyalty_account') and user.loyalty_account else points_earned
+
+            subject = "Vous avez gagné des points de fidélité !"
+            template = "emails/loyalty_points_notification.html"
+            context = {
+                'user_name': user.first_name,
+                'points_earned': points_earned,
+                'total_points': total_points,
+            }
+            
+            self.email_service.send_email(
+                to=user.email,
+                subject=subject,
+                template=template,
+                context=context
+            )
+            logger.info(f"Successfully queued loyalty points notification for user {user.email}")
+
+        except Exception as e:
+            logger.error(f"Failed to send loyalty points notification for user ID {user_id}: {e}", exc_info=True)
 
     @staticmethod
     def trigger_back_in_stock_notifications(product_id):

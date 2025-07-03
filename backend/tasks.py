@@ -22,7 +22,8 @@ def finalize_order_task(self, order_id):
     It calls other tasks for invoice generation and confirmation emails.
     """
     from .services.order_service import OrderService
-    
+    from .services.notification_service import NotificationService
+
     logger.info(f"Executing 'finalize_order_task' for order ID: {order_id}")
     try:
         order_service = OrderService()
@@ -157,3 +158,33 @@ def expire_loyalty_points_task(self):
     except Exception as e:
         logger.error(f"An error occurred during loyalty point expiration: {e}", exc_info=True)
         raise
+
+
+@celery_app.task(name="tasks.update_inventory_on_order")
+def update_inventory_on_order_task(product_id, quantity_ordered):
+    """
+    Celery task to update inventory after an order is placed.
+    """
+    from .services.inventory_service import InventoryService
+    logger.info(f"Executing update_inventory_on_order_task for product_id: {product_id}, quantity: {quantity_ordered}")
+    try:
+        inventory_service = InventoryService()
+        inventory_service.decrease_stock(product_id, quantity_ordered)
+    except Exception as e:
+        logger.error(f"Error in update_inventory_on_order_task for product {product_id}: {e}", exc_info=True)
+
+@celery_app.task(name="tasks.notify_user_of_loyalty_points")
+def notify_user_of_loyalty_points_task(user_id, points_earned):
+    """
+    Celery task to notify a user about earned loyalty points.
+    """
+    from .services.notification_service import NotificationService
+    logger.info(f"Executing notify_user_of_loyalty_points_task for user_id: {user_id} with {points_earned} points.")
+    try:
+        # Instantiate services within the task to ensure they run
+        # in the Celery worker's application context.
+        notification_service = NotificationService()
+        notification_service.send_loyalty_points_notification(user_id, points_earned)
+    except Exception as e:
+        # Log any exceptions that occur within the task
+        logger.error(f"Error in notify_user_of_loyalty_points_task for user_id {user_id}: {e}", exc_info=True)

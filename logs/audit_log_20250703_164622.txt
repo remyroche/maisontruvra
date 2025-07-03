@@ -1,0 +1,159 @@
++ echo ==========================================
+==========================================
++ echo '   Starting Maison Truvra Code Audits     '
+   Starting Maison Truvra Code Audits     
++ echo ==========================================
+==========================================
++ echo 'Full log will be saved to: logs/audit_log_20250703_164622.txt'
+Full log will be saved to: logs/audit_log_20250703_164622.txt
++ echo --------------------------------------------------
+--------------------------------------------------
++ print_step 'Installation/Mise à jour des outils d'\''audit Python'
++ echo -e '\n\033[1;33m>>> Installation/Mise à jour des outils d'\''audit Python\033[0m'
+
+[1;33m>>> Installation/Mise à jour des outils d'audit Python[0m
++ pip install --upgrade pip bandit safety pip-audit pylint black isort
+Requirement already satisfied: pip in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (25.1.1)
+Requirement already satisfied: bandit in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (1.8.5)
+Requirement already satisfied: safety in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (3.5.2)
+Requirement already satisfied: pip-audit in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (2.9.0)
+Requirement already satisfied: pylint in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (3.3.7)
+Requirement already satisfied: black in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (25.1.0)
+Requirement already satisfied: isort in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (6.0.1)
+Requirement already satisfied: PyYAML>=5.3.1 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from bandit) (6.0.2)
+Requirement already satisfied: stevedore>=1.20.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from bandit) (5.4.1)
+Requirement already satisfied: rich in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from bandit) (13.9.4)
+Requirement already satisfied: authlib>=1.2.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (1.6.0)
+Requirement already satisfied: click<8.2.0,>=8.0.2 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (8.1.7)
+Requirement already satisfied: dparse>=0.6.4 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (0.6.4)
+Requirement already satisfied: filelock~=3.16.1 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (3.16.1)
+Requirement already satisfied: httpx in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (0.28.1)
+Requirement already satisfied: jinja2>=3.1.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (3.1.3)
+Requirement already satisfied: marshmallow>=3.15.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (3.19.0)
+Requirement already satisfied: nltk>=3.9 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (3.9.1)
+Requirement already satisfied: packaging>=21.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (23.2)
+Requirement already satisfied: psutil~=6.1.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (6.1.1)
+Requirement already satisfied: pydantic<2.10.0,>=2.6.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (2.9.2)
+Requirement already satisfied: requests in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (2.31.0)
+Requirement already satisfied: ruamel-yaml>=0.17.21 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (0.18.14)
+Requirement already satisfied: safety-schemas==0.0.14 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (0.0.14)
+Requirement already satisfied: setuptools>=65.5.1 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (80.9.0)
+Requirement already satisfied: tenacity in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (9.1.2)
+Requirement already satisfied: tomlkit in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (0.13.3)
+Requirement already satisfied: typer>=0.12.1 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (0.16.0)
+Requirement already satisfied: typing-extensions>=4.7.1 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from safety) (4.9.0)
+Requirement already satisfied: annotated-types>=0.6.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pydantic<2.10.0,>=2.6.0->safety) (0.7.0)
+Requirement already satisfied: pydantic-core==2.23.4 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pydantic<2.10.0,>=2.6.0->safety) (2.23.4)
+Requirement already satisfied: CacheControl>=0.13.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from CacheControl[filecache]>=0.13.0->pip-audit) (0.14.3)
+Requirement already satisfied: cyclonedx-python-lib<10,>=5 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pip-audit) (9.1.0)
+Requirement already satisfied: pip-api>=0.0.28 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pip-audit) (0.0.34)
+Requirement already satisfied: pip-requirements-parser>=32.0.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pip-audit) (32.0.1)
+Requirement already satisfied: toml>=0.10 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pip-audit) (0.10.2)
+Requirement already satisfied: platformdirs>=4.2.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pip-audit) (4.3.8)
+Requirement already satisfied: license-expression<31,>=30 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from cyclonedx-python-lib<10,>=5->pip-audit) (30.4.3)
+Requirement already satisfied: packageurl-python<2,>=0.11 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from cyclonedx-python-lib<10,>=5->pip-audit) (0.17.1)
+Requirement already satisfied: py-serializable<3.0.0,>=2.0.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from cyclonedx-python-lib<10,>=5->pip-audit) (2.0.0)
+Requirement already satisfied: sortedcontainers<3.0.0,>=2.4.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from cyclonedx-python-lib<10,>=5->pip-audit) (2.4.0)
+Requirement already satisfied: boolean.py>=4.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from license-expression<31,>=30->cyclonedx-python-lib<10,>=5->pip-audit) (5.0)
+Requirement already satisfied: defusedxml<0.8.0,>=0.7.1 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from py-serializable<3.0.0,>=2.0.0->cyclonedx-python-lib<10,>=5->pip-audit) (0.7.1)
+Requirement already satisfied: astroid<=3.4.0.dev0,>=3.3.8 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pylint) (3.3.10)
+Requirement already satisfied: dill>=0.3.6 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pylint) (0.4.0)
+Requirement already satisfied: mccabe<0.8,>=0.6 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pylint) (0.7.0)
+Requirement already satisfied: mypy-extensions>=0.4.3 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from black) (1.1.0)
+Requirement already satisfied: pathspec>=0.9.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from black) (0.12.1)
+Requirement already satisfied: cryptography in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from authlib>=1.2.0->safety) (42.0.5)
+Requirement already satisfied: msgpack<2.0.0,>=0.5.2 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from CacheControl>=0.13.0->CacheControl[filecache]>=0.13.0->pip-audit) (1.1.1)
+Requirement already satisfied: MarkupSafe>=2.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from jinja2>=3.1.0->safety) (2.1.5)
+Requirement already satisfied: joblib in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from nltk>=3.9->safety) (1.5.1)
+Requirement already satisfied: regex>=2021.8.3 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from nltk>=3.9->safety) (2024.11.6)
+Requirement already satisfied: tqdm in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from nltk>=3.9->safety) (4.67.1)
+Requirement already satisfied: pyparsing in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from pip-requirements-parser>=32.0.0->pip-audit) (3.2.3)
+Requirement already satisfied: charset-normalizer<4,>=2 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from requests->safety) (3.3.2)
+Requirement already satisfied: idna<4,>=2.5 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from requests->safety) (3.6)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from requests->safety) (2.2.1)
+Requirement already satisfied: certifi>=2017.4.17 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from requests->safety) (2024.2.2)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from rich->bandit) (3.0.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from rich->bandit) (2.19.1)
+Requirement already satisfied: mdurl~=0.1 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from markdown-it-py>=2.2.0->rich->bandit) (0.1.2)
+Requirement already satisfied: ruamel.yaml.clib>=0.2.7 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from ruamel-yaml>=0.17.21->safety) (0.2.12)
+Requirement already satisfied: pbr>=2.0.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from stevedore>=1.20.0->bandit) (6.1.1)
+Requirement already satisfied: shellingham>=1.3.0 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from typer>=0.12.1->safety) (1.5.4)
+Requirement already satisfied: cffi>=1.12 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from cryptography->authlib>=1.2.0->safety) (1.16.0)
+Requirement already satisfied: pycparser in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from cffi>=1.12->cryptography->authlib>=1.2.0->safety) (2.21)
+Requirement already satisfied: anyio in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from httpx->safety) (4.9.0)
+Requirement already satisfied: httpcore==1.* in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from httpx->safety) (1.0.9)
+Requirement already satisfied: h11>=0.16 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from httpcore==1.*->httpx->safety) (0.16.0)
+Requirement already satisfied: sniffio>=1.1 in /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages (from anyio->httpx->safety) (1.3.1)
++ '[' 0 -ne 0 ']'
++ print_success 'Outils d'\''audit Python prêts.'
++ echo -e '\033[0;32m✓ Outils d'\''audit Python prêts.\033[0m'
+[0;32m✓ Outils d'audit Python prêts.[0m
++ print_step 'Running Custom Backend Best Practices Audit...'
++ echo -e '\n\033[1;33m>>> Running Custom Backend Best Practices Audit...\033[0m'
+
+[1;33m>>> Running Custom Backend Best Practices Audit...[0m
++ python3 best_practices_audit.py
+[INFO] Début de l'audit des meilleures pratiques...
+[INFO] 290 fichier(s) à analyser.
+[INFO] Audit des meilleures pratiques terminé. Aucun problème trouvé.
++ print_success 'Custom Backend Best Practices Audit Complete.'
++ echo -e '\033[0;32m✓ Custom Backend Best Practices Audit Complete.\033[0m'
+[0;32m✓ Custom Backend Best Practices Audit Complete.[0m
++ print_step 'Running Custom Backend Security Audit (Pip-Audit, Bandit etc.)...'
++ echo -e '\n\033[1;33m>>> Running Custom Backend Security Audit (Pip-Audit, Bandit etc.)...\033[0m'
+
+[1;33m>>> Running Custom Backend Security Audit (Pip-Audit, Bandit etc.)...[0m
++ python3 security_audit.py
+[WARNING] Command '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m pip_audit -f json -r /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/requirements.txt' produced stderr:
+Found 26 known vulnerabilities in 11 packages
+[INFO] pip-audit completed with no vulnerabilities found.
+[WARNING] pip-audit exited with non-zero code (1) but reported no vulnerabilities in its JSON output. Check stderr logs for details.
+[INFO] NEW FINDING: Vulnerable package: esbuild in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/package.json:1 (Severity: MODERATE)
+[INFO] npm audit found 1 vulnerabilities.
+[WARNING] Command '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m bandit -r /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend -f json -ll' produced stderr:
+[main]	INFO	profile include tests: None
+[main]	INFO	profile exclude tests: None
+[main]	INFO	cli include tests: None
+[main]	INFO	cli exclude tests: None
+[ERROR] Could not decode Bandit JSON output. Error: Expecting value: line 1 column 1 (char 0)
+[ERROR] Raw Bandit output that failed to decode (first 500 chars):
+Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:01
+{
+  "errors": [],
+  "generated_at": "2025-07-03T14:46:50Z",
+  "metrics": {
+    "/Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 230,
+      "nosec": 0,
+    ...
+[INFO] Found 320 files to analyze.
+
+[95m[1m===== STARTING COMPREHENSIVE SECURITY AUDIT =====[0m
+
+[95m[1m===== BACKEND DEPENDENCY SCAN (PIP-AUDIT) =====[0m
+
+[95m[1m===== FRONTEND DEPENDENCY SCAN (NPM AUDIT) =====[0m
+
+[95m[1m===== BACKEND SECURITY SCAN (BANDIT) =====[0m
+
+[95m[1m===== RUNNING CUSTOM STATIC CODE ANALYSIS =====[0m
+Traceback (most recent call last):
+  File "/Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/security_audit.py", line 683, in <module>
+    num_issues = auditor.run_audit()
+                 ^^^^^^^^^^^^^^^^^^^
+  File "/Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/security_audit.py", line 628, in run_audit
+    self.analyze_file(file_path)
+  File "/Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/security_audit.py", line 436, in analyze_file
+    self.check_missing_permissions(file_path, content, lines)
+  File "/Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/security_audit.py", line 518, in check_missing_permissions
+    for node in ast.walk(tree):
+                         ^^^^
+NameError: name 'tree' is not defined. Did you mean: 'True'?
