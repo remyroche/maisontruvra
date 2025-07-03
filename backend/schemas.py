@@ -5,6 +5,10 @@ separating input validation from output serialization.
 """
 import re
 from marshmallow import Schema, fields, validate, ValidationError
+from typing import List, Optional
+from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field
+
 from .extensions import ma
 from .models.b2b_models import B2BPartnershipRequest, B2BTier, B2BAccount
 from .models.user_models import User
@@ -22,7 +26,7 @@ class BaseSchema(ma.Schema):
 def validate_password_complexity(password):
     """
     Custom validator for password strength. Ensures at least 8 characters,
-    one uppercase, one lowercase, one digit, and one special character.
+    one uppercase, one lowercase, and one digit.
     """
     if len(password) < 8:
         raise ValidationError("Password must be at least 8 characters long.")
@@ -32,8 +36,6 @@ def validate_password_complexity(password):
         raise ValidationError("Password must contain at least one lowercase letter.")
     if not re.search(r"\d", password):
         raise ValidationError("Password must contain at least one digit.")
-    if not re.search(r"[\W_]", password):
-        raise ValidationError("Password must contain at least one special character.")
 
 # --- Core Model Schemas ---
 
@@ -100,7 +102,7 @@ class B2BProfileSchema(BaseModel):
     company_name: str
     vat_number: Optional[str] = None
     status: str
-    user: UserSchema # Embed the user details
+    user: 'UserSchema' # Embed the user details
 
     class Config:
         from_attributes = True
@@ -110,10 +112,10 @@ class B2BProfileUpdateSchema(BaseModel):
     Schema for validating updates to a B2B profile.
     A B2B user can update their company info and their personal info.
     """
-    company_name: Optional[constr(min_length=1)] = None
-    vat_number: Optional[constr(min_length=1)] = None
+    company_name: Optional[str] = Field(default=None, min_length=1)
+    vat_number: Optional[str] = Field(default=None, min_length=1)
     # Nested schema for updating the associated user details
-    user_details: Optional[UserProfileUpdateSchema] = None
+    user_details: Optional['UserProfileUpdateSchema'] = None
 
     class Config:
         from_attributes = True
@@ -165,6 +167,9 @@ class UserRegistrationSchema(BaseSchema):
     last_name = fields.Str(required=True, validate=validate.Length(min=1, max=50))
     email = fields.Email(required=True)
     password = fields.Str(required=True, validate=validate_password_complexity)
+    user_type = fields.Str(validate=validate.OneOf(['b2c', 'b2b']), missing='b2c')
+    setup_2fa = fields.Bool(missing=False)  # Optional 2FA setup during registration
+    two_fa_method = fields.Str(validate=validate.OneOf(['totp', 'magic_link']), allow_none=True)
 
 class LoginSchema(BaseSchema):
     """Schema for user login."""
@@ -177,9 +182,9 @@ class UserProfileUpdateSchema(BaseModel):
     They can only update a limited set of fields.
     """
     email: Optional[EmailStr] = None
-    first_name: Optional[constr(min_length=1)] = None
-    last_name: Optional[constr(min_length=1)] = None
-    language = fields.Str(validate=validate.Length(min=2, max=10))
+    first_name: Optional[str] = Field(default=None, min_length=1)
+    last_name: Optional[str] = Field(default=None, min_length=1)
+    language: Optional[str] = Field(default=None, min_length=2, max_length=10)
 
     class Config:
         from_attributes = True
@@ -210,6 +215,32 @@ class TwoFactorSetupSchema(BaseSchema):
 class TwoFactorVerifySchema(BaseSchema):
     """Schema for verifying 2FA token."""
     totp_code = fields.Str(required=True, validate=validate.Length(equal=6))
+
+class MfaVerificationSchema(BaseSchema):
+    """Schema for MFA verification during login."""
+    user_id = fields.Int(required=True)
+    mfa_token = fields.Str(required=True)
+    mfa_type = fields.Str(validate=validate.OneOf(['totp', 'magic_link']), required=True)
+
+class SetupTotpSchema(BaseSchema):
+    """Schema for TOTP setup."""
+    totp_code = fields.Str(required=True, validate=validate.Length(equal=6))
+
+class MagicLinkRequestSchema(BaseSchema):
+    """Schema for requesting a magic link."""
+    email = fields.Email(required=True)
+
+class AuthMethodUpdateSchema(BaseSchema):
+    """Schema for updating authentication methods."""
+    action = fields.Str(validate=validate.OneOf(['enable_totp', 'disable_totp', 'enable_magic_link', 'disable_magic_link']), required=True)
+    current_password = fields.Str(required=True)  # Always require current password for security
+    totp_code = fields.Str(validate=validate.Length(equal=6), allow_none=True)  # Required when disabling TOTP
+    magic_link_token = fields.Str(allow_none=True)  # Required when disabling magic link
+
+class PasswordChangeSchema(BaseSchema):
+    """Schema for changing password."""
+    current_password = fields.Str(required=True)
+    new_password = fields.Str(required=True, validate=validate_password_complexity)
 
 # --- Cart & Checkout Schemas ---
 

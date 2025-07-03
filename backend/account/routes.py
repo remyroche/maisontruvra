@@ -1,13 +1,8 @@
 from flask import Blueprint, request, jsonify, session, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
-from flask_login import  current_user
+from flask_login import login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from marshmallow import ValidationError
-from flask import Blueprint, request, jsonify
-from backend.services.auth_service import AuthService
-from backend.services.exceptions import AuthorizationException
-from backend.utils.decorators import login_required, b2c_user_required, api_resource_handler
-from backend.models.user_models import User
 
 from backend.database import db
 from backend.models.user_models import User
@@ -30,8 +25,9 @@ from backend.schemas import UpdateUserSchema, UpdatePasswordSchema, AddressSchem
 from backend.models.address_models import Address
 
 from backend.services.auth_service import AuthService
-from backend.services.exceptions import InvalidCredentialsError
-
+from backend.services.exceptions import InvalidCredentialsError, UnauthorizedException
+# from backend.schemas import UserProfileUpdateSchema, AddressSchema, ChangePasswordSchema # Duplicate import, removed
+from backend.utils.decorators import login_required
 
 account_bp = Blueprint('account_bp', __name__)
 user_service = UserService()
@@ -117,6 +113,7 @@ def admin_data():
 
 
 @account_bp.route('/api/account/language', methods=['PUT'])
+# @api_resource_handler(User, schema=LanguageUpdateSchema(), check_ownership=True) # Old usage
 @login_required
 @api_resource_handler(
     model=User,
@@ -144,6 +141,8 @@ def update_language(user_id): # The decorator will pass the ID of the resource (
 
 @account_bp.route('/update', methods=['POST'])
 @login_required
+# This endpoint updates user profile fields (first_name, last_name).
+# It's a PUT-like operation on the current user's profile.
 @api_resource_handler(
     model=User,
     request_schema=UserProfileUpdateSchema, # Using UserProfileUpdateSchema for update fields
@@ -235,35 +234,28 @@ def get_profile(user_id):
     return g.target_object
 
 
-
-
 @account_bp.route('/profile', methods=['PUT'])
-@login_required
 @api_resource_handler(
+    model=User,
     request_schema=UserProfileUpdateSchema,
-    response_schema=UserSchema
+    response_schema=UserSchema,
+    ownership_exempt_roles=[],  # Only the user themselves can update
+    cache_timeout=0,  # No caching for user profiles
+    log_action=True  # Log profile updates
 )
-def update_profile(validated_data):
-    """
-    Updates the current user's profile information.
-    The decorator handles validation, error handling, and response serialization.
-    Ownership is implicitly handled by using current_user.
-    """
-    user = user_service.update_user(current_user.id, validated_data)
+@login_required
+def update_profile():
+    """ Update user profile. """
+    # For profile updates, we work with the current user
+    user = current_user
+    
+    # Update user with validated data
+    for key, value in g.validated_data.items():
+        if hasattr(user, key) and key not in ['password', 'id']:  # Exclude sensitive fields
+            setattr(user, key, value)
+    
     return user
 
-@account_bp.route('/delete', methods=['DELETE'])
-@login_required
-@api_resource_handler()
-def delete_account():
-    """
-    Endpoint for a B2C user to request soft-deletion of their own account.
-    The decorator handles JSON response formatting and error catching.
-    """
-    user_service.request_account_deletion(current_user.id)
-    logout_user()  # Log the user out after deletion
-    return {"message": "Account deletion request processed successfully. You have been logged out."}
-    
 @account_bp.route('/change-password', methods=['POST'])
 @login_required
 @api_resource_handler(
@@ -278,7 +270,7 @@ def change_password(user_id): # Decorator provides user_id of current user
     # g.validated_data contains old_password and new_password
     # g.target_object is the User object for the current user
     try:
-        auth_service.change_password(
+        AuthService.change_password(
             user_id=user_id, # Or g.target_object.id
             old_password=g.validated_data['old_password'],
             new_password=g.validated_data['new_password']
@@ -388,7 +380,7 @@ def update_address(address_id):
     
     # Verify ownership
     if address.user_id != current_user.id:
-        raise AuthorizationException("You do not have permission to update this address")
+        raise UnauthorizedException ("You do not have permission to update this address")
     
     # Update address with validated data
     for key, value in g.validated_data.items():
@@ -397,28 +389,16 @@ def update_address(address_id):
     
     return address
 
-@account_bp.route('/addresses/<int:address_id>/restore', methods=['POST'])
-@login_required
-@api_resource_handler(model=Address, response_schema=AddressSchema, ownership_exempt_roles=[])
-def restore_user_address(address_id):
-    """
-    Restores a soft-deleted address for the current user.
-    The decorator handles fetching, ownership checks, and restoration.
-    """
-    # This function body is now intentionally empty.
-    # The decorator performs the entire operation and returns a standard message.
-    return None
-    
 @account_bp.route('/addresses/<int:address_id>', methods=['DELETE'])
 @login_required
-@api_resource_handler(model=Address, ownership_exempt_roles=[], allow_hard_delete=True)
-def delete_user_address(address_id):
-    """
-    Deletes a specific address for the current user.
-    - Soft-delete by default.
-    - Use ?hard=true for a permanent, irreversible delete.
-    The decorator handles all fetching, ownership checks, and deletion logic.
-    """
-    # This function body is now intentionally empty.
-    # The decorator performs the entire operation.
-    return None
+@api_resource_handler(
+    model=Address,
+    ownership_exempt_roles=[],
+    cache_timeout=0,
+    check_ownership=True # Crucial for addresses
+)
+def delete_address(address_id):
+    """ Delete an address. """
+    # user_id is implicit from login_required and check_ownership
+    success = address_service.delete_address(address_id=address_id, user_id=current_user.id)
+    return None # Return None for successful deletion, decorator will send message

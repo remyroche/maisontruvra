@@ -1,7 +1,7 @@
 import logging
 from functools import wraps
 from typing import Callable, Any
-from flask import jsonify, request, g, Response, abort, current_app  
+from flask import jsonify, request, g, Response, abort, current_app 
 from flask_jwt_extended import get_jwt_identity, get_jwt, jwt_required
 from flask_login import current_user
 from backend.models.user_models import User
@@ -15,6 +15,7 @@ from sqlalchemy.orm import joinedload
 # Import the base class and all specific exceptions.
 from ..services.exceptions import (
     ServiceError, 
+    ServiceException, 
     NotFoundException, 
     ValidationException, 
     AuthorizationException,
@@ -175,7 +176,7 @@ def api_resource_handler(model, request_schema=None, response_schema=None,
 
                 # Ownership Check
                 if ownership_exempt_roles is not None and target_object:
-                    current_user_id = get_current_user_id()
+                    current_user_id = get_jwt_identity()
                     if not current_user_id:
                         raise AuthorizationException("Authentication required.")
                     

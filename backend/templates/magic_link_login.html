@@ -1,0 +1,49 @@
+{% extends "general_base_template.html" %}
+
+{% block title %}Your Magic Link - Maison Truvra{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #2c3e50; margin-bottom: 10px;">Your Magic Link</h1>
+        <p style="color: #7f8c8d; font-size: 16px;">Click the link below to sign in to your Maison Truvra account</p>
+    </div>
+
+    <div style="background-color: #f8f9fa; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
+        <p style="margin-bottom: 20px; color: #2c3e50;">Hello {{ user.first_name }},</p>
+        
+        <p style="margin-bottom: 20px; color: #2c3e50;">
+            You requested a magic link to sign in to your Maison Truvra account. Click the button below to sign in:
+        </p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{ magic_link_url }}" 
+               style="background-color: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                Sign In to Maison Truvra
+            </a>
+        </div>
+        
+        <p style="margin-bottom: 15px; color: #2c3e50;">
+            <strong>Important:</strong> This link will expire in {{ expires_minutes }} minutes and can only be used once.
+        </p>
+        
+        <p style="margin-bottom: 20px; color: #2c3e50;">
+            If you didn't request this magic link, you can safely ignore this email.
+        </p>
+        
+        <div style="border-top: 1px solid #e9ecef; padding-top: 20px; margin-top: 20px;">
+            <p style="font-size: 14px; color: #6c757d; margin-bottom: 10px;">
+                If the button doesn't work, you can copy and paste this link into your browser:
+            </p>
+            <p style="font-size: 14px; color: #6c757d; word-break: break-all;">
+                {{ magic_link_url }}
+            </p>
+        </div>
+    </div>
+
+    <div style="text-align: center; color: #6c757d; font-size: 14px;">
+        <p>This email was sent from Maison Truvra</p>
+        <p>If you have any questions, please contact our support team.</p>
+    </div>
+</div>
+{% endblock %}

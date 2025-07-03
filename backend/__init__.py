@@ -183,8 +183,13 @@ def create_app(config_class=config.Config):
     from .routes.webhooks import webhooks_bp
     app.register_blueprint(webhooks_bp, url_prefix='/api/webhooks')
 
+    # Register unified auth routes (replaces separate B2B/B2C auth)
+    from .auth.unified_routes import unified_auth_bp
+    app.register_blueprint(unified_auth_bp)
+    
+    # Keep legacy auth routes for backward compatibility
     from .auth.routes import auth_bp
-    app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(auth_bp, url_prefix='/api/auth/legacy')
 
     from .account.routes import account_bp
     app.register_blueprint(account_bp, url_prefix='/api/account')
@@ -235,9 +240,7 @@ def create_app(config_class=config.Config):
     from backend.api.referral_routes import referral_bp # New Referral routes
     app.register_blueprint(referral_bp)
 
-    app.register_blueprint(wishlist_bp)
-    app.register_blueprint(review_bp)
-    app.register_blueprint(recommendation_bp)
+
 
     from .b2b.invoice_routes import b2b_invoice_bp
     app.register_blueprint(b2b_invoice_bp, url_prefix='/api/b2b/invoices')
@@ -297,17 +300,17 @@ def create_app(config_class=config.Config):
     from .admin_api.delivery_routes import admin_delivery_bp
     app.register_blueprint(admin_delivery_bp, url_prefix='/api/admin/delivery')
 
-    from .admin_api.quote_routes import admin_quote_bp
-    app.register_blueprint(admin_quote_bp, url_prefix='/api/admin/quotes')
-    
-    from .admin_api.blog_routes import admin_blog_bp
-    app.register_blueprint(admin_blog_bp, url_prefix='/api/admin/blog')
+    from .admin_api.blog_management_routes import bp as admin_blog_bp
+    app.register_blueprint(admin_blog_bp)
     
     from .admin_api.passport_routes import admin_passport_bp
     app.register_blueprint(admin_passport_bp, url_prefix='/api/admin/passports')
 
     from .admin_api.session_routes import admin_session_bp
     app.register_blueprint(admin_session_bp, url_prefix='/api/admin/sessions')
+
+    from .admin_api.recommendation_routes import admin_recommendation_bp
+    app.register_blueprint(admin_recommendation_bp)
 
     from backend.admin_api.recycling_bin_routes import recycling_bin_bp
     app.register_blueprint(recycling_bin_bp)

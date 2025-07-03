@@ -101,5 +101,176 @@ class RecommendationService:
             raise NotFoundException(f"User with ID {user_id} not found.")
         
         # The logic is the same, just called from an admin context
-        return RecommendationService.get_recommendations_for_user(user_id, limit)
+        recommendations = RecommendationService.get_recommendations_for_user(user_id, limit)
+        
+        # Add user context for admin view
+        return {
+            'user_id': user_id,
+            'user_email': user.email,
+            'user_name': f"{user.first_name} {user.last_name}".strip(),
+            'recommendations': recommendations,
+            'recommendation_count': len(recommendations)
+        }
+
+    @staticmethod
+    def get_all_customer_recommendations(limit_per_user=5, page=1, per_page=50):
+        """
+        Get recommendations for all customers with pagination.
+        This is for admin bulk view operations.
+        """
+        try:
+            # Get all active users with pagination
+            users_query = User.query.filter(User.is_active == True)
+            total_users = users_query.count()
+            
+            users = users_query.offset((page - 1) * per_page).limit(per_page).all()
+            
+            all_recommendations = []
+            
+            for user in users:
+                try:
+                    user_recommendations = RecommendationService.get_recommendations_for_user(
+                        user.id, limit_per_user
+                    )
+                    
+                    all_recommendations.append({
+                        'user_id': user.id,
+                        'user_email': user.email,
+                        'user_name': f"{user.first_name} {user.last_name}".strip(),
+                        'registration_date': user.created_at.isoformat() if user.created_at else None,
+                        'last_login': user.last_login.isoformat() if hasattr(user, 'last_login') and user.last_login else None,
+                        'recommendations': user_recommendations,
+                        'recommendation_count': len(user_recommendations)
+                    })
+                except Exception as e:
+                    # Log error but continue with other users
+                    MonitoringService.log_error(
+                        f"Error generating recommendations for user {user.id}: {str(e)}",
+                        "RecommendationService",
+                        exc_info=True
+                    )
+                    all_recommendations.append({
+                        'user_id': user.id,
+                        'user_email': user.email,
+                        'user_name': f"{user.first_name} {user.last_name}".strip(),
+                        'registration_date': user.created_at.isoformat() if user.created_at else None,
+                        'last_login': user.last_login.isoformat() if hasattr(user, 'last_login') and user.last_login else None,
+                        'recommendations': [],
+                        'recommendation_count': 0,
+                        'error': 'Failed to generate recommendations'
+                    })
+            
+            return {
+                'recommendations': all_recommendations,
+                'pagination': {
+                    'page': page,
+                    'per_page': per_page,
+                    'total_users': total_users,
+                    'total_pages': (total_users + per_page - 1) // per_page,
+                    'has_next': page * per_page < total_users,
+                    'has_prev': page > 1
+                }
+            }
+            
+        except Exception as e:
+            MonitoringService.log_error(
+                f"Error generating bulk recommendations: {str(e)}",
+                "RecommendationService",
+                exc_info=True
+            )
+            raise ServiceError(f"Failed to generate bulk recommendations: {str(e)}")
+
+    @staticmethod
+    def get_recommendations_summary():
+        """
+        Get a summary of recommendation statistics for admin dashboard.
+        """
+        try:
+            # Get total active users
+            total_users = User.query.filter(User.is_active == True).count()
+            
+            # Get users with purchase history (who would get personalized recommendations)
+            users_with_orders = db.session.query(User.id).join(Order).filter(
+                User.is_active == True
+            ).distinct().count()
+            
+            # Get users without purchase history (who would get general recommendations)
+            users_without_orders = total_users - users_with_orders
+            
+            # Get most popular categories from recent orders
+            popular_categories = db.session.query(
+                Product.category_id, 
+                func.count(OrderItem.id).label('order_count')
+            ).join(OrderItem, OrderItem.product_id == Product.id)\
+             .join(Order, Order.id == OrderItem.order_id)\
+             .group_by(Product.category_id)\
+             .order_by(func.count(OrderItem.id).desc())\
+             .limit(5).all()
+            
+            return {
+                'total_active_users': total_users,
+                'users_with_personalized_recommendations': users_with_orders,
+                'users_with_general_recommendations': users_without_orders,
+                'popular_categories': [
+                    {
+                        'category_id': cat.category_id,
+                        'order_count': cat.order_count
+                    } for cat in popular_categories
+                ]
+            }
+            
+        except Exception as e:
+            MonitoringService.log_error(
+                f"Error generating recommendations summary: {str(e)}",
+                "RecommendationService",
+                exc_info=True
+            )
+            raise ServiceError(f"Failed to generate recommendations summary: {str(e)}")
+
+    @staticmethod
+    def bulk_generate_recommendations(user_ids, limit_per_user=5):
+        """
+        Generate recommendations for multiple users at once.
+        Useful for bulk operations like email campaigns.
+        """
+        try:
+            results = []
+            
+            for user_id in user_ids:
+                try:
+                    user_recommendations = RecommendationService.get_admin_recommendations_for_user(
+                        user_id, limit_per_user
+                    )
+                    results.append({
+                        'user_id': user_id,
+                        'status': 'success',
+                        'data': user_recommendations
+                    })
+                except NotFoundException:
+                    results.append({
+                        'user_id': user_id,
+                        'status': 'error',
+                        'error': 'User not found'
+                    })
+                except Exception as e:
+                    results.append({
+                        'user_id': user_id,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+            
+            return {
+                'results': results,
+                'total_processed': len(user_ids),
+                'successful': len([r for r in results if r['status'] == 'success']),
+                'failed': len([r for r in results if r['status'] == 'error'])
+            }
+            
+        except Exception as e:
+            MonitoringService.log_error(
+                f"Error in bulk recommendation generation: {str(e)}",
+                "RecommendationService",
+                exc_info=True
+            )
+            raise ServiceError(f"Failed to generate bulk recommendations: {str(e)}")
 

@@ -34,11 +34,8 @@
     <!-- B2C Address Manager -->
     <B2CAddressManager />
 
-    <!-- Change Password Form -->
-    <div class="bg-white p-6 shadow rounded-lg">
-      <h3 class="text-lg font-medium leading-6 text-gray-900">{{ $t('account.profile.changePassword') }}</h3>
-      <PasswordChangeForm class="mt-6" />
-    </div>
+    <!-- Authentication Settings -->
+    <AuthenticationSettings />
 
     <!-- Delete Account Section -->
     <div class="bg-white p-6 rounded-lg shadow border border-red-200">
@@ -66,6 +63,7 @@ import { object as yupObject, string as yupString } from 'yup';
 import { Form as VeeForm, Field as VeeField, ErrorMessage as VeeErrorMessage } from 'vee-validate';
 import PasswordChangeForm from '@/components/auth/PasswordChangeForm.vue';
 import B2CAddressManager from '@/components/account/B2CAddressManager.vue';
+import AuthenticationSettings from '@/components/auth/AuthenticationSettings.vue';
 
 const { t } = useI18n();
 const userStore = useUserStore();

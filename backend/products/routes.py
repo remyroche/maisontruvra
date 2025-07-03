@@ -27,7 +27,7 @@ def get_recommendations(product_id):
 @products_bp.route('/search', methods=['GET'])
 def search_products():
     """Endpoint for product search/autocomplete."""
-    query = InputSanitizer.InputSanitizer.sanitize_input(request.args.get('q', ''))
+    query = InputSanitizer.sanitize_input(request.args.get('q', ''))
     if len(query) < 2:
         return jsonify([])
     
@@ -81,7 +81,7 @@ def get_products():
         return jsonify(status="error", message="An error occurred while fetching products."), 500
 
 # READ a single product by its slug
-@product_bp.route('/<slug>', methods=['GET'])
+@products_bp.route('/<slug>', methods=['GET'])
 @api_resource_handler(model=Product, response_schema=ProductSchema, lookup_field='slug', eager_loads=['category', 'collections', 'reviews'])
 def get_product_by_slug(slug):
     """
@@ -149,7 +149,7 @@ def get_product_reviews(product_id):
     Get all approved reviews for a specific product.
     """
     try:
-        reviews = ReviewService.get_approved_reviews_for_product(product_id)
+        reviews = ReviewService.get_reviews_for_product(product_id)
         return jsonify(status="success", data=[r.to_dict_for_public() for r in reviews]), 200
     except Exception as e:
         # Log error e
@@ -189,7 +189,7 @@ def create_product_review(product_id):
     # e.g., check if user has purchased the product
     try:
         # The service layer should handle validation
-        ReviewService.validate_review_creation(user_id, product_id)
+        ReviewService.submit_review(user_id, product_id)
     except ValueError as e:
         raise ValidationException(str(e))
     

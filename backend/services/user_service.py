@@ -1,13 +1,16 @@
-from backend.database import db
 from backend.services.monitoring_service import MonitoringService
-from backend.services.exceptions import NotFoundException, ValidationException, UnauthorizedException
+from backend.services.exceptions import (
+    NotFoundException, ValidationException, UnauthorizedException,
+    UserNotFoundException, UpdateException, DeletionException
+)
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from flask import current_app, request, g
 from flask_jwt_extended import get_jwt_identity
-from backend.models import User, Address, UserRole
+from backend.models import User, Address, UserRole, Role, Company, AdminAuditLog
+from backend.models.enums import RoleType
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
-from backend.extensions import dbF
+from backend.extensions import db
 
 audit_log_service = AuditLogService()
 
@@ -16,7 +19,8 @@ class UserService:
 
     def __init__(self, logger):
         self.logger = logger
-        self.audit_log_service = AuditLogService(session=self.session)
+        self.session = db.session
+        self.audit_log_service = AuditLogService()
         self.monitoring_service = MonitoringService()
         
     def get_user_by_id(self, user_id):
@@ -134,7 +138,6 @@ class UserService:
         current_app.logger.info(f"Admin updated profile for {user.email}")
         return user
 
-    @staticmethod
     def admin_create_user(self, data):
         """ Allows an admin to create a new user. """
         from backend.services.auth_service import AuthService
@@ -151,10 +154,9 @@ class UserService:
         if 'is_active' in data:
             user.is_active = data['is_active']
             
-        b2c_role = self.session.query(Role).filter_by(name=RoleType.B2C_USER).first()
+        b2c_role = db.session.query(Role).filter_by(name=RoleType.B2C_USER).first()
         if b2c_role:
-            new_user.roles.append(b2c_role)
-
+            user.roles.append(b2c_role)
 
         db.session.commit()
         current_app.logger.info(f"Admin created new user: {user.email}")

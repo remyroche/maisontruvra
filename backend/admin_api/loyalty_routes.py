@@ -1,7 +1,7 @@
-from flask import Blueprint, request, jsonify
-from ..services.loyalty_service import LoyaltyService
+from flask import Blueprint, request, jsonify, jwt_required, abort, g
+from ..services.loyalty_service import LoyaltyService, LoyaltyTier, LoyaltyTierSchema
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.utils.decorators import staff_required, roles_required, permissions_required
+from backend.utils.decorators import staff_required, api_resource_handler, roles_required, permissions_required
 from ..extensions import cache
 
 loyalty_bp = Blueprint('admin_loyalty_routes', __name__, url_prefix='/api/admin/loyalty')
@@ -47,7 +47,7 @@ def update_tier(tier_id):
         return jsonify({"error": "Tier not found"}), 404
     return jsonify(tier.to_dict())
 
-@admin_loyalty_bp.route('/tiers/<int:tier_id>', methods=['DELETE'])
+@loyalty_bp.route('/tiers/<int:tier_id>', methods=['DELETE'])
 @jwt_required()
 @roles_required('Admin')
 @api_resource_handler(model=LoyaltyTier, allow_hard_delete=False) # Hard delete is disallowed for safety
@@ -55,7 +55,7 @@ def delete_loyalty_tier(tier_id):
     """Deletes a loyalty tier (soft by default)."""
     return None
 
-@admin_loyalty_bp.route('/tiers/<int:tier_id>/restore', methods=['POST'])
+@loyalty_bp.route('/tiers/<int:tier_id>/restore', methods=['POST'])
 @jwt_required()
 @roles_required('Admin')
 @api_resource_handler(model=LoyaltyTier, response_schema=LoyaltyTierSchema)

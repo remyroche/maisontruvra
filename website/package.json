@@ -16,7 +16,7 @@
     "pinia": "^2.0.35",
     "vue": "^3.2.47",
     "vue-i18n": "^9.2.2",
-    "vue-router": "^4.2.0"
+    "vue-router": "^4.2.0",
     "@vee-validate/i18n": "^4.15.1",
     "@vee-validate/rules": "^4.15.1",
     "@vueuse/core": "^13.4.0",
@@ -38,6 +38,7 @@
     "vite-node": "^1.6.0",
     "vitest": "^1.6.0",
     "esbuild": "^0.23.0"
+  }
 }
 
 

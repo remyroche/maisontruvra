@@ -14,16 +14,21 @@ class ReviewService:
     @staticmethod
     def get_reviews_for_product(product_id):
         """
-        Retrieves all reviews for a specific product, ordered by most recent.
+        Retrieves all *approved* reviews for a specific product, ordered by most recent.
+        This is for public display.
         """
         try:
             safe_product_id = InputSanitizer.sanitize_integer(product_id)
             product = Product.query.get(safe_product_id)
             if not product:
                 raise NotFoundException("Product not found.")
-
-            reviews = Review.query.filter_by(product_id=safe_product_id).order_by(Review.created_at.desc()).all()
-            return [review.to_dict() for review in reviews]
+            # Only fetch approved reviews for public display
+            reviews = Review.query.filter_by(
+                product_id=safe_product_id, 
+                status='approved'
+            ).order_by(Review.created_at.desc()).all()
+            # Return the list of Review objects for the route to serialize
+            return reviews
         except Exception as e:
             MonitoringService.log_error(
                 f"Error getting reviews for product {product_id}: {str(e)}",

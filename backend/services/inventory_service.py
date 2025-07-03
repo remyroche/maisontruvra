@@ -39,35 +39,39 @@ class InventoryService:
         self.email_service = EmailService(logger)
 
 
-    
-        @staticmethod
-        def create_item_batch(batch_data):
-            """
-            Creates a batch of new inventory Items from a single parent Product.
-            This calls the single create_item method in a loop.
-            """
-            product_id = batch_data.get('product_id')
-            number_to_create = batch_data.get('number_to_create', 0)
-    
-            if not isinstance(number_to_create, int) or number_to_create <= 0:
-                raise ValidationException("Number of items to create must be a positive integer.")
+
+    @staticmethod
+    def increase_stock(self, product_id, quantity):
+        """
+        Increases stock for a product, e.g., for a return or cancellation.
+        Triggers back-in-stock notifications if the product was previously out of stock.
+        """
+        try:
+            inventory = db.session.query(Inventory).filter_by(product_id=product_id).first()
+            if not inventory:
+                # This case might happen if a product was created without an inventory record
+                inventory = Inventory(product_id=product_id, quantity=0)
+                db.session.add(inventory)
             
-            if number_to_create > 100: # Safety limit
-                raise ValidationException("Cannot create more than 100 items in a single batch.")
-    
-            created_items = []
-            # We pass the same data to each item creation call.
-            # The UID will be unique for each, as it's generated on model creation.
-            for _ in range(number_to_create):
-                # The single item data payload is the same as the batch data,
-                # but we ensure stock_quantity is 1 for each unique item.
-                single_item_data = batch_data.copy()
-                single_item_data['stock_quantity'] = 1
-                
-                new_item = InventoryService.create_item(single_item_data)
-                created_items.append(new_item)
+            was_out_of_stock = inventory.quantity <= 0
+            inventory.quantity += quantity
             
-            return created_items
+            # If the product is now back in stock, process notifications
+            if was_out_of_stock and inventory.quantity > 0:
+                self.logger.info(f"Product {product_id} is back in stock. Triggering notifications.")
+                self.background_task_service.submit_task(self.process_stock_notifications, product_id)
+
+            for _ in range(quantity):
+                PassportService.create_and_render_passport(product_id=product_id, item_id=inventory.product_id)
+
+            db.session.commit()
+            self.logger.info(f"Increased stock for product {product_id} by {quantity}.")
+            return inventory
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            self.logger.error(f"Error increasing stock for product {product_id}: {e}")
+            raise
+
 
     @staticmethod
     def create_item(data):
@@ -143,7 +147,7 @@ class InventoryService:
                 qr_code_file_path=qr_path
             )
 
-            increase_stock(InventoryService, product_id, 1)
+            InventoryService.increase_stock(InventoryService, product_id, 1)
             
             db.session.add(new_passport)
             db.session.commit()
@@ -154,6 +158,35 @@ class InventoryService:
             db.session.rollback()
             current_app.logger.error(f"Error creating item and passport: {e}", exc_info=True)
             raise ServiceError("An error occurred while creating the inventory item and its passport.")
+
+    @staticmethod
+    def create_item_batch(batch_data):
+        """
+        Creates a batch of new inventory Items from a single parent Product.
+        This calls the single create_item method in a loop.
+        """
+        product_id = batch_data.get('product_id')
+        number_to_create = batch_data.get('number_to_create', 0)
+
+        if not isinstance(number_to_create, int) or number_to_create <= 0:
+            raise ValidationException("Number of items to create must be a positive integer.")
+        
+        if number_to_create > 100: # Safety limit
+            raise ValidationException("Cannot create more than 100 items in a single batch.")
+
+        created_items = []
+        # We pass the same data to each item creation call.
+        # The UID will be unique for each, as it's generated on model creation.
+        for _ in range(number_to_create):
+            # The single item data payload is the same as the batch data,
+            # but we ensure stock_quantity is 1 for each unique item.
+            single_item_data = batch_data.copy()
+            single_item_data['stock_quantity'] = 1
+            
+            new_item = InventoryService.create_item(single_item_data)
+            created_items.append(new_item)
+        
+        return created_items
 
 
     
@@ -249,40 +282,6 @@ class InventoryService:
             self.logger.error(f"An error occurred during stock notification processing for product {product_id}: {e}")
 
 
-    
-    @staticmethod
-    def increase_stock(self, product_id, quantity):
-        """
-        Increases stock for a product, e.g., for a return or cancellation.
-        Triggers back-in-stock notifications if the product was previously out of stock.
-        """
-        try:
-            inventory = db.session.query(Inventory).filter_by(product_id=product_id).first()
-            if not inventory:
-                # This case might happen if a product was created without an inventory record
-                inventory = Inventory(product_id=product_id, quantity=0)
-                db.session.add(inventory)
-            
-            was_out_of_stock = inventory.quantity <= 0
-            inventory.quantity += quantity
-            
-            # If the product is now back in stock, process notifications
-            if was_out_of_stock and inventory.quantity > 0:
-                self.logger.info(f"Product {product_id} is back in stock. Triggering notifications.")
-                self.background_task_service.submit_task(self.process_stock_notifications, product_id)
-
-            for _ in range(quantity_to_add):
-                PassportService.create_and_render_passport(inventory_item.product_id)
-
-            db.session.commit()
-            self.logger.info(f"Increased stock for product {product_id} by {quantity}.")
-            return inventory
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            self.logger.error(f"Error increasing stock for product {product_id}: {e}")
-            raise
-
-    
 
     @staticmethod
     def reserve_stock(product_id: int, quantity_to_reserve: int, user_id: int = None):

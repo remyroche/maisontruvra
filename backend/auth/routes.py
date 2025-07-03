@@ -8,8 +8,8 @@ from ..services.user_service import UserService
 from backend.utils.input_sanitizer import InputSanitizer
 from ..services.exceptions import ValidationException, UnauthorizedException, NotFoundException
 from datetime import datetime, timezone
-from flask import current_app
-from backend.schemas import UserSchema, UserRegistrationSchema, LoginSchema, MfaVerificationSchema, PasswordResetRequestSchema, PasswordResetConfirmSchema
+from flask import current_app, g
+from backend.schemas import User, UserSchema, UserRegistrationSchema, LoginSchema, MfaVerificationSchema, PasswordResetRequestSchema, PasswordResetConfirmSchema
 from backend.utils.decorators import api_resource_handler
 
 import redis

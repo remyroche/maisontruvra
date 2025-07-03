@@ -60,6 +60,7 @@ import {
   TerminalIcon,
   GiftIcon,
   TrashIcon, // Added TrashIcon for the Recycling Bin
+  LightBulbIcon, // Added for Recommendations
 } from '@heroicons/vue/outline';
 
 const router = useRouter();
@@ -82,6 +83,7 @@ const navItems = [
   { name: 'Blog', path: '/admin/manage-blog', icon: NewspaperIcon },
   { name: 'Loyalty', path: '/admin/manage-loyalty', icon: SparklesIcon },
   { name: 'Newsletter', path: '/admin/manage-newsletter', icon: GiftIcon },
+  { name: 'Recommendations', path: '/admin/recommendations', icon: LightBulbIcon },
   { name: 'Assets', path: '/admin/manage-assets', icon: DocumentReportIcon },
   { name: 'Passports', path: '/admin/view-passports', icon: QrcodeIcon },
   { name: 'POS', path: '/admin/manage-pos', icon: TerminalIcon },
@@ -97,8 +99,7 @@ const logout = async () => {
   router.push('/admin/login');
 };
 </script>
-
-<style scoped>
+<style lang="postcss" scoped>
 /* Add any specific styles for the admin dashboard here */
 .router-link-active {
   @apply bg-gray-700;

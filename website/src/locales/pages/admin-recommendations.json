@@ -1,0 +1,105 @@
+{
+  "title": "Customer Recommendations",
+  "subtitle": "Manage and view product recommendations for all customers",
+  "summary": {
+    "total_users": "Total Active Users",
+    "personalized": "Personalized",
+    "general": "General",
+    "selected": "Selected Users"
+  },
+  "actions": {
+    "export_csv": "Export CSV",
+    "refresh": "Refresh",
+    "select_all": "Select All",
+    "clear": "Clear",
+    "bulk_actions": "Bulk Actions",
+    "manage_all": "Manage All",
+    "view_details": "View Details",
+    "generate_recommendations": "Generate Recommendations"
+  },
+  "search": {
+    "placeholder": "Search users by email, name, or ID...",
+    "results": "Search Results",
+    "no_results": "No users found matching your search"
+  },
+  "table": {
+    "customer": "Customer",
+    "recommendations": "Recommendations",
+    "last_activity": "Last Activity",
+    "actions": "Actions",
+    "no_recommendations": "No recommendations",
+    "error": "Error",
+    "registered": "Registered",
+    "last_login": "Last login",
+    "never_logged_in": "Never logged in"
+  },
+  "bulk_operations": {
+    "title": "Bulk Operations",
+    "selected_users": "Selected Users",
+    "generate": {
+      "title": "Generate Fresh Recommendations",
+      "description": "Generate new product recommendations for all selected users. This will refresh their recommendation data.",
+      "per_user": "Recommendations per user",
+      "note": "This operation may take several minutes for large user sets. You'll receive a notification when it's complete."
+    },
+    "export": {
+      "title": "Export Selected Users' Data",
+      "description": "Export recommendation data for selected users to CSV format for analysis or marketing campaigns.",
+      "format": "Export format",
+      "per_user_export": "Recommendations per user in export"
+    },
+    "email": {
+      "title": "Prepare Email Campaign Data",
+      "description": "Generate recommendation data optimized for email marketing campaigns with personalized product suggestions.",
+      "coming_soon": "Email campaign integration will be available in the next update. For now, use the export function to get data for your email platform."
+    },
+    "processing": "Processing bulk operation...",
+    "processing_note": "This may take a few moments depending on the number of users selected.",
+    "execute": "Execute Operation",
+    "cancel": "Cancel"
+  },
+  "user_detail": {
+    "title": "User Recommendations",
+    "user_info": "User Information",
+    "refresh_recommendations": "Refresh Recommendations",
+    "export_data": "Export Data",
+    "view_grid": "Grid View",
+    "view_list": "List View",
+    "no_recommendations": "No recommendations available",
+    "no_recommendations_desc": "This user doesn't have any product recommendations yet.",
+    "algorithm_info": "How Recommendations Work",
+    "personalized_desc": "Based on this user's purchase history and preferred categories.",
+    "general_desc": "Based on popular products since this user has no purchase history.",
+    "auto_update": "Recommendations are updated automatically when users make new purchases."
+  },
+  "status": {
+    "has_recommendations": "Has Recommendations",
+    "no_recommendations": "No Recommendations",
+    "personalized": "Personalized",
+    "general": "General",
+    "loading": "Loading recommendations...",
+    "failed": "Failed to load recommendations",
+    "retry": "Retry"
+  },
+  "messages": {
+    "export_success": "Recommendations exported successfully",
+    "bulk_success": "Bulk operation completed successfully",
+    "bulk_partial": "Operation completed with some issues",
+    "refresh_success": "Data refreshed successfully",
+    "error_generic": "An error occurred. Please try again.",
+    "no_users_selected": "Please select at least one user",
+    "too_many_users": "Cannot process more than 100 users at once"
+  },
+  "pagination": {
+    "showing": "Showing",
+    "of": "of",
+    "users": "users",
+    "page": "Page",
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "filters": {
+    "per_user": "per user",
+    "recommendations_per_user": "Recommendations per user"
+  }
+}

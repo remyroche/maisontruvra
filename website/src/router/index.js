@@ -7,6 +7,12 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { useAdminAuthStore } from '@/stores/adminAuth';
 import { useUserStore } from '@/stores/user';
 
+// --- Import B2B views that are not lazy-loaded for some reason in the original ---
+import RequestQuoteView from '@/views/pro/RequestQuoteView.vue';
+import ManageQuotesView from '@/views/admin/ManageQuotesView.vue';
+import RespondToQuoteView from '@/views/admin/RespondToQuoteView.vue';
+
+
 const routes = [
   // --- Public Routes ---
   { path: '/', name: 'Home', component: () => import('@/views/public/HomeView.vue') },
@@ -34,14 +40,9 @@ const routes = [
     ]
   },
 
-
-    {path: '/checkout', name: 'Checkout', component: () => import('../views/public/CheckoutView.vue'), },
-
     // B2B User Routes
     { path: '/pro/request-quote', name: 'B2BRequestQuote', component: RequestQuoteView, meta: { requiresAuth: true, requiresB2B: true } },
-    { path: '/admin/quotes', name: 'AdminManageQuotes', component: ManageQuotesView, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/quotes/:id/respond', name: 'AdminRespondToQuote', component: RespondToQuoteView, meta: { requiresAuth: true, requiresAdmin: true } },
-
+    
   // --- Search ---
   { path: '/search', name: 'Search', component: () => import('@/views/public/SearchView.vue'), props: route => ({ query: route.query.q }) },
 
@@ -59,11 +60,30 @@ const routes = [
         { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/account/DashboardView.vue') },
         { path: 'rewards', name: 'Rewards', component: () => import('@/views/account/RewardsView.vue') },
         { path: 'referrals', name: 'Referrals', component: () => import('@/views/account/ReferralView.vue') },
+        // --- NEWLY ADDED ROUTES ---
+        { 
+          path: 'wishlist', 
+          name: 'Wishlist', 
+          component: () => import('@/views/account/WishlistView.vue') 
+        },
+        { 
+          path: 'orders/:id', 
+          name: 'OrderStatus', 
+          component: () => import('@/views/account/OrderStatusView.vue'), 
+          props: true 
+        },
+        // --------------------------
     ]
   },
 
+  // --- ADMIN SECTION ---
   // Core Admin
-  { path: '/admin', name: 'AdminDashboard', component: () => import('@/views/admin/AdminDashboardView.vue'), meta: { requiresAuth: true } },
+  { path: '/admin', name: 'AdminDashboard', component: () => import('@/views/admin/AdminDashboardView.vue'), meta: { requiresAuth: true },
+    children: [
+      { path: '', name: 'AdminDashboardHome', component: () => import('@/views/admin/DashboardHomeView.vue') },
+      { path: 'dashboard', redirect: '/admin' }
+    ]
+  },
   { path: '/admin/profile', name: 'AdminProfile', component: () => import('@/views/admin/AdminProfileView.vue'), meta: { requiresAuth: true } },
   { path: '/admin/setup-mfa', name: 'SetupMfa', component: () => import('@/views/admin/SetupMfaView.vue'), meta: { requiresAuth: true } },
   
@@ -84,12 +104,14 @@ const routes = [
   
   // B2B
   { path: '/admin/b2b', name: 'AdminManageB2B', component: () => import('@/views/admin/ManageB2BView.vue'), meta: { requiresAuth: true, requiredPermission: 'manage_b2b' } },
-  { path: '/admin/quotes', name: 'AdminManageQuotes', component: () => import('@/views/admin/ManageQuotesView.vue'), meta: { requiresAuth: true, requiredPermission: 'manage_quotes' } },
+  { path: '/admin/quotes', name: 'AdminManageQuotes', component: ManageQuotesView, meta: { requiresAuth: true, requiredPermission: 'manage_quotes' } },
+  { path: '/admin/quotes/:id/respond', name: 'AdminRespondToQuote', component: RespondToQuoteView, meta: { requiresAuth: true, requiredPermission: 'manage_quotes' } },
 
   // Marketing
   { path: '/admin/blog', name: 'AdminManageBlog', component: () => import('@/views/admin/ManageBlogView.vue'), meta: { requiresAuth: true, requiredPermission: 'manage_blog' } },
   { path: '/admin/loyalty', name: 'AdminManageLoyalty', component: () => import('@/views/admin/ManageLoyaltyView.vue'), meta: { requiresAuth: true, requiredPermission: 'manage_loyalty' } },
   { path: '/admin/newsletter', name: 'AdminManageNewsletter', component: () => import('@/views/admin/ManageNewsletterView.vue'), meta: { requiresAuth: true, requiredPermission: 'manage_newsletter' } },
+  { path: '/admin/recommendations', name: 'AdminManageRecommendations', component: () => import('@/views/admin/ManageRecommendationsView.vue'), meta: { requiresAuth: true, requiredRoles: ['Admin', 'Manager', 'Marketing'] } },
   
   // Site & System
   { path: '/admin/assets', name: 'AdminManageAssets', component: () => import('@/views/admin/ManageAssetsView.vue'), meta: { requiresAuth: true, requiredPermission: 'manage_assets' } },
@@ -101,7 +123,7 @@ const routes = [
   { path: '/admin/manage-sessions', name: 'ManageSessions', component: () => import('@/views/admin/ManageSessionsView.vue'), meta: { requiresAuth: true, requiredRoles: ['Admin', 'Manager', 'Dev'] } },
   { path: '/admin/manage-roles', name: 'ManageRoles', component: () => import('@/views/admin/ManageRolesView.vue'), meta: { requiresAuth: true, requiredRoles: ['Admin', 'Manager', 'Dev'] } },
  
-  { path: 'recycling-bin', name: 'admin-recycling-bin', component: () => import('@/views/admin/RecyclingBinView.vue'), meta: { requiresAdmin: true } }
+  { path: '/admin/recycling-bin', name: 'admin-recycling-bin', component: () => import('@/views/admin/RecyclingBinView.vue'), meta: { requiresAdmin: true } },
   
   // Catch-all
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('@/views/public/NotFoundView.vue') }
@@ -143,10 +165,10 @@ router.beforeEach(async (to, from, next) => {
   } else {
     // Handle public routes
     const userStore = useUserStore();
-    if (userStore.isLoggedIn === null) {
+    if (userStore.isAuthenticated === null) { // Use the correct property from the new store
       await userStore.checkAuthStatus();
     }
-    if (to.meta.requiresAuth && !userStore.isLoggedIn) {
+    if (to.meta.requiresAuth && !userStore.isAuthenticated) {
       return next({ name: 'Home' }); // Or redirect to a public login page
     }
   }

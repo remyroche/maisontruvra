@@ -1,6 +1,6 @@
 # backend/wishlist/routes.py
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..services.wishlist_service import WishlistService
 from ..services.exceptions import NotFoundException, ValidationException, ServiceError
@@ -55,6 +55,7 @@ def add_to_wishlist():
 def remove_from_wishlist(product_id):
     """
     Remove a prwishlist_bp = Blueprint('wishlist_bp', __name__, url_prefix='/api')
+    """
 
 @wishlist_bp.route('/wishlist', methods=['GET'])
 @jwt_required()

@@ -17,13 +17,14 @@ from .notification_service import NotificationService
 from .monitoring_service import MonitoringService
 from ..extensions import socketio
 from backend.services.invoice_service import InvoiceService
-
 from backend.services.email_service import EmailService
 from sqlalchemy.exc import SQLAlchemyError
 from backend.extensions import db
 from ..models import Order, OrderItem, Product, db
 from ..models.order_models import OrderStatusEnum
+import logging
 
+logger = logging.getLogger(__name__)
 
 
 
@@ -61,56 +62,58 @@ class OrderService:
     def get_user_orders(self, user_id):
         """Retrieves all orders for a specific user."""
         return db.session.query(Order).filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
+    
+def update_order_status(self, order_id, new_status, tracking_number=None, tracking_url=None, notify_customer=True):
+    """
+    Updates the status of an order and optionally notifies the customer.
+    """
+    try:
+        order = self.get_order_by_id(order_id)
+        if not order:
+            raise ValueError(f"Order with id {order_id} not found.")
 
-    def update_order_status(self, order_id, new_status, notify_customer=True):
-        """
-        Updates the status of an order and optionally notifies the customer.
-        """
+        original_status = order.order_status.value # Correctly get the value from the enum
+        
+        # Validate the new status against the enum
         try:
-            order = self.get_order_by_id(order_id)
-            if not order:
-                raise ValueError(f"Order with id {order_id} not found.")
+            status_enum = OrderStatusEnum(new_status)
+        except ValueError:
+            raise ValueError(f"'{new_status}' is not a valid order status.")
 
-            original_status = order.status
-            order.status = new_status
-            db.session.commit()
-            self.logger.info(f"Order {order_id} status updated from '{original_status}' to '{new_status}'.")
+        order.order_status = status_enum
+        
+        # Only add tracking info if it's provided.
+        if tracking_number:
+            order.tracking_number = tracking_number
+        if tracking_url:
+            order.tracking_url = tracking_url
+
+        db.session.commit()
+        self.logger.info(f"Order {order_id} status updated from '{original_status}' to '{new_status}'.")
+
+        if notify_customer:
+            user = order.user
+            subject = f"Your Order #{order.id} Status Update"
+            template = None
+
+            # Check against the string value of the new status
+            if new_status == 'Shipped':
+                template = "order_shipped"
+            elif new_status == 'Cancelled':
+                template = "order_cancelled"
+            # Add more conditions for other statuses like 'Delivered', 'Packing', etc.
+
+            if template and user:
+                context = {"order": order, "user": user}
+                self.email_service.send_email(user.email, subject, template, context)
+                self.logger.info(f"Sent order status update email to {user.email} for order {order_id}.")
+
+        return order
+    except (SQLAlchemyError, ValueError) as e:
+        db.session.rollback()
+        self.logger.error(f"Error updating order status for order {order_id}: {e}")
+        raise
     
-            # Validate the status against the enum
-            try:
-                status_enum = OrderStatusEnum(status)
-            except ValueError:
-                raise ValueError(f"'{status}' is not a valid order status.")
-    
-            order.order_status = status_enum
-            
-            # Only add tracking info if provided.
-            if tracking_number:
-                order.tracking_number = tracking_number
-            if tracking_url:
-                order.tracking_url = tracking_url
-
-            if notify_customer:
-                user = order.user
-                subject = f"Your Order #{order.id} Status Update"
-                template = None
-
-                if new_status == 'shipped':
-                    template = "order_shipped"
-                elif new_status == 'cancelled':
-                    template = "order_cancelled"
-                # Add more conditions for other statuses like 'delivered', 'processing', etc.
-
-                if template and user:
-                    context = {"order": order, "user": user}
-                    self.email_service.send_email(user.email, subject, template, context)
-                    self.logger.info(f"Sent order status update email to {user.email} for order {order_id}.")
-
-            return order
-        except (SQLAlchemyError, ValueError) as e:
-            db.session.rollback()
-            self.logger.error(f"Error updating order status for order {order_id}: {e}")
-            raise
 
     def cancel_order(self, order_id):
         """

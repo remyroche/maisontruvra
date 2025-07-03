@@ -2,12 +2,13 @@
 This module defines the API endpoints for product management in the admin panel.
 It leverages the @api_resource_handler to create clean, secure, and consistent CRUD endpoints.
 """
-from flask import Blueprint, request, g, jsonify
+from flask import Blueprint, request, g, jsonify, jwt_required
 from ..models import Product
 from ..schemas import ProductSchema
 from ..utils.decorators import api_resource_handler, roles_required
 from ..services.product_service import ProductService
 from ..services.background_task_service import BackgroundTaskService
+from backend.services.exceptions import ServiceException
 
 # --- Blueprint Setup ---
 bp = Blueprint('product_management', __name__, url_prefix='/api/admin/products')

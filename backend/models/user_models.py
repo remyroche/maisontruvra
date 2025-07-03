@@ -26,7 +26,6 @@ class User(BaseModel):
     email_verified_at = db.Column(db.DateTime, nullable=True)
     
     # User Type and Status
-    user_type = db.Column(db.String(50), nullable=False, default='b2c_user')
     status = Column(SQLAlchemyEnum(UserStatus), default=UserStatus.PENDING_VERIFICATION)
 
     # Relation avec l'entreprise (pour les utilisateurs B2B)
@@ -46,19 +45,24 @@ class User(BaseModel):
     is_2fa_enabled = Column(Boolean, default=False)
     mfa_secret = Column(String(100))
     
+    # Authentication Methods
+    totp_secret = Column(String(100), nullable=True)  # TOTP secret key
+    is_totp_enabled = Column(Boolean, default=False)
+    is_magic_link_enabled = Column(Boolean, default=False)
+    magic_link_token = Column(String(255), nullable=True)  # Current magic link token
+    magic_link_expires_at = Column(DateTime, nullable=True)  # Magic link expiration
+    
     # Relationships
     addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")
     orders = db.relationship('Order', backref='user', lazy=True)
     roles = db.relationship('Role', secondary='user_roles', back_populates='users')
     loyalty_account = db.relationship('UserLoyalty', back_populates='user', uselist=False)
-    referrals_made = db.relationship('Referral', foreign_keys='Referral.referrer_id', back_populates='referrer')
     carts = relationship("Cart", back_populates="user", cascade="all, delete-orphan")
     wishlists = relationship("Wishlist", back_populates="user", cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="user")
     
     # B2B specific relationship - one-to-one
     b2b_user = relationship("B2BUser", back_populates="user", uselist=False, cascade="all, delete-orphan")
-    _b2b_user = relationship("B2BUser", back_populates="user", uselist=False, cascade="all, delete-orphan")
     user_type = db.Column(db.Enum(UserType), default=UserType.B2C, nullable=False)
 
     # B2B Specific Fields

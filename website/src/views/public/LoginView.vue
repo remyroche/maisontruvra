@@ -11,7 +11,7 @@
         </p>
 
         <div class="mt-8 bg-white p-8 shadow rounded-lg">
-          <LoginForm @login-success="onLoginSuccess" />
+          <UnifiedLoginForm @login-success="onLoginSuccess" />
         </div>
       </div>
     </div>
@@ -20,7 +20,7 @@
 
 <script setup>
 import { useRouter } from 'vue-router';
-import LoginForm from '@/components/checkout/LoginForm.vue'; // Re-using the login form from checkout
+import UnifiedLoginForm from '@/components/auth/UnifiedLoginForm.vue';
 
 const router = useRouter();
 

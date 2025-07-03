@@ -1,14 +1,16 @@
 from decimal import Decimal
-from backend.models import db, User, Role, UserRole, Tier, Order, Company
+from backend.models import db, User, Role, UserRole, Tier, Order, Company, B2BAccount
 from backend.services.email_service import EmailService
 from backend.services.user_service import UserService
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
 from backend.extensions import db
+from backend.services.auth_service import AuthService
+from backend.services.exceptions import ValidationException, NotFoundException, ServiceError
+from flask_login import current_user
 from backend.utils.encryption import hash_password
 from backend.models.enums import RoleType
 from backend.services.audit_log_service import AuditLogService
-froom backend.utils.decorators import 
 
 class B2BService:
     """
@@ -26,7 +28,7 @@ class B2BService:
         This involves creating a User and a linked B2BAccount with 'pending' status.
         """
         if User.query.filter_by(email=data['email']).first():
-            raise CreationException("A user with this email already exists.")
+            raise ValidationException("A user with this email already exists.")
 
         try:
             # First, create the user record
@@ -63,7 +65,7 @@ class B2BService:
             return b2b_account
         except (SQLAlchemyError, Exception) as e:
             db.session.rollback()
-            raise CreationException(f"Error creating B2B account: {e}")
+            raise ValidationException(f"Error creating B2B account: {e}")
 
     def approve_b2b_account(self, b2b_account_id):
         """
@@ -74,7 +76,7 @@ class B2BService:
         if not b2b_account:
             raise NotFoundException("B2B account not found.")
         if b2b_account.status == 'approved':
-            raise UpdateException("B2B account is already approved.")
+            raise ServiceError("B2B account is already approved.")
 
         try:
             # Update status and activate user
@@ -99,7 +101,7 @@ class B2BService:
             return b2b_account
         except (SQLAlchemyError, Exception) as e:
             db.session.rollback()
-            raise UpdateException(f"Error approving B2B account: {e}")
+            raise ServiceError(f"Error approving B2B account: {e}")
 
     def get_all_b2b_accounts(self, status=None):
         """
@@ -133,7 +135,7 @@ class B2BService:
             return b2b_account
         except Exception as e:
             db.session.rollback()
-            raise UpdateException(f"Could not update B2B account: {e}")
+            raise ServiceError(f"Could not update B2B account: {e}")
 
     def request_b2b_account_deletion(self, user_id):
         """
@@ -153,7 +155,7 @@ class B2BService:
             )
         except Exception as e:
             db.session.rollback()
-            raise DeletionException(f"Could not process B2B account deletion: {e}")
+            raise ServiceError(f"Could not process B2B account deletion: {e}")
 
 
     # --- Tier Management Logic ---

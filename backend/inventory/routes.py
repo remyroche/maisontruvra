@@ -1,10 +1,11 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_user, g
 from backend.services.inventory_service import InventoryService # Assumed service
 from backend.utils.decorators import permissions_required, admin_required, api_resource_handler
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.services import product_service
 from backend.models.inventory_models import StockNotification
 from backend.schemas import StockNotificationSchema
+from backend.utils.decorators import login_required
 
 inventory_bp = Blueprint('inventory_bp', __name__, url_prefix='/api/inventory')
 

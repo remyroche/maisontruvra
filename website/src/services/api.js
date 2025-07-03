@@ -192,6 +192,13 @@ export default {
     // Admin Audit Log
     adminGetAuditLogs(params) { return apiClient.get('/admin/audit-log', { params }); },
 
+    // Admin Recommendations
+    adminGetRecommendationsSummary() { return apiClient.get('/admin/recommendations/summary'); },
+    adminGetAllCustomerRecommendations(params) { return apiClient.get('/admin/recommendations/all', { params }); },
+    adminGetUserRecommendations(userId, params) { return apiClient.get(`/admin/recommendations/user/${userId}`, { params }); },
+    adminSearchUsers(params) { return apiClient.get('/admin/recommendations/users/search', { params }); },
+    adminBulkGenerateRecommendations(data) { return apiClient.post('/admin/recommendations/bulk', data); },
+    adminExportRecommendations(params) { return apiClient.get('/admin/recommendations/export', { params }); },
 
     // To classify
     adminGetDeliverySettings() { return apiClient.get('/admin/delivery/settings'); },

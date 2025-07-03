@@ -1,6 +1,7 @@
 from backend.database import db
 from .base import BaseModel, SoftDeleteMixin
 from .enums import OrderStatus
+import enum
 
 class OrderStatusEnum(enum.Enum):
     CONFIRMED = 'Confirmed'

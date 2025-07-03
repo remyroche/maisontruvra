@@ -131,5 +131,17 @@ class CheckoutValidationError(ServiceException):
         self.message = message
         super().__init__(self.message)
 
+class UserNotFoundException(ServiceError):
+    """Raised when a user is not found."""
+    status_code = 404
+
+class UpdateException(ServiceError):
+    """Raised when an update operation fails."""
+    status_code = 400
+
+class DeletionException(ServiceError):
+    """Raised when a deletion operation fails."""
+    status_code = 400
+
 
 

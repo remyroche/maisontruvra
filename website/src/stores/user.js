@@ -63,6 +63,29 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
+   * Unified login for both B2B and B2C users.
+   * @param {object} credentials - { email, password }
+   * @returns {object} - Login response data
+   */
+  async function loginUnified(credentials) {
+    try {
+      const response = await api.post('/auth/login', credentials);
+      
+      if (!response.data.requires_2fa) {
+        // Login successful without 2FA
+        user.value = response.data.user;
+        isAuthenticated.value = true;
+        await fetchWishlist();
+      }
+      
+      return response.data;
+    } catch (error) {
+      isAuthenticated.value = false;
+      throw error;
+    }
+  }
+
+  /**
    * Logs the current user out.
    */
   async function logout() {
@@ -94,6 +117,95 @@ export const useUserStore = defineStore('user', () => {
       const errorMessage = error.response?.data?.error || 'Registration failed.';
       notificationStore.addNotification(errorMessage, 'error');
       return false;
+    }
+  }
+
+  /**
+   * Unified registration for both B2B and B2C users.
+   * @param {object} userInfo - User registration data.
+   * @returns {object} - Registration response data.
+   */
+  async function registerUnified(userInfo) {
+    try {
+      const response = await api.post('/auth/register', userInfo);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Verify 2FA token during login.
+   * @param {object} mfaData - { user_id, mfa_token, mfa_type }
+   * @returns {object} - Verification response data.
+   */
+  async function verify2FA(mfaData) {
+    try {
+      const response = await api.post('/auth/verify-2fa', mfaData);
+      
+      // Login successful after 2FA
+      user.value = response.data.user;
+      isAuthenticated.value = true;
+      await fetchWishlist();
+      
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Setup TOTP for the current user.
+   * @returns {object} - TOTP setup data (secret, QR code).
+   */
+  async function setupTotp() {
+    try {
+      const response = await api.post('/auth/setup-totp');
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Confirm TOTP setup with verification code.
+   * @param {string} totpCode - TOTP verification code.
+   * @returns {boolean} - True if setup confirmed.
+   */
+  async function confirmTotpSetup(totpCode) {
+    try {
+      await api.post('/auth/confirm-totp', { totp_code: totpCode });
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Request a magic link for authentication.
+   * @param {object} linkData - { email }
+   * @returns {boolean} - True if request sent.
+   */
+  async function requestMagicLink(linkData) {
+    try {
+      await api.post('/auth/request-magic-link', linkData);
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Update authentication methods (enable/disable TOTP or magic link).
+   * @param {object} updateData - Authentication method update data.
+   * @returns {boolean} - True if update successful.
+   */
+  async function updateAuthMethod(updateData) {
+    try {
+      await api.post('/auth/update-auth-method', updateData);
+      return true;
+    } catch (error) {
+      throw error;
     }
   }
 
@@ -191,8 +303,15 @@ export const useUserStore = defineStore('user', () => {
     isProductInWishlist,
     checkAuthStatus,
     login,
+    loginUnified,
     logout,
     register,
+    registerUnified,
+    verify2FA,
+    setupTotp,
+    confirmTotpSetup,
+    requestMagicLink,
+    updateAuthMethod,
     updateProfile,
     deleteAccount,
     fetchWishlist,

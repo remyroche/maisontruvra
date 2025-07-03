@@ -1,32 +1,21 @@
 # backend/Services/product_service.py
-from sqlalchemy import func
-from backend.database import db
-from backend.models import db, Product, Category, Collection
-from backend.models.product_models import Product, ProductVariant, Stock
-from backend.services.exceptions import NotFoundException, ValidationException, ServiceError, ProductNotFoundError, DuplicateProductError, InvalidAPIRequestError
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.services.audit_log_service import AuditLogService
-from backend.services.monitoring_service import MonitoringService
+from sqlalchemy import func, select
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.exc import SQLAlchemyError
 from flask import current_app, request
 from flask_jwt_extended import get_jwt_identity
+
+from backend.extensions import db, cache
+from backend.models import Product, Category, Collection, Review, product_tags
+from backend.models.product_models import ProductVariant, Stock
 from backend.models.user_models import User
 from backend.models.order_models import OrderItem
 from backend.models.b2b_loyalty_models import LoyaltyTier
-from sqlalchemy.orm import joinedload, selectinload
-from ..models import Category, Collection, product_tags
-from backend.utils.input_sanitizer import sanitize_html
-from sqlalchemy.exc import SQLAlchemyError
-from backend.extensions import db
-from backend.models import db, Product, Category, Collection, Review, User
-from backend.utils.slug_utility import slugify
-from sqlalchemy.orm import joinedload
-from sqlalchemy import select
-
-from slugify import slugify
-
-from ..extensions import db, cache
-from ..models import Product
-from ..utils.cache_helpers import (
+from backend.services.exceptions import NotFoundException, ValidationException, ServiceError, ProductNotFoundError, DuplicateProductError, InvalidAPIRequestError
+from backend.utils.input_sanitizer import InputSanitizer, sanitize_html
+from backend.services.audit_log_service import AuditLogService
+from backend.services.monitoring_service import MonitoringService
+from backend.utils.cache_helpers import (
     get_product_list_key,
     get_product_by_slug_key,
     get_product_by_id_key,
@@ -38,14 +27,16 @@ class ProductService:
     def __init__(self, logger):
         self.logger = logger
 
-    def get_all_products(self):
+    def get_all_products(self, user=None, filters=None, page=1, per_page=20):
         """Retrieves all products from the database, with caching."""
         cache_key = get_product_list_key()
         products = cache.get(cache_key)
         if products is None:
             products = Product.query.options(joinedload(Product.category)).order_by(Product.name).all()
             cache.set(cache_key, products, timeout=3600)  # Cache for 1 hour
-            return products
+            
+        # Start with base query
+        query = Product.query.options(joinedload(Product.category))
 
         # --- User-based Filtering (Visibility & Tier Restrictions) ---
         if user:
@@ -106,6 +97,7 @@ class ProductService:
         )
 
 
+    @staticmethod
     def get_product_by_slug_cached(slug):
         """Retrieves a single product by its slug, with caching."""
         cache_key = get_product_by_slug_key(slug)
@@ -128,6 +120,7 @@ class ProductService:
             db.joinedload(Product.category)
         ).all()
                 
+    @staticmethod
     def get_product_by_id(product_id: int, user=None):
         """
         Get a single product by ID, handling serialization, visibility, and B2B pricing.
@@ -296,7 +289,7 @@ class ProductService:
             )
             raise ServiceError("Product creation failed due to a database error.")
 
-    def create_product_for_quote(self, name, description, price):
+    def create_product_for_quote(self, name, description, price, owner_id=None):
         """
         Creates a new, non-public product specifically for a quote.
         """
@@ -311,7 +304,7 @@ class ProductService:
                 sku=unique_sku,
                 is_active=True, # Active so it can be ordered
                 is_quotable_only=True, # Hidden from public shop
-                owner_id=owner_id # Assign ownership)
+                owner_id=owner_id # Assign ownership
                 )
             db.session.add(quote_product)
             db.session.commit()
@@ -323,6 +316,7 @@ class ProductService:
             raise
 
     
+    @staticmethod
     def create_product(product_data: dict):
         """Create a new product with proper validation and logging."""
         # Check for duplicate product name before proceeding.
@@ -342,18 +336,18 @@ class ProductService:
     
         # Create the main product record.
         new_product = Product(
-            name=data.get('name'),
-            description=data.get('description'),
-            price=float(data.get('price')),
-            stock=int(data.get('stock', 0)),
-            sku=data.get('sku'),
-            image_url=data.get('image_url'),
-            category_id=data.get('category_id'),
-            collection_id=data.get('collection_id'),
-            passport_hd_image_url=data.get('passport_hd_image_url'),
-            sourcing_production_place=data.get('sourcing_production_place'),
-            producer_notes=data.get('producer_notes'),
-            pairing_suggestions=data.get('pairing_suggestions')
+            name=product_data.get('name'),
+            description=product_data.get('description'),
+            price=float(product_data.get('price')),
+            stock=int(product_data.get('stock', 0)),
+            sku=product_data.get('sku'),
+            image_url=product_data.get('image_url'),
+            category_id=product_data.get('category_id'),
+            collection_id=product_data.get('collection_id'),
+            passport_hd_image_url=product_data.get('passport_hd_image_url'),
+            sourcing_production_place=product_data.get('sourcing_production_place'),
+            producer_notes=product_data.get('producer_notes'),
+            pairing_suggestions=product_data.get('pairing_suggestions')
         )
         db.session.add(new_product)
         db.session.flush()  # Flush to get the new_product.id for variant creation.
@@ -396,56 +390,98 @@ class ProductService:
         `product_id` is the ID of the product to update.
         `data` is a dictionary containing the fields to update.
         """
-        product = Product.query.get(product_id)
-        if not product:
-            return None # Or raise a custom NotFound exception
+        try:
+            product = Product.query.get(product_id)
+            if not product:
+                return None # Or raise a custom NotFound exception
 
-        # Update standard fields using .get(key, default_value) to allow partial updates
-        product.name = data.get('name', product.name)
-        product.description = data.get('description', product.description)
-        product.price = float(data.get('price', product.price))
-        product.stock = int(data.get('stock', product.stock))
-        product.sku = data.get('sku', product.sku)
-        product.image_url = data.get('image_url', product.image_url)
-        product.category_id = data.get('category_id', product.category_id)
-        product.collection_id = data.get('collection_id', product.collection_id)
+            # Store original slug for cache invalidation
+            original_slug = product.slug if hasattr(product, 'slug') else None
+            
+            # Track changes for audit log
+            changes = {}
+            
+            # Update standard fields using .get(key, default_value) to allow partial updates
+            if 'name' in data and data['name'] != product.name:
+                changes['name'] = {'old': product.name, 'new': data['name']}
+                product.name = data['name']
+                
+            if 'description' in data and data['description'] != product.description:
+                changes['description'] = {'old': product.description, 'new': data['description']}
+                product.description = data['description']
+                
+            if 'price' in data and float(data['price']) != product.price:
+                changes['price'] = {'old': product.price, 'new': float(data['price'])}
+                product.price = float(data['price'])
+                
+            if 'stock' in data and int(data['stock']) != product.stock:
+                changes['stock'] = {'old': product.stock, 'new': int(data['stock'])}
+                product.stock = int(data['stock'])
+                
+            if 'sku' in data and data['sku'] != product.sku:
+                changes['sku'] = {'old': product.sku, 'new': data['sku']}
+                product.sku = data['sku']
+                
+            if 'image_url' in data and data['image_url'] != product.image_url:
+                changes['image_url'] = {'old': product.image_url, 'new': data['image_url']}
+                product.image_url = data['image_url']
+                
+            if 'category_id' in data and data['category_id'] != product.category_id:
+                changes['category_id'] = {'old': product.category_id, 'new': data['category_id']}
+                product.category_id = data['category_id']
+                
+            if 'collection_id' in data and data['collection_id'] != product.collection_id:
+                changes['collection_id'] = {'old': product.collection_id, 'new': data['collection_id']}
+                product.collection_id = data['collection_id']
 
-        # --- UPDATE NEWLY ADDED FIELDS ---
-        product.passport_hd_image_url = data.get('passport_hd_image_url', product.passport_hd_image_url)
-        product.sourcing_production_place = data.get('sourcing_production_place', product.sourcing_production_place)
-        product.producer_notes = data.get('producer_notes', product.producer_notes)
-        product.pairing_suggestions = data.get('pairing_suggestions', product.pairing_suggestions)
-        
-        if changes:
-            AuditLogService.log_action(
-                'PRODUCT_UPDATED',
-                target_id=product.id,
-                details={'changes': changes}
+            # --- UPDATE NEWLY ADDED FIELDS ---
+            if 'passport_hd_image_url' in data and data['passport_hd_image_url'] != product.passport_hd_image_url:
+                changes['passport_hd_image_url'] = {'old': product.passport_hd_image_url, 'new': data['passport_hd_image_url']}
+                product.passport_hd_image_url = data['passport_hd_image_url']
+                
+            if 'sourcing_production_place' in data and data['sourcing_production_place'] != product.sourcing_production_place:
+                changes['sourcing_production_place'] = {'old': product.sourcing_production_place, 'new': data['sourcing_production_place']}
+                product.sourcing_production_place = data['sourcing_production_place']
+                
+            if 'producer_notes' in data and data['producer_notes'] != product.producer_notes:
+                changes['producer_notes'] = {'old': product.producer_notes, 'new': data['producer_notes']}
+                product.producer_notes = data['producer_notes']
+                
+            if 'pairing_suggestions' in data and data['pairing_suggestions'] != product.pairing_suggestions:
+                changes['pairing_suggestions'] = {'old': product.pairing_suggestions, 'new': data['pairing_suggestions']}
+                product.pairing_suggestions = data['pairing_suggestions']
+            
+            if changes:
+                AuditLogService.log_action(
+                    'PRODUCT_UPDATED',
+                    target_id=product.id,
+                    details={'changes': changes}
+                )
+            
+            db.session.commit()
+            
+            # Invalidate caches
+            clear_product_cache(product_id=product.id, slug=original_slug)
+            if original_slug and hasattr(product, 'slug') and original_slug != product.slug:
+                clear_product_cache(slug=product.slug)
+
+            MonitoringService.log_info(
+                f"Product updated successfully: {product.name} (ID: {product.id})",
+                "ProductService"
             )
-        
-        db.session.commit()
-        
-        # Invalidate caches
-        clear_product_cache(product_id=product.id, slug=original_slug)
-        if original_slug != product.slug:
-            clear_product_cache(slug=product.slug)
-
-        MonitoringService.log_info(
-            f"Product updated successfully: {product.name} (ID: {product.id})",
-            "ProductService"
-        )
-        db.session.commit()
-        return product.to_dict(view='admin')
-        
-    except Exception as e:
-        db.session.rollback()
-        MonitoringService.log_error(
-            f"Failed to update product {product_id}: {str(e)}",
-            "ProductService",
-            exc_info=True
-        )
-        raise ValidationException(f"Failed to update product: {str(e)}")
+            
+            return product.to_dict(view='admin')
+            
+        except Exception as e:
+            db.session.rollback()
+            MonitoringService.log_error(
+                f"Failed to update product {product_id}: {str(e)}",
+                "ProductService",
+                exc_info=True
+            )
+            raise ValidationException(f"Failed to update product: {str(e)}")
     
+    @staticmethod
     def delete_product(product_id: int):
         """Soft delete product with logging."""
         product = Product.query.get(product_id)

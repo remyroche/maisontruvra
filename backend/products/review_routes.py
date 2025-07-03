@@ -5,7 +5,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..services.review_service import ReviewService
 from ..services.exceptions import NotFoundException, ValidationException, ServiceError
 from ..utils.decorators import api_resource_handler # Assuming this is the path
-from ..models.review_models import Review # Assuming this is the path
+from backend.models.product_models import Review # Assuming this is the path
 from ..schemas import ReviewSchema # Assuming this exists for validation
 
 # Create a Blueprint for review routes, nested under products
