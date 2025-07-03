@@ -16,7 +16,6 @@ from flask import render_template, current_app
 
 
 from backend.models.user_models import User
-from backend.services.user_service import get_user_by_id
 
 class EmailService:
     def __init__(self):

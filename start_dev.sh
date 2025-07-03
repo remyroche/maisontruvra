@@ -107,36 +107,56 @@ echo "-> Checking for necessary tools..."
 check_command python3
 check_command npm
 
+# Check for libmagic (dependency for python-magic) on macOS
+if [[ "$(uname)" == "Darwin" ]]; then
+    if ! brew list libmagic &>/dev/null; then
+        echo "   ❌ 'libmagic' is not installed via Homebrew. This is required by the 'python-magic' package."
+        read -p "   Would you like to install it now? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "   Installing libmagic..."
+            brew install libmagic
+        else
+            echo "   Skipping installation. The application might fail to start."
+        fi
+    fi
+fi
+
 # Check Redis
 echo "-> Checking Redis status..."
-if redis-cli ping > /dev/null 2>&1; then
-    echo "   ✅ Redis is running"
-else
-    echo "   ❌ Redis is not running or not installed"
-    echo "   Please install and start Redis:"
-    echo "   - macOS: brew install redis && brew services start redis"
-    echo "   - Ubuntu: sudo apt-get install redis-server"
-    echo "   - Or run: ./check_redis.sh"
-    echo ""
-    read -p "   Continue anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "   Exiting. Please start Redis first."
+if ! redis-cli ping > /dev/null 2>&1; then
+    echo "   ❌ Redis is not running. Attempting to start it..."
+    if [ -f "./check_redis.sh" ]; then
+        # Make sure the helper script is executable
+        chmod +x ./check_redis.sh
+        # Run the helper script
+        ./check_redis.sh
+        # Check again after attempting to start
+        if ! redis-cli ping > /dev/null 2>&1; then
+            echo "   ❌ Failed to start Redis automatically. Please check the output above and start Redis manually."
+            exit 1
+        fi
+    else
+        echo "   ❌ 'check_redis.sh' not found. Please start Redis manually."
+        echo "   - On macOS with Homebrew: brew services start redis"
+        echo "   - On Ubuntu: sudo systemctl start redis-server"
         exit 1
     fi
 fi
+echo "   ✅ Redis is running."
 
 # Install/update dependencies
 echo "-> Installing/updating backend dependencies..."
 echo "   NOTE: Ensure 'playwright' is in backend/requirements.txt and 'weasyprint' is removed."
 if [ -d "$VENV_PATH" ]; then
     # If venv exists and was activated, 'pip' will be the correct one from the PATH.
-    pip install -r backend/requirements.txt
+    pip install -r backend/requirements.txt || { echo "   ❌ Failed to install Python dependencies. Aborting."; exit 1; }
 else
     # If no venv, warn the user and try with the system pip3.
     echo "   Warning: Installing dependencies globally. It is highly recommended to use a virtual environment."
-    pip3 install -r backend/requirements.txt
+    pip3 install -r backend/requirements.txt || { echo "   ❌ Failed to install Python dependencies. Aborting."; exit 1; }
 fi
+echo "   ✅ Backend dependencies are up to date."
 
 # Trap SIGINT (Ctrl+C) and call cleanup
 trap cleanup SIGINT
@@ -156,4 +176,3 @@ echo "Press Ctrl+C to stop both servers."
 
 # Wait indefinitely until script is interrupted
 wait
-

@@ -1,6 +1,6 @@
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
-from .. import db
+from backend.extensions import db
 import enum
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Numeric, Text
 from sqlalchemy.orm import relationship
@@ -46,7 +46,7 @@ class UserLoyalty(BaseModel):
     tier_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loyalty_tiers.id'), nullable=False)
     points = db.Column(db.Integer, default=0)
     
-    user = db.relationship('User', back_populates='loyalty')
+    user = db.relationship('User', back_populates='loyalty_account')
     tier = db.relationship('LoyaltyTier')
 
     def to_dict(self):
@@ -130,4 +130,3 @@ class ExclusiveReward(BaseModel):
             'linked_product_id': str(self.linked_product_id) if self.linked_product_id else None
         }
         return data
-

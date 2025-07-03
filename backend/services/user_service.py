@@ -23,14 +23,6 @@ class UserService:
         self.audit_log_service = AuditLogService()
         self.monitoring_service = MonitoringService()
         
-    def get_user_by_id(self, user_id):
-        """Retrieves a user by their ID."""
-        try:
-            return db.session.query(User).get(user_id)
-        except SQLAlchemyError as e:
-            self.logger.error(f"Error retrieving user by ID {user_id}: {e}")
-            raise
-
     def get_user_by_email(self, email):
         """Retrieves a user by their email address."""
         try:
@@ -202,10 +194,11 @@ class UserService:
             self.session.flush()  # Obtenir l'ID de l'utilisateur avant le commit pour la journalisation
 
             # Journaliser l'action de création
+            role_name = role.name.value if hasattr(role.name, 'value') else role.name
             self.audit_log_service.log_action(
                 action='USER_CREATED',
                 target_id=new_user.id,
-                details={'email': new_user.email, 'role': role.name.value, 'user_type': user_type}
+                details={'email': new_user.email, 'role': role_name, 'user_type': user_type}
             )
 
             self.session.commit()
@@ -254,7 +247,7 @@ class UserService:
             raise ValueError("Unsupported language")
             
         user.language = language
-        self.db.session.commit()
+        db.session.commit()
         return user
     
 
@@ -279,11 +272,11 @@ class UserService:
 
             db.session.commit()
 
-            MonitoringService.log_error(f"Failed to update user {user_id}: {str(e)}", "UserService")
+            MonitoringService.log_info(f"User soft deleted successfully: {user.email} (ID: {user.id})", "UserService")
 
         except Exception as e:
             db.session.rollback()
-            MonitoringService.log_info(f"User created successfully: {user.email} (ID: {user.id})", "UserService")
+            MonitoringService.log_error(f"Failed to delete user {user_id}: {str(e)}", "UserService")
             raise ValidationException(f"Failed to delete user: {str(e)}")
 
     def get_user_by_id(self, user_id):

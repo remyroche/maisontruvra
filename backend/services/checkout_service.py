@@ -3,11 +3,11 @@ Service layer for handling the checkout process.
 This includes order creation, payment processing, and orchestrating post-order tasks.
 """
 from backend.extensions import db
-from backend.models.order_models import Order, OrderItem, PaymentStatus, OrderStatus
+from backend.models.order_models import Order, OrderItem, PaymentStatus, OrderStatusEnum
 from backend.models.product_models import Product
 from backend.models.user_models import User, UserType
 from backend.models.address_models import Address
-from backend.models.delivery_models import DeliveryMethod
+from backend.models.delivery_models import DeliveryOption
 from backend.models.cart_models import Cart, CartItem
 
 from backend.services.product_service import ProductService
@@ -16,8 +16,7 @@ from backend.services.cart_service import CartService
 from backend.services.referral_service import ReferralService
 
 from backend.tasks import (
-    generate_invoice_for_order_task, 
-    generate_invoice_for_b2b_order_task,
+    generate_invoice_pdf_task, 
     send_order_confirmation_email_task,
     send_b2b_order_confirmation_email_task,
     notify_user_of_loyalty_points_task
@@ -430,4 +429,4 @@ class CheckoutService:
         Can be extended with logic based on address, weight, or cart value.
         """
         current_app.logger.info("Fetching available delivery methods.")
-        return DeliveryMethod.query.filter_by(is_active=True).order_by(DeliveryMethod.price).all()
+        return DeliveryOption.query.filter_by(is_active=True).order_by(DeliveryOption.price).all()

@@ -10,6 +10,18 @@ product_tier_visibility = db.Table('product_tier_visibility',
     db.Column('tier_id', db.Integer, db.ForeignKey('loyalty_tiers.id'), primary_key=True)
 )
 
+# The 'join table' that links products and tags
+product_tags = db.Table('product_tags',
+    db.Column('tag_id', db.Integer, db.ForeignKey('tags.id'), primary_key=True),
+    db.Column('product_id', db.Integer, db.ForeignKey('products.id'), primary_key=True)
+)
+
+# The Tag model itself
+class Tag(db.Model):
+    __tablename__ = 'tags'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+
 
 class Product(BaseModel, SoftDeleteMixin):
     __tablename__ = 'products'
@@ -20,6 +32,8 @@ class Product(BaseModel, SoftDeleteMixin):
     base_sku = db.Column(db.String(100), nullable=False, unique=True)
     is_published = db.Column(db.Boolean, default=False, nullable=False)
     product_type = db.Column(db.String(50), default='standard') # e.g., standard, b2b_exclusive, blog
+    tags = db.relationship('Tag', secondary=product_tags, lazy='subquery',
+                           backref=db.backref('products', lazy=True))
 
     # POS / B2B Quotes
     is_quotable_only = db.Column(db.Boolean, default=False, nullable=False)
@@ -241,6 +255,21 @@ class Review(BaseModel, SoftDeleteMixin):
         if view == 'admin':
             return self.to_admin_dict()
         return self.to_public_dict()
+
+class StockNotificationRequest(db.Model):
+    __tablename__ = 'stock_notification_requests'
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    product_id = db.Column(UUID(as_uuid=True), db.ForeignKey('products.id'), nullable=False)
+    notified = db.Column(db.Boolean, default=False, nullable=False)
+    
+    # Relationships
+    user = db.relationship('User')
+    product = db.relationship('Product')
+
+    def __repr__(self):
+        return f'<StockNotificationRequest for {self.product.name} by {self.user.username}>'
 
 class Stock(BaseModel):
     """

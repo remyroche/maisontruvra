@@ -4,14 +4,22 @@ from .exceptions import ServiceError, NotFoundException
 from flask import session, current_app
 from datetime import datetime, timedelta
 from .passport_service import PassportService
-from .notification_service import NotificationService
 from .monitoring_service import MonitoringService
 from ..extensions import cache
-from backend.models import db, Inventory, Product, StockNotificationRequest
+from backend.models import Inventory, Product
 from backend.services.email_service import EmailService
 from backend.services.background_task_service import BackgroundTaskService
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import select
+from ..models.passport_models import SerializedItem, ProductPassport 
+import uuid
+import logging
+from sqlalchemy.exc import SQLAlchemyError
+
+from .. import db
+from ..models import Product, StockMovement 
+from ..models.passport_models import SerializedItem, ProductPassport, PassportEntry 
+from .exceptions import ServiceException, NotFoundException
 
 # Updated reservation lifetime to 1 hour (60 minutes)
 RESERVATION_LIFETIME_MINUTES = 60
@@ -19,10 +27,9 @@ RESERVATION_LIFETIME_MINUTES = 60
 import os
 import qrcode
 from flask import current_app, render_template, url_for
-from ..models import db
+from ..database import db
 from ..models.inventory_models import Item
 from ..models.product_models import Product
-from ..models.passport_models import Passport # Import the Passport model
 from ..services.exceptions import NotFoundException, ValidationException, ServiceError
 from ..services.pdf_service import PDFService # Import PDFService to generate PDFs
 
@@ -38,83 +45,42 @@ class InventoryService:
         self.background_task_service = BackgroundTaskService(logger)
         self.email_service = EmailService(logger)
 
-
-
-    @staticmethod
-    def increase_stock(self, product_id, quantity):
+    def create_new_item(self, item_data: dict):
         """
-        Increases stock for a product, e.g., for a return or cancellation.
-        Triggers back-in-stock notifications if the product was previously out of stock.
+        Fonction principale pour la création d'un article unique et de son passeport.
+        C'est le processus de "naissance" d'un article.
         """
-        try:
-            inventory = db.session.query(Inventory).filter_by(product_id=product_id).first()
-            if not inventory:
-                # This case might happen if a product was created without an inventory record
-                inventory = Inventory(product_id=product_id, quantity=0)
-                db.session.add(inventory)
-            
-            was_out_of_stock = inventory.quantity <= 0
-            inventory.quantity += quantity
-            
-            # If the product is now back in stock, process notifications
-            if was_out_of_stock and inventory.quantity > 0:
-                self.logger.info(f"Product {product_id} is back in stock. Triggering notifications.")
-                self.background_task_service.submit_task(self.process_stock_notifications, product_id)
-
-            for _ in range(quantity):
-                PassportService.create_and_render_passport(product_id=product_id, item_id=inventory.product_id)
-
-            db.session.commit()
-            self.logger.info(f"Increased stock for product {product_id} by {quantity}.")
-            return inventory
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            self.logger.error(f"Error increasing stock for product {product_id}: {e}")
-            raise
-
-
-    @staticmethod
-    def create_item(data):
-        """
-        Creates a new inventory Item and its associated digital passport.
-        
-        This process includes:
-        1. Creating the Item record in the database.
-        2. Generating an HTML passport from a template.
-        3. Generating a PDF version of the passport.
-        4. Creating a QR code that links to the passport's public URL.
-        5. Saving all asset paths in a new Passport database record.
-        """
-        product_id = data.get('product_id')
+        product_id = item_data.get('product_id')
         if not product_id:
-            raise ValidationException("A parent product ID is required to create an item.")
+            raise ValidationException("Un 'product_id' parent est requis.")
 
-        parent_product = Product.query.get(product_id)
-        if not parent_product:
-            raise NotFoundException(f"Parent product with ID {product_id} not found.")
+        product = self.session.query(Product).filter_by(id=product_id).with_for_update().one_or_none()
+        if not product:
+            raise NotFoundException(resource_name="Product", resource_id=product_id)
 
         try:
-            # Create the Item first to get its UID
-            new_item = Item(
-                product_id=product_id,
-                collection_id=data.get('collection_id'),
-                stock_quantity=data.get('stock_quantity', 1),
-                creation_date=data.get('creation_date'),
-                harvest_date=data.get('harvest_date'),
-                price=data.get('price'),
-                producer_notes=data.get('producer_notes'),
-                pairing_suggestions=data.get('pairing_suggestions')
-            )
-            db.session.add(new_item)
-            db.session.commit() # Commit to persist the item and its generated UID
+            was_out_of_stock = product.stock <= 0
 
-            # --- Post-Creation: Generate Passport and QR Code ---
-            
-            # 1. Define paths and URL for the assets
+            # 1. Créer l'enregistrement de l'article sérialisé
+            new_item = SerializedItem(
+                product_id=product.id,
+                uid=f"{product.sku or 'SKU'}-{uuid.uuid4().hex[:8].upper()}",
+                status='in_stock',
+                # Ajout des autres champs depuis item_data
+                creation_date=item_data.get('creation_date'),
+                harvest_date=item_data.get('harvest_date'),
+                price=item_data.get('price'),
+                producer_notes=item_data.get('producer_notes'),
+                pairing_suggestions=item_data.get('pairing_suggestions')
+            )
+            self.session.add(new_item)
+            self.session.flush() # Utiliser flush pour obtenir l'ID/UID de new_item avant le commit final
+
+            # 2. Définir les chemins et l'URL pour les actifs numériques
             item_uid_str = str(new_item.uid)
             passport_url = url_for('passport_bp.view_passport', item_uid=item_uid_str, _external=True)
             
-            # Ensure storage directories exist
+            # S'assurer que les répertoires de stockage existent
             html_dir = current_app.config['PASSPORT_HTML_STORAGE_PATH']
             pdf_dir = current_app.config['PASSPORT_PDF_STORAGE_PATH']
             qr_dir = current_app.config['QR_CODE_STORAGE_PATH']
@@ -125,70 +91,79 @@ class InventoryService:
             html_path = os.path.join(html_dir, f"{item_uid_str}.html")
             pdf_path = os.path.join(pdf_dir, f"{item_uid_str}.pdf")
             qr_path = os.path.join(qr_dir, f"{item_uid_str}.png")
-
-            # 2. Generate and save the HTML passport
-            rendered_html = render_template('non-email/product_passport.html', item=new_item)
+            
+            # 3. Générer et sauvegarder le passeport HTML
+            rendered_html = render_template('non-email/product_passport.html', item=new_item, passport_url=passport_url)
             with open(html_path, 'w', encoding='utf-8') as f:
                 f.write(rendered_html)
-
-            # 3. Generate and save the PDF passport
-            PDFService.generate_from_html(html_path, pdf_path)
-
-            # 4. Generate and save the QR code
+            
+            # 4. Générer le PDF à partir du HTML
+            self.pdf_service.generate_from_html(html_path, pdf_path)
+            
+            # 5. Générer et sauvegarder le QR code
             qr_img = qrcode.make(passport_url)
             qr_img.save(qr_path)
-
-            # 5. Create and save the Passport database record
-            new_passport = Passport(
-                item_id=new_item.id,
-                public_url=passport_url,
+            
+            # 6. Créer l'enregistrement du Passeport Numérique avec les chemins des actifs
+            new_passport = ProductPassport(
+                serialized_item=new_item,
                 html_file_path=html_path,
                 pdf_file_path=pdf_path,
                 qr_code_file_path=qr_path
             )
-
-            InventoryService.increase_stock(InventoryService, product_id, 1)
+            self.session.add(new_passport)
             
-            db.session.add(new_passport)
-            db.session.commit()
-
+            # 7. Créer l'entrée "CREATED" dans l'historique du passeport
+            entry = PassportEntry(passport=new_passport, event_type="CREATED", details="Item manufactured and stock created.")
+            self.session.add(entry)
+            
+            # 8. Incrémenter le stock général du produit
+            product.stock += 1
+            
+            # 9. Enregistrer le mouvement de stock
+            log = StockMovement(product_id=product.id, quantity_change=1, reason="Item Creation")
+            self.session.add(log)
+            
+            # 10. Le commit final se fera par la fonction appelante (add_new_stock_batch)
+            
+            # Notification si le produit est de nouveau en stock
+            if was_out_of_stock and product.stock > 0:
+                self.logger.info(f"Product {product.name} is back in stock. Triggering notifications.")
+                from .notification_service import NotificationService
+                notification_service = NotificationService()
+                notification_service.notify_users_of_restock.delay(product.id)
+            
             return new_item
 
         except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error creating item and passport: {e}", exc_info=True)
-            raise ServiceError("An error occurred while creating the inventory item and its passport.")
+            # En cas d'erreur, le rollback est géré par la fonction appelante
+            self.logger.error(f"Error creating new item for product {product_id}: {e}", exc_info=True)
+            raise ServiceException("An error occurred during item creation.")
 
-    @staticmethod
-    def create_item_batch(batch_data):
+
+    def add_new_stock_batch(self, item_data: dict, quantity: int):
         """
-        Creates a batch of new inventory Items from a single parent Product.
-        This calls the single create_item method in a loop.
+        Ajoute un lot de nouveaux articles en appelant create_new_item pour chaque unité.
+        Gère la transaction pour s'assurer que soit tous les articles sont créés, soit aucun.
         """
-        product_id = batch_data.get('product_id')
-        number_to_create = batch_data.get('number_to_create', 0)
-
-        if not isinstance(number_to_create, int) or number_to_create <= 0:
-            raise ValidationException("Number of items to create must be a positive integer.")
-        
-        if number_to_create > 100: # Safety limit
-            raise ValidationException("Cannot create more than 100 items in a single batch.")
-
-        created_items = []
-        # We pass the same data to each item creation call.
-        # The UID will be unique for each, as it's generated on model creation.
-        for _ in range(number_to_create):
-            # The single item data payload is the same as the batch data,
-            # but we ensure stock_quantity is 1 for each unique item.
-            single_item_data = batch_data.copy()
-            single_item_data['stock_quantity'] = 1
+        if quantity <= 0:
+            raise ValidationException("Quantity must be a positive integer.")
             
-            new_item = InventoryService.create_item(single_item_data)
-            created_items.append(new_item)
-        
-        return created_items
-
-
+        try:
+            created_items = []
+            for _ in range(quantity):
+                item = self.create_new_item(item_data)
+                created_items.append(item)
+            
+            # Commit la transaction entière une fois que toutes les créations ont réussi
+            self.session.commit()
+            self.logger.info(f"Successfully created a batch of {quantity} items for product {item_data.get('product_id')}.")
+            return created_items
+            
+        except Exception as e:
+            self.session.rollback()
+            self.logger.error(f"Failed to create item batch. Rolled back transaction. Error: {e}", exc_info=True)
+            raise ServiceException("Failed to create the batch of items.")
     
     @staticmethod
     def get_item_by_id(item_id):
@@ -224,63 +199,6 @@ class InventoryService:
             db.session.rollback()
             self.logger.error(f"Error decreasing stock for product {product_id}: {e}")
             raise
-
-    def request_stock_notification(self, product_id, email):
-        """Creates a request for a back-in-stock notification."""
-        try:
-            # Check if product exists
-            product = db.session.query(Product).get(product_id)
-            if not product:
-                raise ValueError("Product not found.")
-
-            # Check if already in stock
-            if self.get_stock_level(product_id) > 0:
-                return None, "Product is already in stock."
-
-            notification_request = StockNotificationRequest(product_id=product_id, email=email)
-            db.session.add(notification_request)
-            db.session.commit()
-            self.logger.info(f"Stock notification request created for product {product_id} by {email}.")
-            return notification_request, "You will be notified when the product is back in stock."
-        except IntegrityError:
-            db.session.rollback()
-            self.logger.warning(f"Duplicate stock notification request for product {product_id} by {email}.")
-            return None, "You have already requested a notification for this product."
-        except (SQLAlchemyError, ValueError) as e:
-            db.session.rollback()
-            self.logger.error(f"Error creating stock notification request: {e}")
-            raise
-
-    def process_stock_notifications(self, product_id):
-        """Sends out back-in-stock emails for a given product."""
-        try:
-            requests = db.session.query(StockNotificationRequest).filter_by(product_id=product_id, notified_at=None).all()
-            if not requests:
-                self.logger.info(f"No pending stock notifications to process for product {product_id}.")
-                return
-
-            product = db.session.query(Product).get(product_id)
-            if not product:
-                self.logger.error(f"Cannot process stock notifications for non-existent product {product_id}.")
-                return
-
-            self.logger.info(f"Processing {len(requests)} stock notifications for product '{product.name}'.")
-            
-            subject = f"'{product.name}' is Back in Stock!"
-            template = "back_in_stock_notification"
-            
-            for req in requests:
-                context = {"product": product, "user_email": req.email}
-                self.email_service.send_email(req.email, subject, template, context)
-                req.notified_at = datetime.utcnow()
-            
-            db.session.commit()
-            self.logger.info(f"Finished processing stock notifications for product {product_id}.")
-
-        except Exception as e:
-            db.session.rollback()
-            self.logger.error(f"An error occurred during stock notification processing for product {product_id}: {e}")
-
 
 
     @staticmethod

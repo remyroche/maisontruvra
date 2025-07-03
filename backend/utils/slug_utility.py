@@ -33,3 +33,4 @@ def generate_unique_slug(name: str, model_class, session: Session) -> str:
         counter += 1
         
     return slug
+

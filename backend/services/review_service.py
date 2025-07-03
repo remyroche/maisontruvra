@@ -1,5 +1,5 @@
 from backend.database import db
-from ..models import Review, Product, User, Order, OrderItem, db
+from ..models import Review, Product, User, Order, OrderItem
 from ..services.monitoring_service import MonitoringService
 from ..services.audit_log_service import AuditLogService
 from ..services.exceptions import NotFoundException, ValidationException, ServiceError

@@ -3,7 +3,14 @@ import re # Added: For regular expressions
 import os # Added: For os.environ.get
 from backend.models.user_models import User, UserRole
 from backend.database import db
-from backend.services.exceptions import ServiceError, ValidationException, UnauthorizedException, NotFoundException, InvalidPasswordException
+from backend.services.exceptions import (
+    ServiceError,
+    ValidationException,
+    UnauthorizedException,
+    NotFoundException,
+    InvalidPasswordException,
+    InvalidCredentialsError
+)
 from backend.services.mfa_service import MfaService
 # generate_tokens is defined as a method in this class
 from backend.services.email_service import EmailService
@@ -19,9 +26,6 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHash
-from ..services.exceptions import ValidationError
-from backend.services.exceptions import UserAlreadyExistsError, InvalidCredentialsError
-from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
 from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.encryption import hash_password, check_password
 from sqlalchemy.exc import SQLAlchemyError
@@ -92,11 +96,11 @@ class AuthService:
         if user and check_password(password, user.password_hash):
             if not user.is_active:
                 self.logger.warning(f"Authentication attempt for inactive user: {email}")
-                return None  # Or raise an exception for unverified email
+                raise UnauthorizedException("User account is not active. Please verify your email.")
             self.logger.info(f"User {email} authenticated successfully.")
             return user
         self.logger.warning(f"Failed authentication attempt for email: {email}")
-        return None
+        raise InvalidCredentialsError("Invalid email or password.")
 
     def generate_verification_token(self, email):
         """Generates a time-sensitive verification token."""

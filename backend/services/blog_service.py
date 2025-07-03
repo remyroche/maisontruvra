@@ -12,7 +12,7 @@ from ..extensions import db, cache
 from ..models import BlogPost, BlogCategory
 from ..services.exceptions import NotFoundException, ValidationException
 from ..utils.input_sanitizer import InputSanitizer
-from ..utils.slug_utility import create_slug
+from ..utils.slug_utility import generate_unique_slug
 from ..utils.cache_helpers import (
     get_blog_post_list_key,
     get_blog_post_by_slug_key,
@@ -87,7 +87,7 @@ class BlogService:
         # Use sanitize_html for content, allowing some tags
         sanitized_content = InputSanitizer.sanitize_html(article_data['content'], allow_tags=True)
         
-        slug = article_data.get('slug') or create_slug(sanitized_title)
+        slug = article_data.get('slug') or generate_unique_slug(sanitized_title)
         if BlogPost.query.filter_by(slug=slug).first():
             slug = f"{slug}-{self.db.session.query(BlogPost).count() + 1}"
 
@@ -152,7 +152,7 @@ class BlogService:
             post.title = InputSanitizer.sanitize_string(article_data['title'])
             # Also update slug if title changes and no new slug is provided
             if 'slug' not in article_data:
-                post.slug = create_slug(post.title)
+                post.slug = generate_unique_slug(post.title)
         if 'content' in article_data:
             post.content = InputSanitizer.sanitize_html(article_data['content'], allow_tags=True)
         if 'slug' in article_data:

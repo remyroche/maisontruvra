@@ -207,11 +207,11 @@ class User(BaseModel):
 class Role(BaseModel, SoftDeleteMixin):
     __tablename__ = 'roles'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True)
+    name = db.Column(db.Enum(RoleType), unique=True)
     users = db.relationship('User', secondary='user_roles', back_populates='roles')
 
     def to_dict(self):
-        return {'id': self.id, 'name': self.name.value, 'is_deleted': self.is_deleted}
+        return {'id': self.id, 'name': self.name.value if hasattr(self.name, 'value') else self.name, 'is_deleted': self.is_deleted}
 
 
 class UserRole(db.Model):

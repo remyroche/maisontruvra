@@ -1,8 +1,9 @@
 from backend.database import db
-from .base import BaseModel
+from .base import BaseModel, SoftDeleteMixin # Assuming you have these base models
 from datetime import datetime
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as pgUUID
 
 class Item(db.Model):
     """
@@ -91,15 +92,27 @@ class Inventory(BaseModel):
     def __repr__(self):
         return f'<Inventory for Product {self.product_id}>'
 
-class StockNotificationRequest(BaseModel):
-    __tablename__ = 'stock_notification_requests'
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    email = db.Column(db.String(120), nullable=False)
-    notified_at = db.Column(db.DateTime, nullable=True)
-    
-    product = db.relationship('Product')
+class StockMovement(BaseModel, SoftDeleteMixin):
+    """
+    Logs every change in stock for a product, providing a clear audit trail.
+    """
+    __tablename__ = 'stock_movements'
 
-    __table_args__ = (db.UniqueConstraint('product_id', 'email', name='_product_email_uc'),)
+    id = db.Column(pgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id = db.Column(pgUUID(as_uuid=True), db.ForeignKey('products.id'), nullable=False)
+    
+    # Can be linked to a specific unique item for traceability
+    serialized_item_id = db.Column(pgUUID(as_uuid=True), db.ForeignKey('serialized_items.id'), nullable=True)
+    
+    quantity_change = db.Column(db.Integer, nullable=False) # e.g., +50 for new stock, -1 for a sale
+    reason = db.Column(db.String(255), nullable=False) # e.g., "Initial Stock", "Order Fulfillment", "Customer Return"
+    
+    # --- Relationships ---
+    product = db.relationship('Product')
+    serialized_item = db.relationship('SerializedItem')
+
+    def __repr__(self):
+        return f'<StockMovement {self.quantity_change} for Product {self.product_id}>'
 
 class InventoryReservation(db.Model):
     __tablename__ = 'inventory_reservations'

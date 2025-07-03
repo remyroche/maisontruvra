@@ -1,16 +1,17 @@
 from decimal import Decimal
-from backend.models import db, User, Role, UserRole, Tier, Order, Company, B2BAccount
+from .. import db
+from ..models import User, Role, UserRole, Tier, Order, Company, B2BAccount
 from backend.services.email_service import EmailService
 from backend.services.user_service import UserService
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
-from backend.extensions import db
-from backend.services.auth_service import AuthService
+# from backend.extensions import db
 from backend.services.exceptions import ValidationException, NotFoundException, ServiceError
 from flask_login import current_user
 from backend.utils.encryption import hash_password
 from backend.models.enums import RoleType
 from backend.services.audit_log_service import AuditLogService
+from .exceptions import ServiceException, NotFoundException, DataConflictException
 
 class B2BService:
     """
@@ -19,53 +20,62 @@ class B2BService:
     def __init__(self):
         self.email_service = EmailService()
         self.user_service = UserService()
-        self.auth_service = AuthService()
         self.audit_log_service = AuditLogService()
 
-    def create_b2b_account(self, data):
+
+    def create_b2b_account_and_user(self, company_data, user_data):
         """
-        Creates a B2B account application.
-        This involves creating a User and a linked B2BAccount with 'pending' status.
+        Creates a new B2B account, a company, and the initial admin user for that account.
+        This is an atomic transaction.
         """
-        if User.query.filter_by(email=data['email']).first():
-            raise ValidationException("A user with this email already exists.")
+        # ** FIX: Import AuthService inside the method to break the circular dependency **
+        from backend.services.auth_service import AuthService
+        auth_service = AuthService(self.session)
 
         try:
-            # First, create the user record
-            user = self.user_service.create_user({
-                'email': data['email'],
-                'password': data['password'],
-                'first_name': data['first_name'],
-                'last_name': data['last_name'],
-                'is_b2b': True,
-                'is_active': False # Account is not active until approved
-            })
+            # Check if company or user email already exists
+            if Company.query.filter_by(name=company_data.get('name')).first():
+                raise DataConflictException("A company with this name already exists.")
+            if User.query.filter_by(email=user_data.get('email')).first():
+                raise DataConflictException("A user with this email already exists.")
 
-            # Then, create the B2B account record
-            b2b_account = B2BAccount(
-                user_id=user.id,
-                company_name=data['company_name'],
-                vat_number=data.get('vat_number'),
-                status='pending'
-            )
-            db.session.add(b2b_account)
-            db.session.commit()
+            # 1. Create the Company
+            new_company = Company(name=company_data.get('name'))
+            self.session.add(new_company)
+            
+            # 2. Create the B2B Account linked to the Company
+            new_b2b_account = B2BAccount(company=new_company)
+            self.session.add(new_b2b_account)
+            
+            # 3. Create the User via the AuthService to handle hashing and roles
+            user_data['b2b_account_id'] = new_b2b_account.id
+            # Ensure the user is created with an 'admin' or 'b2b_admin' role
+            new_user = auth_service.create_user(user_data, role_name='b2b_admin')
+            
+            self.session.commit()
+            return new_b2b_account, new_user
 
-            # Send notifications
-            self.email_service.send_b2b_pending_email(user.email, user.first_name)
-            # self.email_service.send_admin_b2b_review_email(b2b_account) # Optional: notify admin
+        except Exception as e:
+            self.session.rollback()
+            # Log the error e
+            raise ServiceException(f"Failed to create B2B account: {e}")
 
-            self.audit_log_service.add_entry(
-                f"B2B account application submitted for '{b2b_account.company_name}' by '{user.email}'",
-                user_id=user.id,
-                target_type='b2b_account',
-                target_id=b2b_account.id,
-                action='create'
-            )
-            return b2b_account
-        except (SQLAlchemyError, Exception) as e:
-            db.session.rollback()
-            raise ValidationException(f"Error creating B2B account: {e}")
+    def add_user_to_b2b_account(self, b2b_account_id, user_data, role_name='b2b_user'):
+        """
+        Adds a new user to an existing B2B account.
+        """
+        from backend.services.auth_service import AuthService
+        auth_service = AuthService(self.session)
+        
+        b2b_account = self.session.query(B2BAccount).get(b2b_account_id)
+        if not b2b_account:
+            raise NotFoundException(resource_name="B2B Account", resource_id=b2b_account_id)
+
+        user_data['b2b_account_id'] = b2b_account.id
+        new_user = auth_service.create_user(user_data, role_name=role_name)
+        
+        return new_user
+
 
     def approve_b2b_account(self, b2b_account_id):
         """

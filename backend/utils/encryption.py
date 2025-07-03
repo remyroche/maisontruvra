@@ -1,7 +1,31 @@
 from typing import Optional, Any, Union
 from cryptography.fernet import Fernet
 from flask import current_app
+# backend/utils/encryption.py
 
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
+# Create a PasswordHasher instance with default parameters
+ph = PasswordHasher()
+
+def hash_password(password):
+  """
+  Hashes a password using Argon2.
+  """
+  return ph.hash(password)
+
+def check_password(hashed_password, password):
+  """
+  Verifies a password against a hashed version.
+  Returns True if the password is correct, False otherwise.
+  """
+  try:
+    ph.verify(hashed_password, password)
+    return True
+  except VerifyMismatchError:
+    return False
+  
 def get_cipher() -> Fernet:
     """
     Initializes and returns a Fernet cipher instance using the app's secret key.

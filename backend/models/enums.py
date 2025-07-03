@@ -1,9 +1,17 @@
 import enum
 
 class UserType(enum.Enum):
+    ALL = "all"
     B2C = "B2C"
     B2B = "B2B"
     Staff = "Staff"
+    NEW_CUSTOMERS = "new_customers"
+    RETURNING_CUSTOMERS = "returning_customers"
+
+class DiscountType(enum.Enum):
+    PERCENTAGE = "percentage"
+    FIXED_AMOUNT = "fixed_amount"
+    FREE_SHIPPING = "free_shipping"
 
 class NotificationFrequency(enum.Enum):
     NEVER = 'never'

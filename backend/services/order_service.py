@@ -1,476 +1,270 @@
 import uuid
-from backend import db
-from backend.models.order_models import db, Order, OrderItem
-from backend.models.product_models import Product
-from backend.models.cart_models import Cart
-from backend.models.address_models import Address
-from backend.services.loyalty_service import LoyaltyService
-from .exceptions import ServiceError, NotFoundException, ValidationException, ServiceException
-from sqlalchemy.orm import joinedload, subqueryload
-from backend.models.user_models import User
-from backend.models.b2b_models import B2BUser
-from backend.services.inventory_service import InventoryService
-from backend.services.referral_service import ReferralService
-from backend.services.pdf_service import PDFService
-from flask import current_app
-from .notification_service import NotificationService
-from .monitoring_service import MonitoringService
-from ..extensions import socketio
-from backend.services.invoice_service import InvoiceService
-from backend.services.email_service import EmailService
-from sqlalchemy.exc import SQLAlchemyError
-from backend.extensions import db
-from ..models import Order, OrderItem, Product, db
-from ..models.order_models import OrderStatusEnum
 import logging
+from sqlalchemy.orm import joinedload, subqueryload
+from sqlalchemy.exc import SQLAlchemyError
+from flask import current_app
 
+from .. import db
+from ..extensions import socketio
+from ..models import (
+    User,
+    Order,
+    OrderItem,
+    Product,
+    Cart,
+    Address,
+    OrderStatusEnum,
+    CartItem # Added CartItem to the import list
+)
+from .exceptions import (
+    ServiceException,
+    NotFoundException,
+    ValidationException,
+    BusinessRuleException
+)
+from .inventory_service import InventoryService
+from .loyalty_service import LoyaltyService
+# Note: NotificationService is no longer imported here to prevent circular dependency
+from .monitoring_service import MonitoringService
+from .invoice_service import InvoiceService
+from .email_service import EmailService
+
+# Configure a logger for this service
 logger = logging.getLogger(__name__)
-
-
 
 class OrderService:
     """
-    Handles business logic related to order processing, creation, and fulfillment.
+    Handles all business logic related to order processing, creation, and fulfillment.
     """
-    def __init__(self, session):
-        self.session = session
-        self.inventory_service = InventoryService(session)
-        self.referral_service = ReferralService(session) # Instantiate ReferralService
+
+    def __init__(self, session=None):
+        """
+        Initializes the OrderService with necessary dependent services.
+        A session can be passed for specific transactional contexts, otherwise uses the global db.session.
+        """
+        self.session = session or db.session
+        self.inventory_service = InventoryService(self.session)
+        self.loyalty_service = LoyaltyService()
         self.email_service = EmailService()
-        self.pdf_service = PDFService()
+        self.invoice_service = InvoiceService()
+        self.monitoring_service = MonitoringService()
         self.logger = logger
+        # self.notification_service is removed from __init__
 
-    @staticmethod
-    def get_orders_by_user(user_id, page=1, per_page=10):
-        """
-        Gets a paginated list of orders for a user, eagerly loading items and addresses.
-        """
-        return Order.query.filter_by(user_id=user_id).options(
-            subqueryload(Order.items).joinedload(OrderItem.product),
-            joinedload(Order.shipping_address)
-        ).order_by(Order.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-        
-    def get_order_by_id(self, order_id):
-        """Retrieves a single order by its ID."""
-        return db.session.query(Order).get(order_id)
+    # --- Core Order Creation ---
 
-
-    def get_all_orders(self, page=1, per_page=20):
-        """Retrieves all orders with pagination."""
-        return db.session.query(Order).order_by(Order.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-
-    def get_user_orders(self, user_id):
-        """Retrieves all orders for a specific user."""
-        return db.session.query(Order).filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
-    
-def update_order_status(self, order_id, new_status, tracking_number=None, tracking_url=None, notify_customer=True):
-    """
-    Updates the status of an order and optionally notifies the customer.
-    """
-    try:
-        order = self.get_order_by_id(order_id)
-        if not order:
-            raise ValueError(f"Order with id {order_id} not found.")
-
-        original_status = order.order_status.value # Correctly get the value from the enum
-        
-        # Validate the new status against the enum
-        try:
-            status_enum = OrderStatusEnum(new_status)
-        except ValueError:
-            raise ValueError(f"'{new_status}' is not a valid order status.")
-
-        order.order_status = status_enum
-        
-        # Only add tracking info if it's provided.
-        if tracking_number:
-            order.tracking_number = tracking_number
-        if tracking_url:
-            order.tracking_url = tracking_url
-
-        db.session.commit()
-        self.logger.info(f"Order {order_id} status updated from '{original_status}' to '{new_status}'.")
-
-        if notify_customer:
-            user = order.user
-            subject = f"Your Order #{order.id} Status Update"
-            template = None
-
-            # Check against the string value of the new status
-            if new_status == 'Shipped':
-                template = "order_shipped"
-            elif new_status == 'Cancelled':
-                template = "order_cancelled"
-            # Add more conditions for other statuses like 'Delivered', 'Packing', etc.
-
-            if template and user:
-                context = {"order": order, "user": user}
-                self.email_service.send_email(user.email, subject, template, context)
-                self.logger.info(f"Sent order status update email to {user.email} for order {order_id}.")
-
-        return order
-    except (SQLAlchemyError, ValueError) as e:
-        db.session.rollback()
-        self.logger.error(f"Error updating order status for order {order_id}: {e}")
-        raise
-    
-
-    def cancel_order(self, order_id):
-        """
-        Cancels an order and restocks the items.
-        """
-        try:
-            order = self.get_order_by_id(order_id)
-            if not order:
-                raise ValueError(f"Order with id {order_id} not found.")
-
-            if order.status in ['shipped', 'delivered', 'cancelled']:
-                raise ValueError(f"Cannot cancel order with status '{order.status}'.")
-
-            # Restock items
-            for item in order.items:
-                self.inventory_service.increase_stock(item.product_id, item.quantity)
-            
-            # Update status
-            return self.update_order_status(order_id, 'cancelled', notify_customer=True)
-
-        except (SQLAlchemyError, ValueError) as e:
-            db.session.rollback()
-            self.logger.error(f"Error cancelling order {order_id}: {e}")
-            raise
-            
-    @staticmethod
-    def create_order_from_cart(user_id, user_type, checkout_data):
+    def create_order_from_cart(self, user_id: uuid.UUID, checkout_data: dict):
         """
         Creates a final order from a user's cart, processes payment, updates inventory,
-        and hooks into loyalty/referral services.
-        Handles both B2C and B2B users.
+        and hooks into loyalty/referral services. This is a single, atomic transaction.
         """
-        cart = Cart.query.filter_by(user_id=user_id).first()
+        cart = self.session.query(Cart).filter_by(user_id=user_id).first()
         if not cart or not cart.items:
             raise ValidationException("Cannot create an order from an empty cart.")
 
-        # --- Data from checkout form ---
+        # Extract data from the checkout payload
         shipping_address_id = checkout_data.get('shipping_address_id')
-        billing_address_id = checkout_data.get('billing_address_id')
-        payment_token = checkout_data.get('payment_token') # From payment gateway (e.g., Stripe)
+        payment_token = checkout_data.get('payment_token') # Placeholder for payment gateway token
         creator_ip = checkout_data.get('creator_ip_address')
 
+        if not shipping_address_id:
+            raise ValidationException("Shipping address is required to create an order.")
+
         try:
-            # The entire process is wrapped in a transaction
-            with db.session.begin_nested():
-                # 1. Lock inventory rows for products in the cart to prevent race conditions
-                product_ids = [item.product_id for item in cart.items]
-                products = Product.query.filter(Product.id.in_(product_ids)).with_for_update().all()
-                product_map = {p.id: p for p in products}
+            # --- Transaction Start ---
 
-                # 2. Check stock availability
-                for item in cart.items:
-                    product = product_map.get(item.product_id)
-                    if not product or product.stock < item.quantity:
-                        raise ValidationException(f"Not enough stock for {product.name}.")
+            # 1. Lock inventory rows for products in the cart to prevent race conditions
+            product_ids = [item.product_id for item in cart.items]
+            products = self.session.query(Product).filter(Product.id.in_(product_ids)).with_for_update().all()
+            product_map = {p.id: p for p in products}
 
-                # 3. Create the Order record, handling B2C vs B2B
-                new_order_data = {
-                    "user_type": user_type,
-                    "shipping_address_id": shipping_address_id,
-                    "billing_address_id": billing_address_id,
-                    "creator_ip_address": creator_ip,
-                    "status": "pending_payment" 
-                }
-                if user_type == 'b2b':
-                    b2b_user = B2BUser.query.get(user_id)
-                    if not b2b_user:
-                        raise NotFoundException("B2B user not found.")
-                    new_order_data['b2b_account_id'] = b2b_user.account_id
-                    new_order_data['created_by_user_id'] = b2b_user.id
-                else: # b2c
-                    new_order_data['user_id'] = user_id
-                
-                new_order = Order(**new_order_data)
-                db.session.add(new_order)
-                
-                # 4. Create OrderItems, calculate total, and decrease stock
-                total_amount = 0
-                for item in cart.items:
-                    product = product_map[item.product_id]
-                    order_item = OrderItem(
-                        order=new_order,
-                        product_id=product.id,
-                        quantity=item.quantity,
-                        price_at_purchase=product.price
-                    )
-                    InventoryService.decrease_stock(product.id, item.quantity)
-                    total_amount += order_item.price_at_purchase * order_item.quantity
-                    db.session.add(order_item)
+            # 2. Pre-check stock availability
+            for item in cart.items:
+                product = product_map.get(item.product_id)
+                if not product or not self.inventory_service.is_stock_sufficient(product.id, item.quantity):
+                    raise ValidationException(f"Not enough stock for {getattr(product, 'name', 'Unknown Product')}.")
 
-                new_order.total_amount = total_amount
-                
-                # 5. Process Payment (placeholder for payment gateway integration)
-                # payment_successful = PaymentGateway.charge(payment_token, new_order.total_amount)
-                # if not payment_successful:
-                #     raise ServiceError("Payment processing failed.")
-                new_order.status = "processing" # Assume payment is successful for now
+            # 3. Create the initial Order record
+            new_order = Order(
+                user_id=user_id,
+                shipping_address_id=shipping_address_id,
+                billing_address_id=checkout_data.get('billing_address_id', shipping_address_id), # Default to shipping
+                creator_ip_address=creator_ip,
+                order_status=OrderStatusEnum.PENDING,
+                total_amount=0  # Will be calculated next
+            )
+            self.session.add(new_order)
 
-                # 6. Clear the user's cart
-                for item in cart.items:
-                    db.session.delete(item)
-                db.session.delete(cart)
-
-            # 7. Commit the transaction
-            db.session.commit()
-            
-            # --- Post-Transaction Tasks (safe to run after commit) ---
-            socketio.emit('new_order', new_order.to_dict(), namespace='/admin')
-            
-            # 8. Award loyalty points for the purchase
-            try:
-                LoyaltyService.add_points_for_purchase(
-                    user_id=user_id,
-                    order_total=new_order.total_amount,
-                    order_id=new_order.id
+            # 4. Create OrderItems, calculate total, and decrease stock
+            total_amount = 0
+            for item in cart.items:
+                product = product_map[item.product_id]
+                order_item = OrderItem(
+                    order=new_order,
+                    product_id=product.id,
+                    quantity=item.quantity,
+                    price_at_purchase=product.price
                 )
-            except Exception as e:
-                MonitoringService.log_error(
-                    f"Failed to award loyalty points for order {new_order.id}: {e}",
-                    "OrderService"
-                )
+                self.inventory_service.decrease_stock(product.id, item.quantity)
+                total_amount += order_item.price_at_purchase * order_item.quantity
+                self.session.add(order_item)
 
-            # 9. Handle referral logic for the new user's first order
-            try:
-                LoyaltyService.reward_referrer_for_order(
-                    referee_id=user_id,
-                    order_total_euros=new_order.total_amount
-                )
-            except Exception as e:
-                MonitoringService.log_error(
-                    f"Failed to process referral for order {new_order.id}: {e}",
-                    "OrderService"
-                )
+            new_order.total_amount = total_amount
 
-            # 10. Offload PDF and Email generation to Celery
-            try:
-                InvoiceService.create_invoice_for_order.delay(new_order.id)
-                NotificationService.send_order_confirmation_email.delay(new_order.id)
-                MonitoringService.log_info(
-                    f"Successfully queued post-order tasks for order {new_order.id}",
-                    "OrderService"
-                )
-            except Exception as e:
-                MonitoringService.log_error(
-                    f"Failed to queue post-order tasks for order {new_order.id}: {e}",
-                    "OrderService"
-                )
+            # 5. Process Payment (Placeholder for real payment gateway logic)
+            # payment_successful = PaymentGateway.charge(payment_token, new_order.total_amount)
+            # if not payment_successful:
+            #     raise BusinessRuleException("Payment processing failed.")
+            new_order.order_status = OrderStatusEnum.PROCESSING # Assume payment is successful
+
+            # 6. Clear the user's cart
+            self.session.query(CartItem).filter_by(cart_id=cart.id).delete()
+            self.session.delete(cart)
+
+            self.session.commit()
+            # --- Transaction End ---
+
+            # 7. --- Post-Transaction Asynchronous Tasks ---
+            self._execute_post_order_tasks(new_order)
 
             return new_order
 
         except (ValidationException, NotFoundException) as e:
-            db.session.rollback()
-            MonitoringService.log_warning(
-                f"Order creation failed for user {user_id}: {str(e)}",
-                "OrderService"
-            )
+            self.session.rollback()
+            self.monitoring_service.log_warning(f"Order creation failed for user {user_id}: {str(e)}", "OrderService")
             raise e
         except Exception as e:
-            db.session.rollback()
-            MonitoringService.log_error(
-                f"Failed to create order from cart for user {user_id}: {str(e)}",
-                "OrderService",
-                exc_info=True
-            )
-            raise ServiceError("Could not create order due to an unexpected error.")
+            self.session.rollback()
+            self.monitoring_service.log_error(f"Critical error creating order for user {user_id}: {str(e)}", "OrderService", exc_info=True)
+            raise ServiceException("Could not create order due to an unexpected server error.")
 
+    # --- Order Retrieval ---
 
-    @staticmethod
-    def get_all_orders_paginated(page, per_page, status=None, sort_by='created_at', sort_direction='desc'):
+    def get_order_by_id(self, order_id: uuid.UUID, user_id: uuid.UUID = None):
         """
-        Gets all orders for an admin, eagerly loading user and items.
+        Retrieves a single order by its ID, ensuring it belongs to the user if user_id is provided.
         """
-        query = Order.query.options(
-            joinedload(Order.user),
-            subqueryload(Order.items).joinedload(OrderItem.product)
+        query = self.session.query(Order).options(
+            subqueryload(Order.items).joinedload(OrderItem.product),
+            joinedload(Order.shipping_address)
         )
+        if user_id:
+            query = query.filter_by(id=order_id, user_id=user_id)
+        else:
+            query = query.filter_by(id=order_id)
+
+        order = query.first()
+        if not order:
+            raise NotFoundException(resource_name="Order", resource_id=order_id)
+        return order
+
+    def get_user_orders_paginated(self, user_id: uuid.UUID, page: int = 1, per_page: int = 10):
+        """
+        Gets a paginated list of orders for a specific user.
+        """
+        query = self.session.query(Order).filter_by(user_id=user_id).order_by(Order.created_at.desc())
+        return query.paginate(page=page, per_page=per_page, error_out=False)
+
+    def get_all_orders_paginated(self, page: int, per_page: int, status: str = None, sort_by: str = 'created_at', sort_direction: str = 'desc'):
+        """
+        Gets all orders for an admin view, with optional filtering and sorting.
+        """
+        query = self.session.query(Order).options(joinedload(Order.user))
+
         if status:
-            query = query.filter(Order.status == status)
+            try:
+                status_enum = OrderStatusEnum(status)
+                query = query.filter(Order.order_status == status_enum)
+            except ValueError:
+                self.logger.warning(f"Invalid status filter '{status}' provided.")
 
         order_by_attr = getattr(Order, sort_by, Order.created_at)
         if sort_direction == 'desc':
             query = query.order_by(db.desc(order_by_attr))
         else:
             query = query.order_by(db.asc(order_by_attr))
-        page=page
-        per_page=per_page
+
         return query.paginate(page=page, per_page=per_page, error_out=False)
-    
-    @staticmethod
-    def create_guest_order(data):
+
+    # --- Order Management ---
+
+    def update_order_status(self, order_id: uuid.UUID, new_status_str: str, tracking_number: str = None):
         """
-        Handles the logic for creating an order from a guest.
+        Updates the status of an order and triggers relevant notifications.
         """
-        if not all(k in data for k in ['guest_details', 'shipping_address', 'cart_items', 'payment_token']):
-            raise ServiceError("Missing required data for guest order.", 400)
+        try:
+            order = self.get_order_by_id(order_id)
+            original_status = order.order_status.value
+
+            try:
+                new_status_enum = OrderStatusEnum(new_status_str)
+            except ValueError:
+                raise ValidationException(f"'{new_status_str}' is not a valid order status.")
+
+            order.order_status = new_status_enum
+            if tracking_number:
+                order.tracking_number = tracking_number
+
+            self.session.commit()
+            self.logger.info(f"Order {order_id} status updated from '{original_status}' to '{new_status_str}'.")
+
+            # ** FIX: Import NotificationService here **
+            from .notification_service import NotificationService
+            notification_service = NotificationService()
+            
+            # Trigger notification task
+            notification_service.send_order_status_update.delay(order_id=order.id, new_status=new_status_str)
+
+            return order
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Database error updating order status for order {order_id}: {e}", exc_info=True)
+            raise ServiceException("Failed to update order status due to a database error.")
+
+    def cancel_order(self, order_id: uuid.UUID, user_id: uuid.UUID = None):
+        """
+        Cancels an order, restocks the items, and notifies the customer.
+        """
+        order = self.get_order_by_id(order_id, user_id) # Ensures user can only cancel their own order
+
+        if not order.is_cancellable():
+            raise BusinessRuleException(f"Order in status '{order.order_status.value}' cannot be cancelled.")
 
         try:
-            address_data = data['shipping_address']
-            guest_address = Address(
-                street=address_data['street'],
-                city=address_data['city'],
-                postal_code=address_data['postal_code'],
-                country=address_data['country'],
-            )
-            db.session.add(guest_address)
-            
-            new_order = Order(
-                guest_email=data['guest_details']['email'],
-                guest_phone=data['guest_details'].get('phone'),
-                shipping_address=guest_address,
-                status='PENDING',
-                total=OrderService._calculate_total(data['cart_items']) 
-            )
-            db.session.add(new_order)
-            
-            for item_data in data['cart_items']:
-                product = Product.query.get(item_data['product_id'])
-                if not product:
-                    raise ServiceError(f"Product with ID {item_data['product_id']} not found.", 404)
-                
-                order_item = OrderItem(
-                    order=new_order,
-                    product_id=product.id,
-                    quantity=item_data['quantity'],
-                    price_at_purchase=product.price
-                )
-                db.session.add(order_item)
-
-            new_order.status = 'PROCESSING'
-            db.session.commit()
-            return new_order
-        except Exception as e:
-            db.session.rollback()
-            MonitoringService.log_error(
-                f"Failed to process guest order: {str(e)}",
-                "OrderService",
-                exc_info=True
-            )
-            raise ServiceError("Could not process the guest order.")
-
-    @staticmethod
-    def _calculate_total(cart_items):
-        total = 0
-        for item in cart_items:
-            product = Product.query.get(item['product_id'])
-            if product:
-                total += product.price * item['quantity']
-        return total
-        
-    @staticmethod
-    def create_order(user_id, order_data):
-        try:
-            order_total = 0
-            order_items = []
-
-            for item_data in order_data:
-                product = Product.query.filter_by(id=item_data['product_id']).with_for_update().first()
-
-                if not product or product.stock_quantity < item_data['quantity']:
-                    raise ServiceException(f"Product {product.name if product else item_data['product_id']} is out of stock or does not exist.")
-                
-                # Decrease stock
-                product.stock_quantity -= item_data['quantity']
-                
-                order_item = OrderItem(
-                    product_id=product.id,
-                    quantity=item_data['quantity'],
-                    price=product.price
-                )
-                order_items.append(order_item)
-                order_total += order_item.price * order_item.quantity
-
-            new_order = Order(
-                user_id=user_id,
-                total_amount=order_total,
-                items=order_items
-            )
-
-            db.session.add(new_order)
-            db.session.commit()
-            return new_order
-            
-        except Exception as e:
-            db.session.rollback()
-            # Log the exception e
-            raise ServiceException("Failed to create order.") from e    
-
-    
-
-    @staticmethod
-    def fulfill_order(order_id: int):
-        """
-        Main service method to fulfill a paid order.
-        It allocates serialized items and updates the order status.
-        This entire operation is a single atomic transaction.
-        """
-        MonitoringService.log_info(
-            f"Starting fulfillment service for order_id: {order_id}",
-            "OrderService"
-        )
-        
-        order = Order.query.get(order_id)
-        if not order:
-            raise NotFoundException(f"Order {order_id} not found for fulfillment.")
-        
-        try:
+            # Restock items by increasing inventory
             for item in order.items:
-                OrderService._allocate_serialized_items_for_item(
-                    order_item_id=item.id,
-                    variant_id=item.product_variant_id,
-                    quantity=item.quantity
-                )
+                # Assuming increase_stock handles serialized items correctly if applicable
+                self.inventory_service.increase_stock(item.product_id, item.quantity)
 
-            # Once all items are allocated, the order can be moved to 'Awaiting Shipment'.
-            order.status = 'awaiting_shipment'
-            db.session.commit()
-            MonitoringService.log_info(
-                f"Successfully fulfilled and allocated items for order_id: {order_id}",
-                "OrderService"
-            )
+            # Update status via the standardized method
+            return self.update_order_status(order_id, 'CANCELLED')
 
+        except (SQLAlchemyError, BusinessRuleException) as e:
+            self.session.rollback()
+            self.logger.error(f"Error cancelling order {order_id}: {e}", exc_info=True)
+            raise ServiceException("Failed to cancel the order.")
+
+    # --- Private Helper Methods ---
+
+    def _execute_post_order_tasks(self, order: Order):
+        """
+        Offloads non-critical, post-transaction tasks to background workers (Celery).
+        This ensures the user gets a fast response and failures here don't block the order.
+        """
+        try:
+            # ** FIX: Import NotificationService here **
+            from .notification_service import NotificationService
+            notification_service = NotificationService()
+
+            # Notify admin dashboard of the new order via WebSockets
+            socketio.emit('new_order', {'order_id': str(order.id), 'total': str(order.total_amount)}, namespace='/admin')
+
+            # Queue tasks for Celery
+            self.loyalty_service.add_points_for_purchase.delay(user_id=order.user_id, order_id=order.id)
+            notification_service.send_order_confirmation.delay(order_id=order.id)
+            self.invoice_service.generate_invoice_pdf.delay(order_id=order.id)
+
+            self.monitoring_service.log_info(f"Successfully queued post-order tasks for order {order.id}", "OrderService")
         except Exception as e:
-            db.session.rollback()
-            MonitoringService.log_critical(
-                f"CRITICAL: Failed to fulfill order {order_id}. Manual intervention required. Error: {str(e)}",
-                "OrderService",
-                exc_info=True
-            )
-            raise ServiceError(f"Fulfillment failed for order {order_id}.")
-
-    @staticmethod
-    def _allocate_serialized_items_for_item(order_item_id: int, variant_id: int, quantity: int):
-        """
-        Private helper to allocate specific, serialized product items to a single order item.
-        This creates the full traceability for the Product Passport.
-        """
-        # Find available, 'in_stock' serialized items for the given variant.
-        # We use with_for_update() to lock the rows to prevent another process from allocating the same items.
-        items_to_allocate = db.session.query(OrderItem)\
-            .filter(OrderItem.product_variant_id == variant_id)\
-            .filter(OrderItem.status == 'in_stock')\
-            .limit(quantity)\
-            .with_for_update()\
-            .all()
-
-        # Critical check: Ensure the number of physical items matches the quantity ordered.
-        if len(items_to_allocate) < quantity:
-            # This signifies that inventory_count was out of sync with the actual items.
-            # This is a major issue that needs immediate attention.
-            raise ServiceError(f"Inventory mismatch for variant {variant_id}: Wanted {quantity}, found {len(items_to_allocate)}")
-
-        # Update the status of the specific items to 'sold' and link them to the order item.
-        for item in items_to_allocate:
-            item.status = 'sold'
-            item.order_item_id = order_item_id
-        
-        MonitoringService.log_info(
-            f"Allocated {len(items_to_allocate)} items for order_item_id {order_item_id}",
-            "OrderService"
-        )
+            # Log failure to queue, but don't fail the entire request
+            self.monitoring_service.log_error(f"Failed to queue post-order tasks for order {order.id}: {e}", "OrderService", exc_info=True)

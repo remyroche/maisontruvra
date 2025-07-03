@@ -4,7 +4,7 @@ from flask_talisman import Talisman
 from datetime import datetime
 import os
 from .extensions import db, migrate, cors, jwt
-from .celery_worker import celery # Import the celery instance
+from .celery_worker import celery, init_celery # Import the celery instance
 
 # Import extension instances from the central extensions file
 from .extensions import (
@@ -89,6 +89,7 @@ def create_app(config_class=config.Config):
     celery.config_from_object(app.config, namespace='CELERY')
     jwt.init_app(app)
     Vite(app)
+    init_celery(app) # <-- Add this line
 
 
     # Setup database security options and logging

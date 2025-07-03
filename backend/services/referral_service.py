@@ -11,8 +11,9 @@ import secrets
 import string
 from datetime import datetime
 
-from ..models import db, User, Referral
-from ..services.loyalty_service import LoyaltyService
+from ..models.user_models import User
+from ..models.referral_models import Referral # Assuming Referral model is in referral_models.py
+from backend.services.loyalty_service import LoyaltyService
 from ..services.notification_service import NotificationService
 from ..services.exceptions import ReferralException
 

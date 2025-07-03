@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from sqlalchemy import func
 from backend.database import db
-from backend.models.order_models import Order, OrderStatus
+from backend.models.order_models import Order, OrderStatusEnum
 from backend.models.user_models import User
 from backend.models.product_models import Product, Review
 
@@ -22,7 +22,7 @@ class AdminDashboardService:
         total_revenue = db.session.query(
             func.sum(Order.total)
         ).filter(
-            Order.status == OrderStatus.COMPLETED
+            Order.status == OrderStatusEnum.COMPLETED
         ).scalar() or 0.0
 
         # 2. Count New Customers registered in the last 30 days
@@ -36,7 +36,7 @@ class AdminDashboardService:
         pending_orders_count = db.session.query(
             func.count(Order.id)
         ).filter(
-            Order.status == OrderStatus.PENDING
+            Order.status == OrderStatusEnum.PENDING
         ).scalar() or 0
 
         # 4. Count the total number of products in the catalog

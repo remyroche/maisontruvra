@@ -1,60 +1,52 @@
 # backend/services/invoice_service.py
-import os
-from flask import current_app, render_template
-from backend.database import db
-from backend.models.order_models import Order
-from backend.models.invoice_models import Invoice
-from backend.models.order_models import Order, OrderStatus
-from backend.services.pdf_service import create_invoice_pdf
 
-def get_invoice_by_order_id(order_id):
-    return Invoice.query.filter_by(order_id=order_id).first()
+from .. import db
+from ..models import Order, Invoice, OrderStatusEnum
+from .exceptions import NotFoundException, ServiceException
 
-def get_invoice_by_b2b_order_id(b2b_order_id):
-    return Invoice.query.filter_by(b2b_order_id=b2b_order_id).first()
+# FIX: Import the PDFService class, not a function
+from .pdf_service import PDFService 
 
-def generate_invoice_pdf_for_order(order_id):
-    """Generates a PDF invoice for a given order."""
-    order = Order.query.get(order_id)
-    if not order or order.status != OrderStatus.COMPLETED:
-        current_app.logger.warning(
-            f"Could not generate invoice for order {order_id}. Order not found or not completed."
-        )
-        return
+import logging
 
-    template_path = "non-email/b2c_invoice.html"
-    invoice_html = render_template(template_path, order=order)
-    invoice_pdf = create_invoice_pdf(invoice_html)
+logger = logging.getLogger(__name__)
 
-    invoice = Invoice(
-        order_id=order_id,
-        user_id=order.user_id,
-        invoice_data=invoice_pdf,
-    )
-    db.session.add(invoice)
-    db.session.commit()
-    current_app.logger.info(f"Successfully generated invoice for order {order_id}")
-    return invoice
+class InvoiceService:
+    """
+    Handles all logic related to creating and managing invoices.
+    """
 
-def generate_invoice_pdf_for_b2b_order(order_id):
-    """Generates a PDF invoice for a given B2B order."""
-    order = Order.query.get(order_id)
-    if not order:
-        current_app.logger.warning(
-            f"Could not generate invoice for B2B order {order_id}. Order not found."
-        )
-        return
+    def __init__(self, session=None):
+        self.session = session or db.session
+        # FIX: Create an instance of the PDFService
+        self.pdf_service = PDFService() 
 
-    template_path = "non-email/b2b_invoice.html"
-    invoice_html = render_template(template_path, order=order)
-    invoice_pdf = create_invoice_pdf(invoice_html)
+    def generate_invoice_for_order(self, order_id):
+        """
+        Generates a PDF invoice for a given order and saves it.
+        This method is designed to be called asynchronously by a Celery task.
+        """
+        order = self.session.query(Order).get(order_id)
+        if not order:
+            raise NotFoundException(resource_name="Order", resource_id=order_id)
 
-    invoice = Invoice(
-        b2b_order_id=order_id,
-        user_id=order.user_id,
-        invoice_data=invoice_pdf,
-    )
-    db.session.add(invoice)
-    db.session.commit()
-    current_app.logger.info(f"Successfully generated invoice for B2B order {order_id}")
-    return invoice
+        try:
+            # FIX: Call the method on the PDFService instance
+            pdf_path = self.pdf_service.create_invoice_pdf(order)
+
+            # Create a new invoice record in the database
+            new_invoice = Invoice(
+                order_id=order.id,
+                invoice_number=f"INV-{order.id[:8]}", # Example invoice number
+                pdf_url=pdf_path # Assuming this path is a URL or retrievable path
+            )
+            self.session.add(new_invoice)
+            self.session.commit()
+            
+            logger.info(f"Successfully generated and saved invoice for order {order_id} at {pdf_path}")
+            return new_invoice
+
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to generate invoice for order {order_id}: {e}", exc_info=True)
+            raise ServiceException("Failed to generate invoice.")

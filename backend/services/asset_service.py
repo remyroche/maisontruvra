@@ -1,13 +1,21 @@
 import os
 import uuid
+import io
+import magic
+from PIL import Image
 from flask import current_app
 from backend.database import db
 from backend.models.asset_models import Asset
-from .exceptions import ServiceError, NotFoundException, ValidationError
+from .exceptions import ServiceError, NotFoundException, ValidationException
 from .monitoring_service import MonitoringService
 from werkzeug.utils import secure_filename
-from backend.services.exceptions import InvalidUsageException
 
+# Define constants for file validation
+MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
+ALLOWED_MIMETYPES = {
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf'
+}
 
 def _allowed_file(filename):
     """Helper function to check if the file extension is in the allowed list."""
@@ -34,11 +42,11 @@ class AssetService:
         file_size = file_storage.tell()
         file_storage.seek(0)
         if file_size == 0:
-            raise ValidationError("Submitted file is empty.")
+            raise ValidationException("Submitted file is empty.")
         
         # 2. Check file size against the maximum allowed
         if file_size > MAX_FILE_SIZE_BYTES:
-            raise ValidationError(f"File is too large. Max size is {MAX_FILE_SIZE_BYTES / 1024 / 1024}MB.")
+            raise ValidationException(f"File is too large. Max size is {MAX_FILE_SIZE_BYTES / 1024 / 1024}MB.")
 
         # 3. Securely determine the MIME type using the file's content (magic numbers)
         # This prevents attackers from bypassing checks by simply renaming a malicious file.
@@ -46,7 +54,7 @@ class AssetService:
         file_storage.seek(0)
 
         if mime_type not in ALLOWED_MIMETYPES:
-            raise ValidationError(f"Invalid file type '{mime_type}'. Allowed types are: {', '.join(ALLOWED_MIMETYPES)}")
+            raise ValidationException(f"Invalid file type '{mime_type}'. Allowed types are: {', '.join(ALLOWED_MIMETYPES)}")
 
         # 4. Sanitize image files using Pillow
         # This re-encodes the image, which effectively strips malicious scripts (e.g., in EXIF data) or malformations.
@@ -70,7 +78,7 @@ class AssetService:
         
         except Exception as e:
             current_app.logger.error(f"Failed to process or sanitize image: {e}")
-            raise ValidationError("The uploaded image file appears to be corrupted or invalid.")
+            raise ValidationException("The uploaded image file appears to be corrupted or invalid.")
 
     @staticmethod
     def upload_asset(file_storage, folder='general'):
@@ -78,7 +86,7 @@ class AssetService:
         Uploads a validated and sanitized asset to the configured storage.
         """
         if not file_storage or not file_storage.filename:
-            raise ValidationError("No file provided or file has no name.")
+            raise ValidationException("No file provided or file has no name.")
 
         # The core of the security enhancement is calling the validation method first.
         sanitized_file_buffer, mime_type = AssetService._validate_and_sanitize_upload(file_storage)

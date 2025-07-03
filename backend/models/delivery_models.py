@@ -1,4 +1,4 @@
-from .. import db
+from backend.extensions import db
 from .base import BaseModel
 from sqlalchemy.orm import relationship
 

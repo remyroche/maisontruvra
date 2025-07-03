@@ -12,7 +12,7 @@ from backend.models.user_models import User
 from backend.models.order_models import OrderItem
 from backend.models.b2b_loyalty_models import LoyaltyTier
 from backend.services.exceptions import NotFoundException, ValidationException, ServiceError, ProductNotFoundError, DuplicateProductError, InvalidAPIRequestError
-from backend.utils.input_sanitizer import InputSanitizer, sanitize_html
+from backend.utils.input_sanitizer import InputSanitizer
 from backend.services.audit_log_service import AuditLogService
 from backend.services.monitoring_service import MonitoringService
 from backend.utils.cache_helpers import (
@@ -324,8 +324,8 @@ class ProductService:
             raise DuplicateProductError(f"Product with name '{product_data['name']}' already exists.")
     
         # Sanitize user-provided string fields to prevent XSS.
-        sanitized_name = sanitize_html(product_data['name'])
-        sanitized_description = sanitize_html(product_data['description'])
+        sanitized_name = InputSanitizer.sanitize_html(product_data['name'])
+        sanitized_description = InputSanitizer.sanitize_html(product_data['description'])
     
         # Verify that the foreign key references are valid.
         if not Category.query.get(product_data['category_id']):

@@ -9,12 +9,13 @@ from .monitoring_service import MonitoringService
 from backend.utils.input_sanitizer import InputSanitizer
 from ..models import ExclusiveReward, Product, User
 from backend.services.b2b_service import B2BService 
-from backend.models import UserType  
 from decimal import Decimal
-from backend.models import db, Cart, CartItem, Product, User, UserType
+from .. import db
+from ..models import Cart, CartItem, Product, User
 from sqlalchemy.orm import joinedload
 from backend.extensions import db
 from .exceptions import ProductNotFoundError, InsufficientStockError
+from ..models.enums import UserType
 
 class CartService:
     def __init__(self, logger):

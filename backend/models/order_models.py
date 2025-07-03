@@ -1,101 +1,120 @@
-from backend.database import db
-from .base import BaseModel, SoftDeleteMixin
-from .enums import OrderStatus
 import enum
+import uuid
+from sqlalchemy.dialects.postgresql import UUID
+from .. import db # Use relative import to avoid circular dependencies
+from .base import BaseModel, SoftDeleteMixin # Assuming these are in a 'base.py' file
 
+# --- Enum Definition ---
+# This Enum now includes all necessary statuses and is defined *before* the model.
 class OrderStatusEnum(enum.Enum):
+    PENDING = 'Pending'
     CONFIRMED = 'Confirmed'
+    PROCESSING = 'Processing' # Added PROCESSING for consistency
     PACKING = 'Packing'
     SHIPPED = 'Shipped'
     DELIVERED = 'Delivered'
     CANCELLED = 'Cancelled'
-    
+
+# --- Model Definitions ---
+
+class PaymentStatus(BaseModel, SoftDeleteMixin):
+    __tablename__ = 'payment_statuses'
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    status = db.Column(db.String(50), nullable=False)
+    description = db.Column(db.Text)
+
+
 class Order(BaseModel, SoftDeleteMixin):
     __tablename__ = 'orders'
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
-    guest_email = db.Column(db.String(120), nullable=True)
+
+    # --- Core Columns ---
+    # Using UUID for consistency with other models
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
+    guest_email = db.Column(db.String(120), nullable=True) # For guest checkouts
     guest_phone = db.Column(db.String(20), nullable=True)
+
+    # --- Status and Financials ---
+    # Consolidated to a single status column using the Enum
+    order_status = db.Column(db.Enum(OrderStatusEnum), nullable=False, default=OrderStatusEnum.PENDING)
+    total_amount = db.Column(db.Numeric(10, 2), nullable=False)
+
+    # --- Shipping and Tracking ---
+    shipping_address_id = db.Column(UUID(as_uuid=True), db.ForeignKey('addresses.id'), nullable=False)
+    billing_address_id = db.Column(UUID(as_uuid=True), db.ForeignKey('addresses.id'), nullable=True)
+    tracking_number = db.Column(db.String(100))
+    creator_ip_address = db.Column(db.String(45), nullable=True) # Removed duplicate definition
+
+    # --- Relationships ---
+    # Using foreign_keys to be explicit since multiple columns could link to User
+    user = db.relationship('User', foreign_keys=[user_id], back_populates='orders')
     
-    # B2B functionality
-    b2b_account_id = db.Column(db.Integer, db.ForeignKey('b2b_accounts.id'), nullable=True)
-    created_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    creator_ip_address = db.Column(db.String(45), nullable=True)
-    
-    total_cost = db.Column(db.Numeric(10, 2), nullable=False)
-    status = db.Column(db.Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
-    shipping_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'), nullable=True)
-    
-    # Relationships
-    user = db.relationship('User', foreign_keys=[user_id])
-    b2b_account = db.relationship('B2BAccount', backref='orders')
-    created_by = db.relationship('User', foreign_keys=[created_by_user_id])
-
-    items = db.relationship('OrderItem', back_populates='order', cascade="all, delete-orphan")
-    shipping_address = db.relationship('Address')
-    invoice = db.relationship('Invoice', back_populates='order', uselist=False)
-
-    items = db.relationship('OrderItem', backref='order', lazy=True)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'total_price': self.total_price,
-            'created_at': self.created_at.isoformat(),
-            'order_status': self.order_status.value,
-            'tracking_number': self.tracking_number,
-            'tracking_url': self.tracking_url,
-            'items': [item.to_dict() for item in self.items]
-        }
-
-
-    def to_admin_dict(self):
-        """Serialization for an admin viewing an order."""
-        data = self.to_user_dict()
-        data['user'] = self.user.to_public_dict()
-        return data
+    # Correct, single relationship definition for items
+    items = db.relationship('OrderItem', back_populates='order', cascade="all, delete-orphan", lazy='dynamic')
+    invoice = db.relationship('Invoice', back_populates='order', uselist=False, cascade="all, delete-orphan")
 
     def to_dict(self, view='user'):
-        if view == 'admin':
-            return self.to_admin_dict()
-        return self.to_user_dict()
+        """
+        Consolidated serialization method for an order.
+        Provides different levels of detail based on the 'view' parameter.
+        """
+        data = {
+            'id': str(self.id),
+            'order_status': self.order_status.value,
+            'total_amount': str(self.total_amount),
+            'created_at': self.created_at.isoformat(),
+            'tracking_number': self.tracking_number,
+            'items': [item.to_dict() for item in self.items]
+        }
+        
+        # Add more detailed user information for the admin view
+        if view == 'admin' and self.user:
+            data['user'] = {
+                'id': str(self.user.id),
+                'email': self.user.email,
+                'full_name': self.user.full_name
+            }
+        elif self.guest_email:
+            data['guest_email'] = self.guest_email
+
+        return data
 
 class OrderItem(BaseModel, SoftDeleteMixin):
     __tablename__ = 'order_items'
-    id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = db.Column(UUID(as_uuid=True), db.ForeignKey('orders.id'), nullable=False)
+    product_id = db.Column(UUID(as_uuid=True), db.ForeignKey('products.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
-    price_at_purchase = db.Column(db.Float, nullable=False)
+    price_at_purchase = db.Column(db.Numeric(10, 2), nullable=False)
 
     order = db.relationship('Order', back_populates='items')
     product = db.relationship('Product')
 
-
     def to_dict(self):
         return {
-            'id': self.id,
-            'product_id': self.product_id,
+            'id': str(self.id),
+            'product_id': str(self.product.id),
             'product_name': self.product.name,
             'quantity': self.quantity,
-            'price_at_purchase': self.price_at_purchase
+            'price_at_purchase': str(self.price_at_purchase)
         }
-
 
 class Invoice(BaseModel, SoftDeleteMixin):
     __tablename__ = 'invoices'
-    id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False, unique=True)
+    
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = db.Column(UUID(as_uuid=True), db.ForeignKey('orders.id'), nullable=False, unique=True)
     invoice_number = db.Column(db.String(50), unique=True, nullable=False)
-    pdf_path = db.Column(db.String(255))
+    pdf_url = db.Column(db.String(255)) # Renamed from pdf_path for clarity
     
     order = db.relationship('Order', back_populates='invoice')
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'order_id': self.order_id,
+            'id': str(self.id),
+            'order_id': str(self.order_id),
             'invoice_number': self.invoice_number,
-            'created_at': self.created_at.isoformat(),
-            'is_deleted': self.is_deleted
+            'pdf_url': self.pdf_url,
+            'created_at': self.created_at.isoformat()
         }

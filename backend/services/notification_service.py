@@ -5,31 +5,60 @@ from backend.models.utility_models import StockNotification
 from .monitoring_service import MonitoringService
 from .exceptions import ServiceError, NotFoundException, ValidationException
 from flask import current_app
-from ..tasks import send_back_in_stock_email_task
-from backend.services.email_service import send_email
+import logging
+
+from ..tasks import (
+    send_back_in_stock_notifications_task,
+    send_order_confirmation_email_task,
+    send_order_status_update_task
+)
+
+logger = logging.getLogger(__name__)
 
 class NotificationService:
-
-    def notify_user_of_loyalty_points(user_id, points):
-        """Notifies a user that they have received loyalty points."""
-        user = User.query.get(user_id)
-        if not user:
-            current_app.logger.warning(f"Could not send loyalty notification to user {user_id}. User not found.")
+    def __init__(self, session=None):
+        self.session = session or db.session
+        self.logger = logger
+    def send_loyalty_points_notification(self, user_id, points_earned):
+        """
+        Queues a background task to notify a user they have earned loyalty points.
+        """
+        if not user_id or points_earned <= 0:
             return
 
-        try:
-            # This can be expanded to include other notification types (e.g., push notifications)
-            send_email(
-                to=user.email,
-                subject="Vous avez gagné des points de fidélité !",
-                template="emails/loyalty_points_notification.html", # Assuming this template exists
-                user=user,
-                points=points
-            )
-            current_app.logger.info(f"Sent loyalty points notification to {user.email}.")
-        except Exception as e:
-            current_app.logger.error(f"Failed to send loyalty notification to {user.email}: {e}")
+        self.logger.info(f"Queueing loyalty points notification for user {user_id}.")
+        # Delegate the email sending to a dedicated Celery task
+        from ..tasks import send_loyalty_points_email_task
+        send_loyalty_points_email_task.delay(user_id, points_earned)
 
+    def send_order_confirmation(self, order_id):
+        """Queues a task to send an order confirmation email."""
+        self.logger.info(f"Queueing order confirmation email for order ID: {order_id}")
+        send_order_confirmation_email_task.delay(order_id)
+
+    def send_order_status_update(self, order_id, new_status):
+        """Queues a task to send an order status update email."""
+        self.logger.info(f"Queueing status update email for order {order_id} to '{new_status}'")
+        send_order_status_update_task.delay(order_id, new_status)
+
+    def notify_users_of_restock(self, product_id):
+        """
+        Finds all subscribed users and queues a task to notify them of a restock.
+        """
+        subscribers = self.session.query(StockNotificationRequest).filter_by(
+            product_id=product_id, notified=False
+        ).all()
+
+        if not subscribers:
+            return
+
+        user_ids = [sub.user_id for sub in subscribers]
+        send_back_in_stock_notifications_task.delay(user_ids=user_ids, product_id=product_id)
+
+        for sub in subscribers:
+            sub.notified = True
+        self.session.commit()
+        self.logger.info(f"Queued back-in-stock notifications for {len(user_ids)} users for product {product_id}.")
     @staticmethod
     def create_stock_notification_request(user_id, product_id):
         """Creates a request for a user to be notified when a product is back in stock."""
@@ -77,7 +106,7 @@ class NotificationService:
             return
 
         user_ids = [req.user_id for req in requests]
-        send_back_in_stock_email_task.delay(user_ids, product_id)
+        send_back_in_stock_notifications_task.delay(user_ids, product_id)
 
         # Delete the requests after queuing the emails
         for req in requests:

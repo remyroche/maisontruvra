@@ -1,48 +1,19 @@
+# backend/services/exceptions.py
 
-class ServiceError(Exception):
-    """Base exception for service layer errors."""
+# ==============================================================================
+# Base Exception
+# ==============================================================================
+
+class ServiceException(Exception):
+    """
+    The base exception class for all custom service-layer errors.
+    All other service exceptions should inherit from this class.
+    """
     status_code = 500
     message = "An internal service error occurred."
 
-    def __init__(self, message=None, status_code=None):
-        super().__init__()
-        if message is not None:
-            self.message = message
-        if status_code is not None:
-            self.status_code = status_code
-
-class NotFoundException(ServiceError):
-    """Exception raised when a resource is not found."""
-    status_code = 404
-
-class ValidationException(ServiceError):
-    """Exception raised when validation fails."""
-    status_code = 400
-
-class UnauthorizedException(ServiceError):
-    """Exception raised when user is not authorized."""
-    status_code = 401
-# backend/services/exceptions.py
-"""
-This module defines custom exception classes for the service layer.
-Using specific exceptions allows for more granular error handling and clearer
-API responses.
-"""
-
-class ApiServiceError(Exception):
-    """Base class for service layer exceptions."""
-    status_code = 500
-    message = "An unexpected error occurred."
-
     def __init__(self, message=None, status_code=None, payload=None):
-        """
-        Initializes the ApiServiceError.
-        Args:
-            message (str, optional): The error message. Defaults to None.
-            status_code (int, optional): The HTTP status code. Defaults to None.
-            payload (dict, optional): Additional data to include in the error response. Defaults to None.
-        """
-        super().__init__(message)
+        super().__init__()
         if message is not None:
             self.message = message
         if status_code is not None:
@@ -50,98 +21,165 @@ class ApiServiceError(Exception):
         self.payload = payload
 
     def to_dict(self):
-        """Converts the exception to a dictionary for JSON serialization."""
+        """Converts the exception into a dictionary for API responses."""
         rv = dict(self.payload or ())
         rv['message'] = self.message
         return rv
 
-class InvalidAPIRequestError(ApiServiceError):
-    """Raised when an API request is invalid or missing required data."""
+# ==============================================================================
+# 5xx Server-Side and External Errors
+# ==============================================================================
+
+class ServiceError(ServiceException):
+    """
+    A generic error for failed service operations. (HTTP 500)
+    This is the catch-all for unexpected internal errors.
+    """
+    status_code = 500
+    message = "An unexpected error occurred in the service."
+
+
+class ExternalServiceException(ServiceException):
+    """
+    Raised when an external API or service fails (e.g., payment gateway, email provider). (HTTP 503)
+    """
+    status_code = 503
+    message = "An error occurred with an external service."
+
+# ==============================================================================
+# 4xx Client-Side Errors
+# ==============================================================================
+
+class ValidationException(ServiceException):
+    """
+    Raised when incoming data fails validation checks. (HTTP 400)
+    """
     status_code = 400
+    message = "One or more validation errors occurred."
 
-class ProductNotFoundError(ApiServiceError):
-    """Raised when a requested product or variant is not found."""
-    status_code = 404
+class UpdateException(ServiceException):
+    """
+    Raised when an update operation fails for reasons other than validation. (HTTP 400)
+    """
+    status_code = 400
+    message = "Failed to update the resource."
 
-class DuplicateProductError(ValidationException):
-    """Raised when trying to create a product that already exists."""
-    pass
-    
+
+class DeletionException(ServiceException):
+    """
+    Raised when a delete operation fails, often due to business rules. (HTTP 400)
+    """
+    status_code = 400
+    message = "Failed to delete the resource."
+
+class BusinessRuleException(ValidationException):
+    """
+    Raised when an action violates a specific business rule (e.g., applying an expired discount). (HTTP 400)
+    """
+    message = "The requested action violates a business rule."
+class ReferralException(BusinessRuleException):
+    """
+    Raised for referral-specific business rule violations. (HTTP 400)
+    """
+    message = "A referral error occurred."
+
+
+class InsufficientStockError(BusinessRuleException):
+    """
+    Raised when there is not enough stock to fulfill a request. (HTTP 400)
+    """
+    message = "Insufficient stock for the requested item."
+
 class InvalidAPIRequestError(ValidationException):
-    """Raised for general invalid API requests."""
-    pass
+    """Raised for malformed or invalid API requests."""
+    message = "The API request is invalid or missing required parameters."
 
-class AuthorizationException(ServiceError):
+class DataConflictException(ValidationException):
     """
-    Raised when a user is not authorized to perform an action or access a resource.
-    This should result in a 403 Forbidden response.
+    Raised when trying to create a resource that already exists (e.g., duplicate email). (HTTP 409)
     """
-    pass
-
-class DuplicateProductError(ApiServiceError):
-    """Raised when a product with the same name or SKU already exists."""
-    status_code = 409 # 409 Conflict
-
-class InsufficientStockError(ApiServiceError):
-    """Raised when there is not enough stock for an operation."""
-    status_code = 400
-
-class DuplicateEmailError(ApiServiceError):
-    """Raised when a user with the given email already exists during registration."""
-    status_code = 409 # 409 Conflict
-
-class AuthenticationError(ApiServiceError):
-    """Raised for authentication failures, such as invalid credentials."""
-    status_code = 401
-    
-class InvalidPasswordException(ValidationException):
-    """Exception for password policy failures."""
-    pass
-
-class InvalidUsageException(ServiceError):
-    """Exception for invalid usage of service methods."""
-    status_code = 400
-
-class ServiceException(Exception):
-    """Base exception for services."""
-    def __init__(self, message="An internal error occurred."):
-        self.message = message
-        super().__init__(self.message)
-
-class ResourceNotFound(ServiceException):
-    """Raised when a resource is not found."""
-    def __init__(self, resource_name="Resource", resource_id=None):
-        message = f"{resource_name} not found."
-        if resource_id:
-            message = f"{resource_name} with ID '{resource_id}' not found."
-        super().__init__(message)
-
-class AuthorizationError(ServiceException):
-    """Raised when an action is not authorized."""
-    def __init__(self, message="You are not authorized to perform this action."):
-        super().__init__(message)
-
-class ValidationError(ServiceException):
-    """Raised on data validation errors."""
-    pass
-
-class CheckoutValidationError(ServiceException):
-    """Raised when checkout validation fails (e.g., stock or price change)."""
-    def __init__(self, message="Checkout validation failed."):
-        self.message = message
-        super().__init__(self.message)
-
-class UserNotFoundException(ServiceError):
-    """Raised when a user is not found."""
+    status_code = 409
+    message = "A resource with the provided data already exists."
+class DuplicateProductError(DataConflictException):
+    """Raised when trying to create a product that already exists (e.g., duplicate SKU)."""
+    message = "A product with this SKU or name already exists."
+class NotFoundException(ServiceException):
+    """
+    Raised when a specific resource cannot be found in the database. (HTTP 404)
+    """
     status_code = 404
+    message = "The requested resource was not found."
 
-class UpdateException(ServiceError):
-    """Raised when an update operation fails."""
-    status_code = 400
-
-class DeletionException(ServiceError):
-    """Raised when a deletion operation fails."""
-    status_code = 400
-
+    def __init__(self, resource_name="Resource", resource_id=None, **kwargs):
+        message = f"The requested {resource_name.lower()} was not found."
+        if resource_id:
+            message = f"{resource_name.capitalize()} with ID '{resource_id}' was not found."
+        super().__init__(message=message, **kwargs)
 
 
+class ProductNotFoundError(NotFoundException):
+    """
+    Raised specifically when a product cannot be found. (HTTP 404)
+    """
+    def __init__(self, product_id=None):
+        super().__init__(resource_name="product", resource_id=product_id)
+
+
+class UserNotFoundException(NotFoundException):
+    """
+    Raised specifically when a user cannot be found. (HTTP 404)
+    """
+    def __init__(self, user_id=None):
+        super().__init__(resource_name="user", resource_id=user_id)
+
+class AuthenticationException(ServiceException):
+    """
+    Raised for authentication failures (e.g., invalid credentials, bad token). (HTTP 401)
+    """
+    status_code = 401
+    message = "Authentication failed."
+
+class AuthorizationException(ServiceException):
+    """
+    Raised when an authenticated user is not permitted to perform an action. (HTTP 403)
+    """
+    status_code = 403
+    message = "You are not authorized to perform this action."
+
+    # --- Authentication and Authorization Errors ---
+
+class UnauthorizedException(ServiceException):
+    """
+    Raised when authentication is required and has failed or has not yet been provided. (HTTP 401 Unauthorized)
+    This is the general exception for "login required".
+    """
+    status_code = 401
+    message = "Authentication is required to access this resource."
+
+class AuthenticationException(UnauthorizedException):
+    """
+    A more specific version of UnauthorizedException, often used for invalid credentials during a login attempt. (HTTP 401)
+    """
+    message = "Authentication failed due to invalid credentials."
+
+
+class InvalidPasswordException(AuthenticationException):
+    """
+    Raised specifically when a password does not match during an authentication attempt. (HTTP 401)
+    """
+    message = "The password provided is incorrect."
+
+
+class InvalidCredentialsError(AuthenticationException):
+    """
+    Raised specifically for a bad username/password combination. (HTTP 401)
+    """
+    message = "Invalid email or password."
+
+class AuthorizationException(ServiceException):
+    """
+    Raised when an authenticated user is not permitted to perform a specific action. (HTTP 403 Forbidden)
+    Use this when the user is logged in, but lacks the necessary permissions.
+    """
+    status_code = 403
+    message = "You are not authorized to perform this action."
