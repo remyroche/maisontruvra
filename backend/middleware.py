@@ -1,4 +1,3 @@
-import logging
 import os
 import time
 import uuid
@@ -16,7 +15,6 @@ from werkzeug.exceptions import default_exceptions
 
 from backend.loggers import app_logger as logger
 from backend.loggers import security_logger
-from backend.models.user_models import User
 from backend.services.rbac_service import rbac_service
 from backend.utils.input_sanitizer import InputSanitizer
 
@@ -151,9 +149,7 @@ def setup_middleware(app: Flask) -> None:
             latency = time.time() - g.start_time
             REQUEST_LATENCY.labels(request.method, request.path).observe(latency)
 
-        REQUEST_COUNT.labels(
-            request.method, request.path, response.status_code
-        ).inc()
+        REQUEST_COUNT.labels(request.method, request.path, response.status_code).inc()
 
         if hasattr(g, "request_id"):
             response.headers["X-Request-ID"] = g.request_id
