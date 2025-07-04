@@ -101,15 +101,21 @@ class SecurityAuditor:
             logging.error(f"An unexpected error occurred while running command '{' '.join(cmd_parts)}': {e}")
             return None, 1
 
-    def _find_files(self, directory, extensions):
-        """Helper to find all files with given extensions in a directory."""
+    def _find_files(self, directory, extensions, exclude_dirs=None):
+        """Helper to find all files with given extensions in a directory, excluding specified subdirectories."""
+        if exclude_dirs is None:
+            exclude_dirs = []
+        
         matches = []
-        for root, _, filenames in os.walk(directory):
+        for root, dirs, filenames in os.walk(directory):
+            # Modify dirs in-place to skip excluded directories
+            dirs[:] = [d for d in dirs if os.path.join(root, d) not in [os.path.join(self.project_root, ed) for ed in exclude_dirs]]
+            
             for filename in filenames:
                 if any(filename.endswith(ext) for ext in extensions):
                     matches.append(os.path.join(root, filename))
         return matches
-
+        
     def analyze_file(self, file_path):
         """Analyzes a single Python file for various security issues using AST."""
         try:
@@ -179,7 +185,7 @@ class SecurityAuditor:
         """Runs syntax checks and detects circular imports."""
         self._print_header("Backend Code Integrity (Syntax & Circular Imports)")
 
-        backend_files = self._find_files(self.backend_dir, ['.py'])
+        backend_files = self._find_files(self.backend_dir, ['.py'], exclude_dirs=['website/node_modules'])
         if not backend_files:
             logging.warning("No Python files found in backend to scan for integrity.")
             return
@@ -291,7 +297,7 @@ class SecurityAuditor:
         def _path_to_module(self, path):
             path = os.path.splitext(path)[0]
             return path.replace(os.path.sep, '.')
-
+            
         def visit_Import(self, node):
             for alias in node.names:
                 self.dependencies.add(alias.name)
@@ -309,7 +315,6 @@ class SecurityAuditor:
             if module_name:
                 self.dependencies.add(module_name)
             self.generic_visit(node)
-
     # --- End of merged code from backend_code_scanner.py ---
 
     def run_safety_scan(self):
@@ -677,7 +682,7 @@ class SecurityAuditor:
     def run_best_practices_audit(self):
         """Runs various best practice checks from the best_practices_audit.py script."""
         self._print_header("Best Practices Audit")
-        all_files = self._find_files(self.project_root, ['.py', '.js', '.vue', '.css', '.scss'])
+        all_files = self._find_files(self.project_root, ['.py', '.js', '.vue', '.css', '.scss'], exclude_dirs=['website/node_modules'])
         
         for file_path in all_files:
             try:
