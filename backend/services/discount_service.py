@@ -1,25 +1,18 @@
 from decimal import Decimal
-from sqlalchemy.orm import joinedload
 
-from ..models import db, User, Product, Order, OrderItem, Cart, Tier, Discount
-from ..models.enums import UserType
-from ..services.exceptions import NotFoundException, ServiceError
-from ..services.monitoring_service import MonitoringService
-from ..extensions import redis_client
+from ..models import db, User, Tier, Discount
+from ..services.exceptions import NotFoundException
 from datetime import datetime
 from ..services.exceptions import DiscountInvalidException
-from backend.utils.input_sanitizer import sanitize_plaintext
 
 from backend.database import db
-from backend.utils.input_sanitizer import InputSanitizer
-from flask import current_app
 
-from backend.models import Discount, Order
+from backend.models import Discount
 from sqlalchemy.exc import SQLAlchemyError
 from backend.extensions import db
-from datetime import datetime
 
 CACHE_TTL_SECONDS = 600
+
 
 class DiscountService:
     """
@@ -30,18 +23,19 @@ class DiscountService:
         self.logger = logger
 
     # --- Tier Management (Now for all users) ---
-    
+
     @staticmethod
-    def create_tier(name: str, discount_percentage: Decimal, minimum_spend: Decimal = None) -> Tier:
+    def create_tier(
+        name: str, discount_percentage: Decimal, minimum_spend: Decimal = None
+    ) -> Tier:
         new_tier = Tier(
             name=name,
             discount_percentage=Decimal(discount_percentage),
-            minimum_spend=Decimal(minimum_spend) if minimum_spend else None
+            minimum_spend=Decimal(minimum_spend) if minimum_spend else None,
         )
         db.session.add(new_tier)
         db.session.commit()
         return new_tier
-
 
     def create_discount(self, discount_data):
         """Creates a new discount."""
@@ -81,15 +75,22 @@ class DiscountService:
         """
         try:
             # Lock the row for update to prevent race conditions
-            discount = db.session.query(Discount).with_for_update().filter_by(id=discount_id).first()
-            
+            discount = (
+                db.session.query(Discount)
+                .with_for_update()
+                .filter_by(id=discount_id)
+                .first()
+            )
+
             if discount and discount.max_uses is not None:
                 discount.times_used = (discount.times_used or 0) + 1
                 if discount.times_used > discount.max_uses:
-                    self.logger.warning(f"Discount {discount_id} usage has now exceeded its max limit.")
+                    self.logger.warning(
+                        f"Discount {discount_id} usage has now exceeded its max limit."
+                    )
                 db.session.commit()
                 self.logger.info(f"Usage recorded for discount {discount_id}.")
-            
+
         except SQLAlchemyError as e:
             db.session.rollback()
             self.logger.error(f"Error recording usage for discount {discount_id}: {e}")
@@ -126,7 +127,6 @@ class DiscountService:
             self.logger.error(f"Error deleting discount {discount_id}: {e}")
             raise
 
-    
     @staticmethod
     def apply_discount_code(self, cart, code):
         """
@@ -144,18 +144,21 @@ class DiscountService:
             raise DiscountInvalidException("Discount code has expired.")
 
         # Check if the discount has reached its usage limit.
-        if discount.usage_limit is not None and discount.times_used >= discount.usage_limit:
+        if (
+            discount.usage_limit is not None
+            and discount.times_used >= discount.usage_limit
+        ):
             raise DiscountInvalidException("Discount code has reached its usage limit.")
 
         # TODO: Add logic to check for user-specific or product-specific discounts if needed.
 
         # Calculate the actual discount amount based on its type.
         discount_amount = 0
-        if discount.discount_type == 'percentage':
+        if discount.discount_type == "percentage":
             discount_amount = (cart.total_cost * discount.value) / 100
-        elif discount.discount_type == 'fixed_amount':
+        elif discount.discount_type == "fixed_amount":
             discount_amount = discount.value
-        
+
         # Ensure the discount doesn't make the cart total negative.
         discount_amount = min(discount_amount, cart.total_cost)
 
@@ -166,14 +169,14 @@ class DiscountService:
 
         # Increment the usage count for the discount.
         discount.times_used += 1
-        
+
         db.session.commit()
 
         return {
-            "success": True, 
+            "success": True,
             "message": "Discount applied successfully.",
             "new_total": cart.total_cost,
-            "discount_amount": cart.discount_amount
+            "discount_amount": cart.discount_amount,
         }
 
     @staticmethod
@@ -188,15 +191,14 @@ class DiscountService:
         if discount:
             cart.total_cost += cart.discount_amount
             if discount.times_used > 0:
-                 discount.times_used -= 1
-        
+                discount.times_used -= 1
+
         cart.discount_amount = 0.0
         cart.applied_discount_code = None
-        
+
         db.session.commit()
         return {"success": True, "message": "Discount removed."}
 
-    
     @staticmethod
     def get_tier(tier_id: int) -> Tier:
         return db.session.query(Tier).get(tier_id)
@@ -212,7 +214,7 @@ class DiscountService:
         tier = DiscountService.get_tier(tier_id)
         if not user or not tier:
             raise NotFoundException("User or Tier not found.")
-        
+
         user.tier = tier
         user.tier_override = True  # Manual assignment overrides automated logic
         db.session.commit()
@@ -221,16 +223,16 @@ class DiscountService:
     # --- Custom Discount Management (Now for all users) ---
 
     @staticmethod
-    def set_custom_discount_for_user(user_id: int, discount_percentage: Decimal, spend_limit: Decimal):
+    def set_custom_discount_for_user(
+        user_id: int, discount_percentage: Decimal, spend_limit: Decimal
+    ):
         """Sets a custom discount percentage and monthly spend limit for any user."""
         user = db.session.query(User).get(user_id)
         if not user:
             raise NotFoundException("User not found")
-        
+
         user.custom_discount_percentage = discount_percentage
         user.monthly_spend_limit = spend_limit
         user.tier_override = True  # Custom discount is a form of manual override
         db.session.commit()
         return user
-
-

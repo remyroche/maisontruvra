@@ -1,7 +1,7 @@
 # ruff: noqa: F401, E402
 from flask import Blueprint
 
-admin_api_blueprint = Blueprint('admin_api', __name__, url_prefix='/api/admin')
+admin_api_blueprint = Blueprint("admin_api", __name__, url_prefix="/api/admin")
 
 # Import routes to register them with the blueprint
 # The noqa comments disable warnings for unused imports and imports not at the top,
@@ -31,5 +31,5 @@ from . import (
     inventory_management_routes,
     invoice_routes,
     recommendation_routes,
-    recycling_bin_routes
+    recycling_bin_routes,
 )

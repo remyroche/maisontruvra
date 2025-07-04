@@ -1,6 +1,5 @@
 import re
 import os
-import logging
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
@@ -25,10 +24,9 @@ from backend.services.exceptions import (
     UnauthorizedException,
     NotFoundException,
     InvalidPasswordException,
-    InvalidCredentialsError
+    InvalidCredentialsError,
 )
 from backend.utils.encryption import hash_password, check_password
-from backend.utils.input_sanitizer import InputSanitizer
 
 # Instantiate the PasswordHasher. It's thread-safe and can be shared.
 ph = PasswordHasher()
@@ -40,30 +38,30 @@ class AuthService:
         self.email_service = EmailService(logger)
         self.user_service = UserService(logger)
         self.referral_service = ReferralService(logger)
-        self.serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-        self.sessions = {} # In-memory session store, replace with Redis/DB in production
+        self.serializer = URLSafeTimedSerializer(current_app.config["SECRET_KEY"])
+        self.sessions = {}  # In-memory session store, replace with Redis/DB in production
 
     def register_user(self, user_data):
         """
         Registers a new user, hashes their password, and sends a verification email.
         """
         try:
-            if db.session.query(User).filter_by(email=user_data['email']).first():
+            if db.session.query(User).filter_by(email=user_data["email"]).first():
                 raise ValueError("User with this email already exists.")
 
-            hashed_password = hash_password(user_data['password'])
+            hashed_password = hash_password(user_data["password"])
             user = User(
-                email=user_data['email'],
+                email=user_data["email"],
                 password_hash=hashed_password,
-                first_name=user_data.get('first_name'),
-                last_name=user_data.get('last_name'),
-                is_active=False  # User is inactive until email is verified
+                first_name=user_data.get("first_name"),
+                last_name=user_data.get("last_name"),
+                is_active=False,  # User is inactive until email is verified
             )
             db.session.add(user)
             db.session.commit()
 
             # Assign default role
-            default_role = db.session.query(Role).filter_by(name='user').first()
+            default_role = db.session.query(Role).filter_by(name="user").first()
             if default_role:
                 user_role = UserRole(user_id=user.id, role_id=default_role.id)
                 db.session.add(user_role)
@@ -71,13 +69,15 @@ class AuthService:
 
             # Send verification email
             token = self.generate_verification_token(user.email)
-            verification_url = url_for('auth.verify_email', token=token, _external=True)
+            verification_url = url_for("auth.verify_email", token=token, _external=True)
             subject = "Welcome to Maison Truvra! Please Verify Your Email"
             template = "welcome_and_verify"
             context = {"user": user, "verification_url": verification_url}
             self.email_service.send_email(user.email, subject, template, context)
 
-            self.logger.info(f"User {user.email} registered successfully. Verification email sent.")
+            self.logger.info(
+                f"User {user.email} registered successfully. Verification email sent."
+            )
             return user
         except (SQLAlchemyError, ValueError) as e:
             db.session.rollback()
@@ -91,8 +91,12 @@ class AuthService:
         user = self.user_service.get_user_by_email(email)
         if user and check_password(password, user.password_hash):
             if not user.is_active:
-                self.logger.warning(f"Authentication attempt for inactive user: {email}")
-                raise UnauthorizedException("User account is not active. Please verify your email.")
+                self.logger.warning(
+                    f"Authentication attempt for inactive user: {email}"
+                )
+                raise UnauthorizedException(
+                    "User account is not active. Please verify your email."
+                )
             self.logger.info(f"User {email} authenticated successfully.")
             return user
         self.logger.warning(f"Failed authentication attempt for email: {email}")
@@ -100,15 +104,17 @@ class AuthService:
 
     def generate_verification_token(self, email):
         """Generates a time-sensitive verification token."""
-        return self.serializer.dumps(email, salt=current_app.config['SECURITY_PASSWORD_SALT'])
+        return self.serializer.dumps(
+            email, salt=current_app.config["SECURITY_PASSWORD_SALT"]
+        )
 
     def verify_email(self, token, max_age=3600):
         """Verifies an email using the provided token."""
         try:
             email = self.serializer.loads(
                 token,
-                salt=current_app.config['SECURITY_PASSWORD_SALT'],
-                max_age=max_age
+                salt=current_app.config["SECURITY_PASSWORD_SALT"],
+                max_age=max_age,
             )
             user = self.user_service.get_user_by_email(email)
             if user:
@@ -138,7 +144,7 @@ class AuthService:
         user = self.user_service.get_user_by_email(email)
         if user:
             token = self.generate_verification_token(email)
-            reset_url = url_for('auth.reset_password', token=token, _external=True)
+            reset_url = url_for("auth.reset_password", token=token, _external=True)
             subject = "Password Reset Request"
             template = "password_reset_request"
             context = {"user": user, "reset_url": reset_url}
@@ -148,7 +154,9 @@ class AuthService:
     def reset_password(self, token, new_password):
         """Resets a user's password using a token."""
         try:
-            email = self.serializer.loads(token, salt=current_app.config['SECURITY_PASSWORD_SALT'], max_age=3600)
+            email = self.serializer.loads(
+                token, salt=current_app.config["SECURITY_PASSWORD_SALT"], max_age=3600
+            )
             user = self.user_service.get_user_by_email(email)
             if user:
                 user.password_hash = hash_password(new_password)
@@ -161,17 +169,24 @@ class AuthService:
             return False
 
     def get_reset_token(self, user, expires_sec=1800):
-        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-        return s.dumps(user.email, salt=current_app.config.get('SECURITY_PASSWORD_SALT', 'password-salt'))
+        s = URLSafeTimedSerializer(current_app.config["SECRET_KEY"])
+        return s.dumps(
+            user.email,
+            salt=current_app.config.get("SECURITY_PASSWORD_SALT", "password-salt"),
+        )
 
     def verify_reset_token(self, token):
-        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        s = URLSafeTimedSerializer(current_app.config["SECRET_KEY"])
         try:
-            email = s.loads(token, salt=current_app.config.get('SECURITY_PASSWORD_SALT', 'password-salt'), max_age=1800)
+            email = s.loads(
+                token,
+                salt=current_app.config.get("SECURITY_PASSWORD_SALT", "password-salt"),
+                max_age=1800,
+            )
         except (SignatureExpired, BadTimeSignature):
             return None
         return User.query.filter_by(email=email).first()
-    
+
     @staticmethod
     def verify_password(hashed_password: str, password: str) -> bool:
         """
@@ -192,7 +207,7 @@ class AuthService:
             MonitoringService.log_error(
                 f"Password verification failed with an unexpected error: {e}",
                 "AuthService",
-                level='ERROR'
+                level="ERROR",
             )
             return False
 
@@ -201,25 +216,23 @@ class AuthService:
         try:
             if session_token not in self.sessions:
                 return None
-            
+
             session_data = self.sessions[session_token]
-            
+
             # Check if session is expired
             if datetime.now() > session_data["expires_at"]:
                 del self.sessions[session_token]
                 MonitoringService.log_security_event(
                     f"Expired session removed for user: {session_data.get('email', 'unknown')}",
-                    "AuthService"
+                    "AuthService",
                 )
                 return None
-            
+
             return session_data
-            
+
         except Exception as e:
             MonitoringService.log_security_event(
-                f"Session validation error: {str(e)}",
-                "AuthService",
-                level='ERROR'
+                f"Session validation error: {str(e)}", "AuthService", level="ERROR"
             )
             return None
 
@@ -229,15 +242,15 @@ class AuthService:
             session_data = self.validate_session(session_token)
             if not session_data:
                 return {"success": False, "message": "Invalid session"}
-            
+
             user = self.user_service.get_user_by_id(session_data["user_id"])
             if not user:
                 MonitoringService.log_error(
                     f"User not found for session: {session_data['user_id']}",
-                    "AuthService"
+                    "AuthService",
                 )
                 return {"success": False, "message": "User not found"}
-            
+
             return {
                 "success": True,
                 "user": {
@@ -245,18 +258,16 @@ class AuthService:
                     "username": user.username,
                     "email": user.email,
                     "created_at": user.created_at,
-                    "is_active": user.is_active
-                }
+                    "is_active": user.is_active,
+                },
             }
-            
+
         except Exception as e:
             MonitoringService.log_error(
-                f"Get profile error: {str(e)}",
-                "AuthService",
-                exc_info=True
+                f"Get profile error: {str(e)}", "AuthService", exc_info=True
             )
             return {"success": False, "message": "Failed to get profile"}
-            
+
     @staticmethod
     def _validate_password(password):
         """
@@ -264,32 +275,44 @@ class AuthService:
         Raises InvalidPasswordException if the policy is not met.
         """
         errors = []
-        if len(password) < current_app.config.get('PASSWORD_MIN_LENGTH', 8):
-            errors.append(f"Password must be at least {current_app.config['PASSWORD_MIN_LENGTH']} characters long.")
-        if current_app.config.get('PASSWORD_REQUIRE_LOWERCASE') and not re.search(r'[a-z]', password):
+        if len(password) < current_app.config.get("PASSWORD_MIN_LENGTH", 8):
+            errors.append(
+                f"Password must be at least {current_app.config['PASSWORD_MIN_LENGTH']} characters long."
+            )
+        if current_app.config.get("PASSWORD_REQUIRE_LOWERCASE") and not re.search(
+            r"[a-z]", password
+        ):
             errors.append("Password must contain at least one lowercase letter.")
-        if current_app.config.get('PASSWORD_REQUIRE_UPPERCASE') and not re.search(r'[A-Z]', password):
+        if current_app.config.get("PASSWORD_REQUIRE_UPPERCASE") and not re.search(
+            r"[A-Z]", password
+        ):
             errors.append("Password must contain at least one uppercase letter.")
-        if current_app.config.get('PASSWORD_REQUIRE_DIGIT') and not re.search(r'\d', password):
+        if current_app.config.get("PASSWORD_REQUIRE_DIGIT") and not re.search(
+            r"\d", password
+        ):
             errors.append("Password must contain at least one digit.")
-        if current_app.config.get('PASSWORD_REQUIRE_SPECIAL') and not re.search(r'[\W_]', password):
+        if current_app.config.get("PASSWORD_REQUIRE_SPECIAL") and not re.search(
+            r"[\W_]", password
+        ):
             errors.append("Password must contain at least one special character.")
-    
+
         if errors:
             # We join errors into a single string for the exception message.
-            raise InvalidPasswordException("Password validation failed: " + " ".join(errors))
-    
+            raise InvalidPasswordException(
+                "Password validation failed: " + " ".join(errors)
+            )
+
     @staticmethod
-    def get_token_serializer(salt='default'):
+    def get_token_serializer(salt="default"):
         """Creates a token serializer with a specific salt."""
-        return URLSafeTimedSerializer(current_app.config['SECRET_KEY'], salt=salt)
+        return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=salt)
 
     @staticmethod
     def request_password_reset(email):
         user = User.query.filter_by(email=email).first()
         if user:
             # Standard token for B2C users
-            ts = AuthService.get_token_serializer(salt='password-reset-salt')
+            ts = AuthService.get_token_serializer(salt="password-reset-salt")
             token = ts.dumps(user.email)
             reset_url = f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/reset-password/{token}"
             EmailService.send_password_reset_email(user, reset_url)
@@ -303,12 +326,12 @@ class AuthService:
         # CRITICAL: Verify the user is an administrator before proceeding
         if user and user.is_admin:
             # Use a DIFFERENT salt for admin resets for enhanced security
-            ts = AuthService.get_token_serializer(salt='admin-password-reset-salt')
+            ts = AuthService.get_token_serializer(salt="admin-password-reset-salt")
             token = ts.dumps(user.email)
-            
+
             # This URL should point to the admin password reset page, not the B2C one.
             reset_url = f"{os.environ.get('ADMIN_URL', 'http://localhost:8080')}/admin_reset_password.html?token={token}"
-            
+
             # A dedicated email template should be used
             EmailService.send_admin_password_reset_email(user, reset_url)
         # Note: We don't confirm if the email exists to prevent user enumeration.
@@ -321,12 +344,12 @@ class AuthService:
         user = User.query.filter_by(email=email).first()
         # CRITICAL: Verify the user is a B2B user
         if user and user.is_b2b:
-            ts = AuthService.get_token_serializer(salt='b2b-password-reset-salt')
+            ts = AuthService.get_token_serializer(salt="b2b-password-reset-salt")
             token = ts.dumps(user.email)
-            
+
             # This URL points to the Vue B2B portal reset page
             reset_url = f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/pro/reset-password/{token}"
-            
+
             # You might want a specific B2B email template here
             EmailService.send_password_reset_email(user, reset_url)
 
@@ -340,20 +363,19 @@ class AuthService:
             user.password_hash = ph.hash(new_password)
             db.session.commit()
             MonitoringService.log_security_event(
-                f"Password reset successfully for user {user.email}",
-                "AuthService"
+                f"Password reset successfully for user {user.email}", "AuthService"
             )
         except Exception as e:
             db.session.rollback()
             MonitoringService.log_security_event(
                 f"Failed to reset password for user {user.email}: {e}",
                 "AuthService",
-                level='ERROR'
+                level="ERROR",
             )
             raise ServiceError("Could not update password.")
-            
+
     @staticmethod
-    def verify_password_reset_token(token, salt='password-reset-salt'):
+    def verify_password_reset_token(token, salt="password-reset-salt"):
         ts = AuthService.get_token_serializer(salt=salt)
         try:
             email = ts.loads(token, max_age=3600)  # Token is valid for 1 hour
@@ -361,7 +383,6 @@ class AuthService:
         except (SignatureExpired, BadTimeSignature):
             return None
 
-    
     @staticmethod
     def find_user_by_email(email):
         """Finds a user by their email address."""
@@ -373,7 +394,7 @@ class AuthService:
     def send_verification_email(self, email):
         """Generates a token and sends a verification email."""
         serializer = AuthService.get_token_serializer()
-        token = serializer.dumps(email, salt='email-confirm-salt')
+        token = serializer.dumps(email, salt="email-confirm-salt")
         EmailService.send_verification_email.delay(email, token)
 
     @staticmethod
@@ -381,7 +402,7 @@ class AuthService:
         """Verifies the email confirmation token."""
         serializer = AuthService.get_token_serializer()
         try:
-            email = serializer.loads(token, salt='email-confirm-salt', max_age=max_age)
+            email = serializer.loads(token, salt="email-confirm-salt", max_age=max_age)
             user = User.query.filter_by(email=email).first()
             if user and not user.is_email_verified:
                 user.is_email_verified = True
@@ -398,18 +419,16 @@ class AuthService:
                 MonitoringService.log_security_event(
                     f"Login attempt with non-existent email: {email}",
                     "AuthService",
-                    level='WARNING'
+                    level="WARNING",
                 )
                 return {"success": False, "message": "Invalid credentials"}
-            
+
             if not AuthService.verify_password(user.password_hash, password):
                 MonitoringService.log_security_event(
-                    f"Failed login attempt for: {email}",
-                    "AuthService",
-                    level='WARNING'
+                    f"Failed login attempt for: {email}", "AuthService", level="WARNING"
                 )
                 return {"success": False, "message": "Invalid credentials"}
-            
+
             # --- Automatic Re-hashing for Security Upgrades ---
             if ph.check_needs_rehash(user.password_hash):
                 try:
@@ -422,17 +441,18 @@ class AuthService:
                     db.session.rollback()
                     MonitoringService.log_error(
                         f"Failed to rehash password for user {user.email}: {e}",
-                        "AuthService", level='WARNING'
+                        "AuthService",
+                        level="WARNING",
                     )
 
             if not user.is_active:
                 MonitoringService.log_security_event(
                     f"Login attempt for inactive user: {email}",
                     "AuthService",
-                    level='WARNING'
+                    level="WARNING",
                 )
                 return {"success": False, "message": "Account is inactive"}
-            
+
             # Create session
             session_token = secrets.token_urlsafe(32)
             session_data = {
@@ -440,34 +460,27 @@ class AuthService:
                 "username": user.username,
                 "email": user.email,
                 "created_at": datetime.now(),
-                "expires_at": datetime.now() + timedelta(hours=24)
+                "expires_at": datetime.now() + timedelta(hours=24),
             }
-            
+
             self.sessions[session_token] = session_data
             MonitoringService.log_security_event(
-                f"User logged in: {email}",
-                "AuthService"
+                f"User logged in: {email}", "AuthService"
             )
-            
+
             return {
                 "success": True,
                 "message": "Login successful",
                 "session_token": session_token,
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email
-                }
+                "user": {"id": user.id, "username": user.username, "email": user.email},
             }
-            
+
         except Exception as e:
             MonitoringService.log_security_event(
-                f"Login error: {str(e)}",
-                "AuthService",
-                level='ERROR'
+                f"Login error: {str(e)}", "AuthService", level="ERROR"
             )
             return {"success": False, "message": "Login failed"}
-    
+
     def logout_user(self, session_token: str) -> Dict[str, Any]:
         """Logout user and invalidate session"""
         try:
@@ -475,110 +488,103 @@ class AuthService:
                 user_email = self.sessions[session_token].get("email", "unknown")
                 del self.sessions[session_token]
                 MonitoringService.log_security_event(
-                    f"User logged out: {user_email}",
-                    "AuthService"
+                    f"User logged out: {user_email}", "AuthService"
                 )
                 return {"success": True, "message": "Logout successful"}
             else:
                 MonitoringService.log_security_event(
                     "Logout attempt with invalid session token",
                     "AuthService",
-                    level='WARNING'
+                    level="WARNING",
                 )
                 return {"success": False, "message": "Invalid session"}
-                
+
         except Exception as e:
             MonitoringService.log_security_event(
-                f"Logout error: {str(e)}",
-                "AuthService",
-                level='ERROR'
+                f"Logout error: {str(e)}", "AuthService", level="ERROR"
             )
             return {"success": False, "message": "Logout failed"}
-    
+
     @staticmethod
     def verify_and_complete_login(mfa_token):
         """
         Verifies the MFA token for a user with a pending db.session.
         If successful, it "upgrades" the session to be fully authenticated.
         """
-        user_id = session.get('mfa_pending_user_id')
+        user_id = session.get("mfa_pending_user_id")
         if not user_id:
             raise ServiceError("No MFA login attempt is pending.", 401)
 
         user = User.query.get(user_id)
         if not user:
             raise ServiceError("User not found.", 401)
-        
+
         # Verify the token against the user's secret
         if MfaService.verify_token(user.two_factor_secret, mfa_token):
             login_user(user)
-            session['mfa_authenticated'] = True
-            session.pop('mfa_pending_user_id', None) # Clean up the pending key
+            session["mfa_authenticated"] = True
+            session.pop("mfa_pending_user_id", None)  # Clean up the pending key
             MonitoringService.log_security_event(
-                f"MFA successful for user {user.email}",
-                "AuthService"
+                f"MFA successful for user {user.email}", "AuthService"
             )
             return user
 
         # If verification fails
         raise ServiceError("Invalid MFA token.", 401)
-    
-        
+
     @staticmethod
     def verify_mfa_login(user_id, mfa_token):
         """Verify MFA token and complete login."""
         user = User.query.get(user_id)
         if not user:
             raise NotFoundException("User not found")
-            
+
         if not user.two_factor_secret:
             raise ValidationException("MFA not enabled for this user")
-            
+
         if not MfaService.verify_token(user.two_factor_secret, mfa_token):
             MonitoringService.log_security_event(
                 f"Failed MFA verification for user ID: {user_id}",
                 "AuthService",
-                level='WARNING'
+                level="WARNING",
             )
             raise UnauthorizedException("Invalid MFA token")
-            
+
         MonitoringService.log_security_event(
-            f"MFA verification successful for user ID: {user_id}",
-            "AuthService"
+            f"MFA verification successful for user ID: {user_id}", "AuthService"
         )
         return AuthService.generate_tokens(user.id)
-        
-        
+
     @staticmethod
     def confirm_password_reset(token, new_password):
         """Confirm password reset with token."""
         if len(new_password) < 8:
             raise ValidationException("Password must be at least 8 characters")
-            
+
         # Verify token and update password
         # Implementation would go here
         return True
-    
+
     @staticmethod
     def generate_tokens(user_id):
         """Generate JWT access and refresh tokens for a user"""
         try:
             from flask_jwt_extended import create_access_token, create_refresh_token
-            
+
             # Create tokens
             access_token = create_access_token(identity=user_id)
             refresh_token = create_refresh_token(identity=user_id)
-            
+
             return {
                 "access_token": access_token,
                 "refresh_token": refresh_token,
-                "token_type": "Bearer"
+                "token_type": "Bearer",
             }
-            
+
         except Exception as e:
             MonitoringService.log_error(
                 f"Error generating tokens for user {user_id}: {str(e)}",
                 "AuthService",
-                exc_info=True
+                exc_info=True,
             )
             raise ServiceError("Failed to generate authentication tokens")

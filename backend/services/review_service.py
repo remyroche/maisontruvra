@@ -1,5 +1,5 @@
 from backend.database import db
-from ..models import Review, Product, User, Order, OrderItem
+from ..models import Review, Product, User
 from ..services.monitoring_service import MonitoringService
 from ..services.audit_log_service import AuditLogService
 from ..services.exceptions import NotFoundException, ValidationException, ServiceError
@@ -23,17 +23,18 @@ class ReviewService:
             if not product:
                 raise NotFoundException("Product not found.")
             # Only fetch approved reviews for public display
-            reviews = Review.query.filter_by(
-                product_id=safe_product_id, 
-                status='approved'
-            ).order_by(Review.created_at.desc()).all()
+            reviews = (
+                Review.query.filter_by(product_id=safe_product_id, status="approved")
+                .order_by(Review.created_at.desc())
+                .all()
+            )
             # Return the list of Review objects for the route to serialize
             return reviews
         except Exception as e:
             MonitoringService.log_error(
                 f"Error getting reviews for product {product_id}: {str(e)}",
                 "ReviewService",
-                exc_info=True
+                exc_info=True,
             )
             raise ServiceError(f"Failed to retrieve reviews: {str(e)}")
 
@@ -71,7 +72,9 @@ class ReviewService:
             # ------------------------------------------------------------------------------------
 
             # Check if the user has already reviewed this product
-            existing_review = Review.query.filter_by(user_id=safe_user_id, product_id=safe_product_id).first()
+            existing_review = Review.query.filter_by(
+                user_id=safe_user_id, product_id=safe_product_id
+            ).first()
             if existing_review:
                 raise ValidationException("You have already reviewed this product.")
 
@@ -79,7 +82,7 @@ class ReviewService:
                 user_id=safe_user_id,
                 product_id=safe_product_id,
                 rating=safe_rating,
-                comment=safe_comment
+                comment=safe_comment,
             )
 
             db.session.add(new_review)
@@ -88,22 +91,24 @@ class ReviewService:
             AuditLogService.log_action(
                 user_id=safe_user_id,
                 action="SUBMIT_REVIEW",
-                details=f"User submitted a {safe_rating}-star review for product {safe_product_id}"
+                details=f"User submitted a {safe_rating}-star review for product {safe_product_id}",
             )
             MonitoringService.log_info(
                 f"User {safe_user_id} submitted review for product {safe_product_id}",
-                "ReviewService"
+                "ReviewService",
             )
-            
+
             return new_review.to_dict()
 
         except Exception as e:
             db.session.rollback()
-            MonitoringService.log_error(f"Error submitting review for user {user_id}, product {product_id}: {str(e)}", "ReviewService", exc_info=True)
+            MonitoringService.log_error(
+                f"Error submitting review for user {user_id}, product {product_id}: {str(e)}",
+                "ReviewService",
+                exc_info=True,
+            )
             raise ServiceError(f"Failed to submit review: {str(e)}")
 
-
-    
     @staticmethod
     def get_all_reviews(status_filter=None, include_deleted=False):
         query = Review.query
@@ -116,10 +121,10 @@ class ReviewService:
     @staticmethod
     def get_all_reviews_paginated(page, per_page, filters):
         query = Review.query
-        if filters.get('include_deleted'):
+        if filters.get("include_deleted"):
             query = query.with_deleted()
-        if filters.get('status'):
-            query = query.filter(Review.status == filters['status'])
+        if filters.get("status"):
+            query = query.filter(Review.status == filters["status"])
         # Add other filters as needed
         return query.paginate(page=page, per_page=per_page, error_out=False)
 
@@ -128,7 +133,7 @@ class ReviewService:
         review = Review.query.get(review_id)
         if not review:
             raise NotFoundException("Review not found")
-        review.status = 'approved'
+        review.status = "approved"
         db.session.commit()
         return review
 

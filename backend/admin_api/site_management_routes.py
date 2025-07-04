@@ -1,7 +1,8 @@
 """
 This module defines the API endpoints for managing global site settings.
 """
-from flask import Blueprint, request, g, jsonify
+
+from flask import Blueprint, request, jsonify
 from ..schemas import SiteSettingsSchema
 from ..utils.decorators import roles_required
 from ..services.site_settings_service import SiteSettingsService
@@ -9,10 +10,11 @@ from ..extensions import db
 from marshmallow import ValidationError
 
 # --- Blueprint Setup ---
-bp = Blueprint('site_management', __name__, url_prefix='/api/admin/site-settings')
+bp = Blueprint("site_management", __name__, url_prefix="/api/admin/site-settings")
 
-@bp.route('/', methods=['GET'])
-@roles_required('Admin', 'Manager')
+
+@bp.route("/", methods=["GET"])
+@roles_required("Admin", "Manager")
 def get_site_settings():
     """
     Retrieves all site settings from the database.
@@ -21,8 +23,9 @@ def get_site_settings():
     settings = SiteSettingsService.get_all_settings_cached()
     return jsonify(settings)
 
-@bp.route('/', methods=['PUT'])
-@roles_required('Admin', 'Manager')
+
+@bp.route("/", methods=["PUT"])
+@roles_required("Admin", "Manager")
 def update_site_settings():
     """
     Updates multiple site settings in a single transaction.
@@ -33,16 +36,16 @@ def update_site_settings():
     json_data = request.get_json()
     if not json_data:
         return jsonify({"error": "Invalid JSON data provided"}), 400
-        
+
     try:
         # Validate the incoming data against our schema
         validated_data = SiteSettingsSchema().load(json_data)
-        
+
         # The service layer handles the update logic and cache invalidation
-        SiteSettingsService.update_settings(validated_data['settings'])
-        
+        SiteSettingsService.update_settings(validated_data["settings"])
+
         # The service commits the session, so we don't need to do it here.
-        
+
         return jsonify({"message": "Site settings updated successfully."}), 200
 
     except ValidationError as err:

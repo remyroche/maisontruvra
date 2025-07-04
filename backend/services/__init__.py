@@ -1,4 +1,3 @@
-
 # Service Provider for Dependency Injection
 from backend.services.address_service import AddressService
 from backend.services.admin_dashboard_service import AdminDashboardService
@@ -38,7 +37,7 @@ from backend.services.wishlist_service import WishlistService
 
 class ServiceProvider:
     """Central service provider for dependency injection."""
-    
+
     def __init__(self, db_session, config, mail, celery_app):
         self.db_session = db_session
         self.config = config
@@ -53,8 +52,17 @@ class ServiceProvider:
         self.inventory = InventoryService(self.db_session, self.notification)
         self.product = ProductService(self.db_session, self.inventory)
         self.cart = CartService(self.db_session, self.product, self.inventory)
-        self.order = OrderService(self.db_session, self.cart, self.inventory, self.notification)
-        self.checkout = CheckoutService(self.db_session, self.order, self.cart, self.inventory, self.notification, self.user)
+        self.order = OrderService(
+            self.db_session, self.cart, self.inventory, self.notification
+        )
+        self.checkout = CheckoutService(
+            self.db_session,
+            self.order,
+            self.cart,
+            self.inventory,
+            self.notification,
+            self.user,
+        )
         self.b2b = B2BService(self.db_session, self.user, self.notification)
 
         # ... initialize other services here, injecting dependencies as needed
@@ -87,5 +95,5 @@ class ServiceProvider:
 def init_app(app):
     """Initializes the services with the Flask app context."""
     from backend.extensions import db, mail, celery
-    app.service_provider = ServiceProvider(db.session, app.config, mail, celery)
 
+    app.service_provider = ServiceProvider(db.session, app.config, mail, celery)

@@ -1,12 +1,13 @@
 from .base import BaseModel
 from backend.extensions import db
-from datetime import datetime
+
 
 class Asset(BaseModel):
     """
     Represents an uploaded file (e.g., an image) in the media library.
     """
-    __tablename__ = 'assets'
+
+    __tablename__ = "assets"
     filename = db.Column(db.String(255), nullable=False, unique=True)
     # The public URL to access the file
     url = db.Column(db.String(512), nullable=False)
@@ -17,14 +18,13 @@ class Asset(BaseModel):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'filename': self.filename,
-            'url': self.url,
-            'mime_type': self.mime_type,
-            'usage_tag': self.usage_tag,
-            'created_at': self.created_at.isoformat()
+            "id": self.id,
+            "filename": self.filename,
+            "url": self.url,
+            "mime_type": self.mime_type,
+            "usage_tag": self.usage_tag,
+            "created_at": self.created_at.isoformat(),
         }
 
     def __repr__(self):
-        return f'<Asset {self.filename}>'
-
+        return f"<Asset {self.filename}>"

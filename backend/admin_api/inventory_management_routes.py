@@ -3,16 +3,19 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from ..services.inventory_service import InventoryService
-from ..utils.decorators import roles_required 
+from ..utils.decorators import roles_required
 from ..services.exceptions import NotFoundException, ValidationException, ServiceError
 
 # Assuming the blueprint is named this way. If it's different, I'll adapt.
-inventory_admin_bp = Blueprint('inventory_admin_bp', __name__, url_prefix='/api/admin/inventory')
+inventory_admin_bp = Blueprint(
+    "inventory_admin_bp", __name__, url_prefix="/api/admin/inventory"
+)
+
 
 # --- NEW ROUTE FOR CREATING AN ITEM ---
-@inventory_admin_bp.route('/items', methods=['POST'])
+@inventory_admin_bp.route("/items", methods=["POST"])
 @jwt_required()
-@roles_required('Admin', 'Manager', 'Farmer')
+@roles_required("Admin", "Manager", "Farmer")
 def create_inventory_item():
     """
     Admin endpoint to create a new, unique inventory Item from a parent Product.
@@ -35,12 +38,15 @@ def create_inventory_item():
         return jsonify({"error": str(e)}), 500
     except Exception as e:
         # Log unexpected errors for debugging
-        current_app.logger.error(f"Unexpected error creating inventory item: {e}", exc_info=True)
+        current_app.logger.error(
+            f"Unexpected error creating inventory item: {e}", exc_info=True
+        )
         return jsonify({"error": "An unexpected internal error occurred."}), 500
 
-@inventory_admin_bp.route('/items/batch', methods=['POST'])
+
+@inventory_admin_bp.route("/items/batch", methods=["POST"])
 @jwt_required()
-@roles_required('Admin', 'Manager', 'Farmer')
+@roles_required("Admin", "Manager", "Farmer")
 def create_inventory_item_batch():
     """
     Admin endpoint to create a batch of unique inventory Items from a single parent Product.
@@ -57,13 +63,16 @@ def create_inventory_item_batch():
     except ServiceError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:
-        current_app.logger.error(f"Unexpected error creating item batch: {e}", exc_info=True)
+        current_app.logger.error(
+            f"Unexpected error creating item batch: {e}", exc_info=True
+        )
         return jsonify({"error": "An unexpected internal error occurred."}), 500
-        
+
+
 # --- NEW ROUTE FOR LISTING ALL ITEMS ---
-@inventory_admin_bp.route('/items', methods=['GET'])
+@inventory_admin_bp.route("/items", methods=["GET"])
 @jwt_required()
-@roles_required('Admin', 'Manager', 'Farmer', 'Support')
+@roles_required("Admin", "Manager", "Farmer", "Support")
 def get_all_inventory_items():
     """
     Admin endpoint to retrieve a list of all unique inventory items.

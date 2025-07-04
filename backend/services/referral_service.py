@@ -2,8 +2,6 @@ import secrets
 import string
 from datetime import datetime
 
-from flask import current_app
-from flask_jwt_extended import get_jwt_identity
 
 from backend.database import db
 from backend.models.user_models import User
@@ -201,7 +199,9 @@ class ReferralService:
             result = []
             for referral in referrals:
                 referred_user = (
-                    User.query.get(referral.referred_id) if referral.referred_id else None
+                    User.query.get(referral.referred_id)
+                    if referral.referred_id
+                    else None
                 )
                 result.append(
                     {
@@ -259,9 +259,7 @@ class ReferralService:
 
             # Get user's referral code
             referral_record = Referral.query.filter_by(referrer_id=user_id).first()
-            referral_code = (
-                referral_record.referral_code if referral_record else None
-            )
+            referral_code = referral_record.referral_code if referral_record else None
 
             return {
                 "referral_code": referral_code,

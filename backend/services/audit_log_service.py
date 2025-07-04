@@ -2,9 +2,9 @@ import uuid
 from backend.database import db
 from backend.models.admin_audit_models import AdminAuditLog
 from backend.models.user_models import User
-from flask import current_app
 from backend.services.monitoring_service import MonitoringService
 from datetime import datetime
+
 
 class AuditLogService:
     """
@@ -26,19 +26,18 @@ class AuditLogService:
                 staff_log_id=unique_log_id,
                 admin_user_id=admin_user_id,
                 action=action,
-                details=details
+                details=details,
             )
             db.session.add(log_entry)
             db.session.commit()
             MonitoringService.log_info(
                 f"Audit log created: Admin {admin_user_id} -> {action} (Log ID: {unique_log_id})",
-                "AuditLogService"
+                "AuditLogService",
             )
         except Exception as e:
             db.session.rollback()
             MonitoringService.log_error(
-                f"Failed to create audit log: {e}",
-                "AuditLogService"
+                f"Failed to create audit log: {e}", "AuditLogService"
             )
 
     @staticmethod
@@ -47,18 +46,24 @@ class AuditLogService:
         Retrieves paginated audit log entries, optionally filtering by date.
         """
         try:
-            query = AdminAuditLog.query.join(User, AdminAuditLog.admin_user_id == User.id)\
-                                     .options(db.joinedload(AdminAuditLog.admin_user))\
-                                     .order_by(AdminAuditLog.timestamp.desc())
+            query = (
+                AdminAuditLog.query.join(User, AdminAuditLog.admin_user_id == User.id)
+                .options(db.joinedload(AdminAuditLog.admin_user))
+                .order_by(AdminAuditLog.timestamp.desc())
+            )
 
             if date_filter:
                 try:
-                    filter_date = datetime.strptime(date_filter, '%Y-%m-%d').date()
-                    query = query.filter(db.func.date(AdminAuditLog.timestamp) == filter_date)
+                    filter_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
+                    query = query.filter(
+                        db.func.date(AdminAuditLog.timestamp) == filter_date
+                    )
                 except ValueError:
                     pass
 
-            paginated_logs = query.paginate(page=page, per_page=per_page, error_out=False)
+            paginated_logs = query.paginate(
+                page=page, per_page=per_page, error_out=False
+            )
 
             return {
                 "logs": [log.to_dict() for log in paginated_logs.items],
@@ -70,7 +75,6 @@ class AuditLogService:
             }
         except Exception as e:
             MonitoringService.log_error(
-                f"Failed to retrieve audit logs: {e}",
-                "AuditLogService"
+                f"Failed to retrieve audit logs: {e}", "AuditLogService"
             )
             return {"logs": [], "total": 0, "pages": 0}

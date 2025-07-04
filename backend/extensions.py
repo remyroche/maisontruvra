@@ -22,6 +22,8 @@ mail = Mail()
 cors = CORS()
 cache = Cache()
 jwt = JWTManager()
-limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
+limiter = Limiter(
+    key_func=get_remote_address, default_limits=["200 per day", "50 per hour"]
+)
 redis_client = FlaskRedis()
 socketio = SocketIO()

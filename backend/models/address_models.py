@@ -2,16 +2,19 @@ from backend.database import db
 from sqlalchemy.ext.hybrid import hybrid_property
 from backend.utils.encryption import encrypt_data, decrypt_data
 
+
 class Address(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    
-    _address_line_1 = db.Column('address_line_1', db.String(255), nullable=False)
-    _address_line_2 = db.Column('address_line_2', db.String(255))
-    _city = db.Column('city', db.String(100), nullable=False)
-    _state_province_region = db.Column('state_province_region', db.String(100), nullable=False)
-    _postal_code = db.Column('postal_code', db.String(20), nullable=False)
-    _country = db.Column('country', db.String(100), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+
+    _address_line_1 = db.Column("address_line_1", db.String(255), nullable=False)
+    _address_line_2 = db.Column("address_line_2", db.String(255))
+    _city = db.Column("city", db.String(100), nullable=False)
+    _state_province_region = db.Column(
+        "state_province_region", db.String(100), nullable=False
+    )
+    _postal_code = db.Column("postal_code", db.String(20), nullable=False)
+    _country = db.Column("country", db.String(100), nullable=False)
     is_default_shipping = db.Column(db.Boolean, default=False)
     is_default_billing = db.Column(db.Boolean, default=False)
 
@@ -65,14 +68,14 @@ class Address(db.Model):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'address_line_1': self.address_line_1,
-            'address_line_2': self.address_line_2,
-            'city': self.city,
-            'state_province_region': self.state_province_region,
-            'postal_code': self.postal_code,
-            'country': self.country,
-            'is_default_shipping': self.is_default_shipping,
-            'is_default_billing': self.is_default_billing,
+            "id": self.id,
+            "user_id": self.user_id,
+            "address_line_1": self.address_line_1,
+            "address_line_2": self.address_line_2,
+            "city": self.city,
+            "state_province_region": self.state_province_region,
+            "postal_code": self.postal_code,
+            "country": self.country,
+            "is_default_shipping": self.is_default_shipping,
+            "is_default_billing": self.is_default_billing,
         }

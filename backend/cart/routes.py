@@ -1,21 +1,19 @@
-from flask import current_app, Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g
 from flask_login import current_user, login_required
 from marshmallow import ValidationError
-from backend.models import db, Cart, CartItem, Product, User
-from backend.services.exceptions import NotFoundException, ServiceError, ValidationException, AuthorizationException
-from backend.services.b2b_service import B2BService
-from backend.services.inventory_service import InventoryService
-from backend.services.monitoring_service import MonitoringService
+from backend.models import CartItem
+from backend.services.exceptions import (
+    NotFoundException,
+    ServiceError,
+)
 from backend.services.cart_service import CartService
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.models.enums import UserType
-from backend.schemas import AddToCartSchema, UpdateCartItemSchema
+from backend.schemas import AddToCartSchema
 from backend.utils.decorators import api_resource_handler
-from decimal import Decimal
 
-cart_bp = Blueprint('cart_bp', __name__, url_prefix='/api/cart')
+cart_bp = Blueprint("cart_bp", __name__, url_prefix="/api/cart")
 
-@cart_bp.route('/', methods=['GET'])
+
+@cart_bp.route("/", methods=["GET"])
 @login_required
 def get_cart_contents():
     """
@@ -23,68 +21,91 @@ def get_cart_contents():
     """
     try:
         cart_data = CartService.get_cart(current_user.id)
-        if not cart_data or not cart_data.get('items_details'):
-            return jsonify({'message': 'Cart is empty', 'items': [], 'total': '0.00', 'subtotal': '0.00', 'discount_applied': '0.00', 'tier_name': None}), 200
+        if not cart_data or not cart_data.get("items_details"):
+            return jsonify(
+                {
+                    "message": "Cart is empty",
+                    "items": [],
+                    "total": "0.00",
+                    "subtotal": "0.00",
+                    "discount_applied": "0.00",
+                    "tier_name": None,
+                }
+            ), 200
 
-        return jsonify({
-            'items': [{
-                'item_id': detail['item'].id,
-                'product_id': detail['item'].product.id,
-                'name': detail['item'].product.name,
-                'quantity': detail['item'].quantity,
-                'original_price': str(detail['original_price']),
-                'discounted_price': str(detail['discounted_price']),
-                'line_total': str(detail['line_total']),
-            } for detail in cart_data['items_details']],
-            'subtotal': str(cart_data['subtotal']),
-            'discount_applied': str(cart_data['discount_applied']),
-            'total': str(cart_data['total']),
-            'tier_name': cart_data['tier_name']
-        }), 200
+        return jsonify(
+            {
+                "items": [
+                    {
+                        "item_id": detail["item"].id,
+                        "product_id": detail["item"].product.id,
+                        "name": detail["item"].product.name,
+                        "quantity": detail["item"].quantity,
+                        "original_price": str(detail["original_price"]),
+                        "discounted_price": str(detail["discounted_price"]),
+                        "line_total": str(detail["line_total"]),
+                    }
+                    for detail in cart_data["items_details"]
+                ],
+                "subtotal": str(cart_data["subtotal"]),
+                "discount_applied": str(cart_data["discount_applied"]),
+                "total": str(cart_data["total"]),
+                "tier_name": cart_data["tier_name"],
+            }
+        ), 200
     except NotFoundException as e:
-        return jsonify({'message': str(e)}), 404
+        return jsonify({"message": str(e)}), 404
 
-@cart_bp.route('/add', methods=['POST'])
+
+@cart_bp.route("/add", methods=["POST"])
 @login_required
 def add_to_cart():
     """Adds an item to the cart."""
     json_data = request.get_json()
     if not json_data:
-        return jsonify({'message': 'Invalid JSON data provided'}), 400
-    
+        return jsonify({"message": "Invalid JSON data provided"}), 400
+
     # Validate input using marshmallow schema
     try:
         schema = AddToCartSchema()
         validated_data = schema.load(json_data)
     except ValidationError as err:
-        return jsonify({'message': 'Validation failed', 'errors': err.messages}), 400
-        
-    try:
-        CartService.add_to_cart(current_user.id, validated_data['product_id'], validated_data['quantity'])
-        return jsonify({'message': 'Item added to cart'}), 201
-    except NotFoundException:
-        return jsonify({'message': 'Product not found'}), 404
-    except (ValueError, ServiceError) as e:
-        return jsonify({'message': str(e)}), 400
+        return jsonify({"message": "Validation failed", "errors": err.messages}), 400
 
-@cart_bp.route('/item/<int:item_id>', methods=['PUT'])
+    try:
+        CartService.add_to_cart(
+            current_user.id, validated_data["product_id"], validated_data["quantity"]
+        )
+        return jsonify({"message": "Item added to cart"}), 201
+    except NotFoundException:
+        return jsonify({"message": "Product not found"}), 404
+    except (ValueError, ServiceError) as e:
+        return jsonify({"message": str(e)}), 400
+
+
+@cart_bp.route("/item/<int:item_id>", methods=["PUT"])
 @login_required
-@api_resource_handler(model=CartItem, request_schema=CartItemUpdateSchema, response_schema=CartSchema, ownership_exempt_roles=[])
+@api_resource_handler(
+    model=CartItem,
+    request_schema=CartItemUpdateSchema,
+    response_schema=CartSchema,
+    ownership_exempt_roles=[],
+)
 def update_cart_item_route(item_id):
     updated_cart = CartService.update_item_quantity(
         user_id=current_user.id,
         item_id=item_id,
-        new_quantity=g.validated_data['quantity']
+        new_quantity=g.validated_data["quantity"],
     )
     return updated_cart
 
-@cart_bp.route('/item/<int:item_id>', methods=['DELETE'])
+
+@cart_bp.route("/item/<int:item_id>", methods=["DELETE"])
 @login_required
-@api_resource_handler(model=CartItem, response_schema=CartSchema, ownership_exempt_roles=[])
+@api_resource_handler(
+    model=CartItem, response_schema=CartSchema, ownership_exempt_roles=[]
+)
 def remove_cart_item_route(item_id):
     """Removes a specific item from the cart."""
-    updated_cart = CartService.remove_item(
-        user_id=current_user.id,
-        item_id=item_id
-    )
+    updated_cart = CartService.remove_item(user_id=current_user.id, item_id=item_id)
     return updated_cart

@@ -1,15 +1,20 @@
 from flask import Blueprint, request, jsonify
 from backend.services.newsletter_service import NewsletterService
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.utils.decorators import staff_required, roles_required, permissions_required
+from backend.utils.decorators import (
+    roles_required,
+    permissions_required,
+)
 from backend.services.email_service import EmailService
 
-newsletter_bp = Blueprint('admin_newsletter_routes', __name__, url_prefix='/api/admin/newsletter')
+newsletter_bp = Blueprint(
+    "admin_newsletter_routes", __name__, url_prefix="/api/admin/newsletter"
+)
+
 
 # READ all newsletter subscribers
-@newsletter_bp.route('/subscribers', methods=['GET'])
-@permissions_required('MANAGE_NEWSLETTER')
-@roles_required ('Admin', 'Marketing', 'Manager')
+@newsletter_bp.route("/subscribers", methods=["GET"])
+@permissions_required("MANAGE_NEWSLETTER")
+@roles_required("Admin", "Marketing", "Manager")
 def get_subscribers():
     """
     Retrieves all newsletter subscribers.
@@ -25,9 +30,10 @@ def get_subscribers():
     subscribers = NewsletterService.get_all_subscribers()
     return jsonify([sub.to_dict() for sub in subscribers])
 
-@newsletter_bp.route('/subscribers/<int:subscriber_id>', methods=['DELETE'])
-@permissions_required('MANAGE_NEWSLETTER')
-@roles_required ('Admin', 'Marketing', 'Manager')
+
+@newsletter_bp.route("/subscribers/<int:subscriber_id>", methods=["DELETE"])
+@permissions_required("MANAGE_NEWSLETTER")
+@roles_required("Admin", "Marketing", "Manager")
 def delete_subscriber(subscriber_id):
     """
     Deletes a newsletter subscriber.
@@ -52,9 +58,10 @@ def delete_subscriber(subscriber_id):
         return jsonify({"message": "Subscriber deleted successfully"})
     return jsonify({"error": "Subscriber not found"}), 404
 
-@newsletter_bp.route('/send', methods=['POST'])
-@permissions_required('MANAGE_NEWSLETTER')
-@roles_required ('Admin', 'Marketing', 'Manager')
+
+@newsletter_bp.route("/send", methods=["POST"])
+@permissions_required("MANAGE_NEWSLETTER")
+@roles_required("Admin", "Marketing", "Manager")
 def send_newsletter():
     """
     Sends a newsletter campaign to all subscribers.
@@ -82,8 +89,8 @@ def send_newsletter():
         description: Missing subject or content.
     """
     data = request.get_json()
-    subject = data.get('subject')
-    html_content = data.get('html_content')
+    subject = data.get("subject")
+    html_content = data.get("html_content")
 
     if not subject or not html_content:
         return jsonify({"error": "Subject and content are required"}), 400
@@ -92,9 +99,11 @@ def send_newsletter():
     # For now, we'll just simulate it
     subscribers = NewsletterService.get_all_subscribers()
     recipient_emails = [sub.email for sub in subscribers]
-    
+
     # Let's assume a generic sender for now
     sender = "noreply@maisontruvra.com"
     EmailService.send_bulk_email(subject, sender, recipient_emails, html_content)
-    
-    return jsonify({"message": f"Newsletter sent to {len(recipient_emails)} subscribers"})
+
+    return jsonify(
+        {"message": f"Newsletter sent to {len(recipient_emails)} subscribers"}
+    )

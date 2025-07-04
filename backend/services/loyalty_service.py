@@ -1,12 +1,14 @@
 # backend/services/loyalty_service.py
 
 from .. import db
-from ..models import (User, LoyaltyProgram, LoyaltyTier, UserLoyalty, 
-                      PointVoucher, ExclusiveReward, LoyaltyPointLog, 
-                      Discount, DiscountType, Referral, ReferralRewardTier)
+from ..models import (
+    LoyaltyTier,
+    UserLoyalty,
+    LoyaltyPointLog,
+)
 from ..models.loyalty_account import LoyaltyAccount
 from sqlalchemy.exc import IntegrityError
-import uuid
+
 
 class LoyaltyService:
     """
@@ -28,24 +30,22 @@ class LoyaltyService:
         Creates a new loyalty tier.
 
         Args:
-            data (dict): A dictionary containing tier details 
+            data (dict): A dictionary containing tier details
                          (name, points_required, description).
 
         Returns:
             A tuple of (LoyaltyTier|None, error_message|None).
         """
-        name = data.get('name')
-        points_required = data.get('points_required')
-        description = data.get('description')
+        name = data.get("name")
+        points_required = data.get("points_required")
+        description = data.get("description")
 
         if not all([name, points_required]):
             return None, "Missing required fields: name and points_required."
 
         try:
             new_tier = LoyaltyTier(
-                name=name,
-                points_required=points_required,
-                description=description
+                name=name, points_required=points_required, description=description
             )
             db.session.add(new_tier)
             db.session.commit()
@@ -136,18 +136,16 @@ class LoyaltyService:
 
         try:
             account.points_balance += points
-            
+
             # Log the transaction
             log_entry = LoyaltyPointLog(
-                user_id=user_id,
-                points_change=points,
-                reason=reason
+                user_id=user_id, points_change=points, reason=reason
             )
             db.session.add(log_entry)
-            
+
             # Check for tier update
             self.update_user_tier(user_id, account.points_balance)
-            
+
             db.session.commit()
             return account, None
         except Exception as e:
@@ -161,12 +159,14 @@ class LoyaltyService:
         """
         user_loyalty = UserLoyalty.query.filter_by(user_id=user_id).first()
         if not user_loyalty:
-            return # Or handle error appropriately
+            return  # Or handle error appropriately
 
         # Find the highest tier the user qualifies for
-        eligible_tiers = LoyaltyTier.query.filter(
-            LoyaltyTier.points_required <= current_points
-        ).order_by(LoyaltyTier.points_required.desc()).all()
+        eligible_tiers = (
+            LoyaltyTier.query.filter(LoyaltyTier.points_required <= current_points)
+            .order_by(LoyaltyTier.points_required.desc())
+            .all()
+        )
 
         if eligible_tiers:
             new_tier = eligible_tiers[0]

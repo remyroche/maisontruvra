@@ -5,9 +5,10 @@ from marshmallow import ValidationError
 from flask import current_app
 
 # Define the blueprint
-contact_bp = Blueprint('contact', __name__, url_prefix='/api/contact')
+contact_bp = Blueprint("contact", __name__, url_prefix="/api/contact")
 
-@contact_bp.route('', methods=['POST'])
+
+@contact_bp.route("", methods=["POST"])
 def submit_contact_form():
     """
     API endpoint to receive and process contact form submissions.

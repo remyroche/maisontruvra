@@ -7,6 +7,7 @@ from ..services.exceptions import NotFoundException, ValidationException, Servic
 from ..utils.input_sanitizer import InputSanitizer
 from sqlalchemy.exc import IntegrityError
 
+
 class WishlistService:
     """
     Handles business logic related to user wishlists.
@@ -36,22 +37,22 @@ class WishlistService:
         try:
             safe_user_id = InputSanitizer.sanitize_integer(user_id)
             wishlist = WishlistService._get_or_create_wishlist(safe_user_id)
-            
+
             # The relationship on the model will handle fetching the items.
             items = wishlist.items.order_by(WishlistItem.added_at.desc()).all()
-            
+
             result = [item.to_dict() for item in items]
-            
+
             MonitoringService.log_info(
                 f"Retrieved {len(result)} wishlist items for user {safe_user_id}",
-                "WishlistService"
+                "WishlistService",
             )
             return result
         except Exception as e:
             MonitoringService.log_error(
                 f"Error getting wishlist items for user {user_id}: {str(e)}",
                 "WishlistService",
-                exc_info=True
+                exc_info=True,
             )
             raise ServiceError(f"Failed to retrieve wishlist items: {str(e)}")
 
@@ -61,7 +62,7 @@ class WishlistService:
         try:
             safe_user_id = InputSanitizer.sanitize_integer(user_id)
             safe_product_id = InputSanitizer.sanitize_integer(product_id)
-            
+
             wishlist = WishlistService._get_or_create_wishlist(safe_user_id)
 
             # Verify product exists
@@ -75,18 +76,20 @@ class WishlistService:
                 raise ValidationException("Product already in wishlist")
 
             # Create new wishlist item
-            wishlist_item = WishlistItem(wishlist_id=wishlist.id, product_id=safe_product_id)
+            wishlist_item = WishlistItem(
+                wishlist_id=wishlist.id, product_id=safe_product_id
+            )
             db.session.add(wishlist_item)
             db.session.commit()
 
             AuditLogService.log_action(
                 user_id=safe_user_id,
                 action="ADD_TO_WISHLIST",
-                details=f"Added product {safe_product_id} to wishlist"
+                details=f"Added product {safe_product_id} to wishlist",
             )
             MonitoringService.log_info(
                 f"User {safe_user_id} added product {safe_product_id} to wishlist",
-                "WishlistService"
+                "WishlistService",
             )
             return wishlist_item.to_dict()
         except IntegrityError:
@@ -94,7 +97,11 @@ class WishlistService:
             raise ValidationException("Product already in wishlist")
         except Exception as e:
             db.session.rollback()
-            MonitoringService.log_error(f"Error adding product {product_id} to wishlist for user {user_id}: {str(e)}", "WishlistService", exc_info=True)
+            MonitoringService.log_error(
+                f"Error adding product {product_id} to wishlist for user {user_id}: {str(e)}",
+                "WishlistService",
+                exc_info=True,
+            )
             raise ServiceError(f"Failed to add product to wishlist: {str(e)}")
 
     @staticmethod
@@ -105,29 +112,32 @@ class WishlistService:
             safe_product_id = InputSanitizer.sanitize_integer(product_id)
 
             wishlist = WishlistService._get_or_create_wishlist(safe_user_id)
-            
+
             # Find the wishlist item
             wishlist_item = wishlist.items.filter_by(product_id=safe_product_id).first()
             if not wishlist_item:
                 raise NotFoundException("Product not found in wishlist")
 
-            item_id_for_log = wishlist_item.id
             db.session.delete(wishlist_item)
             db.session.commit()
 
             AuditLogService.log_action(
                 user_id=safe_user_id,
                 action="REMOVE_FROM_WISHLIST",
-                details=f"Removed product {safe_product_id} from wishlist"
+                details=f"Removed product {safe_product_id} from wishlist",
             )
             MonitoringService.log_info(
                 f"User {safe_user_id} removed product {safe_product_id} from wishlist",
-                "WishlistService"
+                "WishlistService",
             )
             return True
         except Exception as e:
             db.session.rollback()
-            MonitoringService.log_error(f"Error removing product {product_id} from wishlist for user {user_id}: {str(e)}", "WishlistService", exc_info=True)
+            MonitoringService.log_error(
+                f"Error removing product {product_id} from wishlist for user {user_id}: {str(e)}",
+                "WishlistService",
+                exc_info=True,
+            )
             raise ServiceError(f"Failed to remove product from wishlist: {str(e)}")
 
     @staticmethod
@@ -143,5 +153,8 @@ class WishlistService:
 
             return wishlist.items.filter_by(product_id=safe_product_id).count() > 0
         except Exception as e:
-            MonitoringService.log_error(f"Error checking wishlist for user {user_id}, product {product_id}: {str(e)}", "WishlistService")
+            MonitoringService.log_error(
+                f"Error checking wishlist for user {user_id}, product {product_id}: {str(e)}",
+                "WishlistService",
+            )
             return False

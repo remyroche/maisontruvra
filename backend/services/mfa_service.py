@@ -2,8 +2,7 @@ import pyotp
 import qrcode
 from io import BytesIO
 import base64
-from backend.models.user_models import User
-from backend.database import db
+
 
 class MfaService:
     @staticmethod
@@ -15,8 +14,7 @@ class MfaService:
     def get_provisioning_uri(user_email: str, secret: str) -> str:
         """Generates the provisioning URI for the QR code."""
         return pyotp.totp.TOTP(secret).provisioning_uri(
-            name=user_email,
-            issuer_name="Maison Truvra"
+            name=user_email, issuer_name="Maison Truvra"
         )
 
     @staticmethod
@@ -26,7 +24,7 @@ class MfaService:
         qr.add_data(uri)
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
-        
+
         buffered = BytesIO()
         img.save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")

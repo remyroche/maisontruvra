@@ -1,6 +1,7 @@
 import re
 from sqlalchemy.orm.session import Session
 
+
 def generate_unique_slug(name: str, model_class, session: Session) -> str:
     """
     Generates a URL-friendly, unique slug for a given name and SQLAlchemy model.
@@ -18,11 +19,12 @@ def generate_unique_slug(name: str, model_class, session: Session) -> str:
 
     # 1. Create a base slug
     slug = name.lower()
-    slug = re.sub(r'[^\w\s-]', '', slug).strip()
-    slug = re.sub(r'[-\s]+', '-', slug)
+    slug = re.sub(r"[^\w\s-]", "", slug).strip()
+    slug = re.sub(r"[-\s]+", "-", slug)
 
     if not slug:
         import uuid
+
         return str(uuid.uuid4())[:8]
 
     # 2. Check for uniqueness and append a counter if necessary
@@ -31,6 +33,5 @@ def generate_unique_slug(name: str, model_class, session: Session) -> str:
     while session.query(model_class).filter(model_class.slug == slug).first():
         slug = f"{base_slug}-{counter}"
         counter += 1
-        
-    return slug
 
+    return slug

@@ -1,11 +1,12 @@
 # backend/b2b/referral_routes.py
 from flask import Blueprint, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required
 
 # This blueprint is for B2B user referrals
-b2b_referral_bp = Blueprint('b2b_referral_bp', __name__)
+b2b_referral_bp = Blueprint("b2b_referral_bp", __name__)
 
-@b2b_referral_bp.route('/', methods=['GET'])
+
+@b2b_referral_bp.route("/", methods=["GET"])
 @jwt_required()
 def get_referral_info():
     """
@@ -15,6 +16,4 @@ def get_referral_info():
     """
     # user_id = get_jwt_identity()
     # referral_data = ReferralService.get_b2b_referrals(user_id)
-    return jsonify({
-        "message": "B2B referral information endpoint."
-    })
+    return jsonify({"message": "B2B referral information endpoint."})

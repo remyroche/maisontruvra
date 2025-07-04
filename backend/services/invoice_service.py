@@ -1,15 +1,16 @@
 # backend/services/invoice_service.py
 
 from .. import db
-from ..models import Order, Invoice, OrderStatusEnum
+from ..models import Order, Invoice
 from .exceptions import NotFoundException, ServiceException
 
 # FIX: Import the PDFService class, not a function
-from .pdf_service import PDFService 
+from .pdf_service import PDFService
 
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class InvoiceService:
     """
@@ -19,7 +20,7 @@ class InvoiceService:
     def __init__(self, session=None):
         self.session = session or db.session
         # FIX: Create an instance of the PDFService
-        self.pdf_service = PDFService() 
+        self.pdf_service = PDFService()
 
     def generate_invoice_for_order(self, order_id):
         """
@@ -37,16 +38,20 @@ class InvoiceService:
             # Create a new invoice record in the database
             new_invoice = Invoice(
                 order_id=order.id,
-                invoice_number=f"INV-{order.id[:8]}", # Example invoice number
-                pdf_url=pdf_path # Assuming this path is a URL or retrievable path
+                invoice_number=f"INV-{order.id[:8]}",  # Example invoice number
+                pdf_url=pdf_path,  # Assuming this path is a URL or retrievable path
             )
             self.session.add(new_invoice)
             self.session.commit()
-            
-            logger.info(f"Successfully generated and saved invoice for order {order_id} at {pdf_path}")
+
+            logger.info(
+                f"Successfully generated and saved invoice for order {order_id} at {pdf_path}"
+            )
             return new_invoice
 
         except Exception as e:
             self.session.rollback()
-            logger.error(f"Failed to generate invoice for order {order_id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to generate invoice for order {order_id}: {e}", exc_info=True
+            )
             raise ServiceException("Failed to generate invoice.")

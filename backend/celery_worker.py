@@ -13,9 +13,10 @@ celery = Celery(__name__)
 # Create the Celery instance without app context
 celery_app = Celery(
     __name__,
-    broker=os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0'),
-    backend=os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+    broker=os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+    backend=os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
 )
+
 
 def init_celery(app):
     """
@@ -27,11 +28,13 @@ def init_celery(app):
 
     class ContextTask(celery_app.Task):
         """A custom Celery Task class that runs within a Flask app context."""
+
         def __call__(self, *args, **kwargs):
             with app.app_context():
                 return self.run(*args, **kwargs)
 
     celery_app.Task = ContextTask
+
 
 @celery.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):
@@ -41,18 +44,18 @@ def setup_periodic_tasks(sender, **kwargs):
     Make sure they match the actual paths to your tasks.
     """
     logger.info("Setting up periodic tasks...")
-    
+
     # Daily B2B Tier Recalculation Task
     sender.add_periodic_task(
-        crontab(hour=0, minute=0), # Executes daily at midnight
-        'tasks.update_all_user_tiers',
-        name='Update B2B loyalty tiers daily'
+        crontab(hour=0, minute=0),  # Executes daily at midnight
+        "tasks.update_all_user_tiers",
+        name="Update B2B loyalty tiers daily",
     )
-    
+
     # Periodic Cache Clear Task
     sender.add_periodic_task(
-        crontab(hour='*/6'), # Executes every 6 hours
-        'tasks.clear_application_cache',
-        name='Clear application cache every 6 hours'
+        crontab(hour="*/6"),  # Executes every 6 hours
+        "tasks.clear_application_cache",
+        name="Clear application cache every 6 hours",
     )
     logger.info("Periodic tasks set up.")
