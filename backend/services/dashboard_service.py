@@ -1,9 +1,6 @@
-from backend.models import User
-from backend.models.enums import UserType
 from backend.services.loyalty_service import LoyaltyService
 from backend.services.order_service import OrderService
-from backend.services.recommendation_service import RecommendationService
-from backend.services.exceptions import NotFoundException
+
 
 class DashboardService:
     @staticmethod
