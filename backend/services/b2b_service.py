@@ -1,20 +1,8 @@
-from decimal import Decimal
-
-from flask_login import current_user
-from sqlalchemy import func
+from flask import current_app
 from sqlalchemy.exc import SQLAlchemyError
-
-from backend import db
-from backend.models import B2BAccount, Company, Order, Tier, User
-from backend.services.audit_log_service import AuditLogService
-from backend.services.email_service import EmailService
-from backend.services.exceptions import (
-    DataConflictException,
-    NotFoundException,
-    ServiceError,
-    ServiceException,
-)
-from backend.services.user_service import UserService
+from backend.database import db
+from backend.models import B2BAccount, User, B2BUser, Tier
+from backend.services.exceptions import ServiceException, ServiceError
 
 
 class B2BService:
@@ -95,9 +83,9 @@ class B2BService:
         """
         b2b_account = B2BAccount.query.get(b2b_account_id)
         if not b2b_account:
-            raise NotFoundException("B2B account not found.")
+            raise NotFoundException("B2B account not found.") from e
         if b2b_account.status == "approved":
-            raise ServiceError("B2B account is already approved.")
+            raise ServiceError("B2B account is already approved.") from e
 
         try:
             # Update status and activate user
@@ -144,7 +132,7 @@ class B2BService:
         """Retrieves a B2B account by the associated user ID."""
         user = User.query.get(user_id)
         if not user or not user.b2b_account:
-            raise NotFoundException("B2B account not found for this user.")
+            raise NotFoundException("B2B account not found for this user.") from e
         return user.b2b_account
 
     def update_b2b_account(self, b2b_account_id, data):
@@ -153,7 +141,7 @@ class B2BService:
         """
         b2b_account = B2BAccount.query.get(b2b_account_id)
         if not b2b_account:
-            raise NotFoundException("B2B Account not found.")
+            raise NotFoundException("B2B Account not found.") from e
         try:
             if "company_name" in data and data["company_name"] is not None:
                 b2b_account.company.name = data["company_name"]
@@ -217,9 +205,9 @@ class B2BService:
         user = self.user_service.get_user_by_id(user_id)
         tier = db.session.query(Tier).get(tier_id)
         if not user or not user.b2b_account:
-            raise ValueError("User is not a B2B account.")
+            raise ValueError("User is not a B2B account.") from e
         if not tier:
-            raise ValueError("Tier not found.")
+            raise ValueError("Tier not found.") from e
 
         user.tier_id = tier_id
         db.session.commit()
