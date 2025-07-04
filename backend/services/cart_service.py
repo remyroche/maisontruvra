@@ -1,29 +1,16 @@
-from decimal import Decimal
-
-from flask_login import current_user
-from sqlalchemy.orm import joinedload
-
+import logging
+from sqlalchemy.exc import SQLAlchemyError
 from backend.database import db
-from backend.extensions import db
-from backend.models.inventory_models import (
-    InventoryReservation,
-)  # Added: Import InventoryReservation
-from backend.models.product_models import Product
-from backend.services.b2b_service import B2BService
-from backend.utils.input_sanitizer import InputSanitizer
-
-from .. import db
-from ..models import Cart, CartItem, ExclusiveReward, Product, User
-from ..models.enums import UserType
-from .exceptions import (
-    NotFoundException,
-    ProductNotFoundError,
+from backend.models import Cart, CartItem, Product, User, InventoryReservation
+from backend.services.exceptions import (
     ServiceError,
+    NotFoundException,
     ValidationException,
+    InsufficientStockException,
 )
-from .inventory_service import InventoryService
-from .monitoring_service import MonitoringService
+from backend.services.inventory_service import InventoryService
 
+logger = logging.getLogger(__name__)
 
 class CartService:
     def __init__(self, logger):
@@ -285,7 +272,7 @@ class CartService:
                 "CartService",
                 exc_info=True,
             )
-            raise ServiceError(f"Failed to update cart item: {str(e)}")
+            raise ServiceError(f"Failed to update cart item: {str(e)}") from e
 
     @staticmethod
     def remove_from_cart(user_id: int, product_id: int) -> Cart:
@@ -318,7 +305,7 @@ class CartService:
                 "CartService",
                 exc_info=True,
             )
-            raise ServiceError(f"Failed to remove cart item: {str(e)}")
+            raise ServiceError(f"Failed to remove cart item: {str(e)}") from e
 
     @staticmethod
     def clear_cart():
@@ -358,4 +345,4 @@ class CartService:
                 exc_info=True,
             )
             # The transaction is rolled back, so no reservations were released and no items were deleted.
-            raise ServiceError("Failed to clear cart due to a database error.")
+            raise ServiceError("Failed to clear cart due to a database error.") from e
