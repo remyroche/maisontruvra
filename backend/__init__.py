@@ -1,15 +1,13 @@
-from flask import Flask, request, session, jsonify
-from celery import Celery
+from flask import Flask, request, session
 from flask_talisman import Talisman
 from datetime import datetime
-import os
-from .extensions import db, migrate, cors, jwt
-from .celery_worker import celery, init_celery # Import the celery instance
+from .celery_worker import celery, init_celery 
 
 # Import extension instances from the central extensions file
 from .extensions import (
     db,
     migrate,
+    cors,
     login_manager,
     mail,
     limiter,
@@ -31,9 +29,6 @@ from .logger_and_error_handler import register_error_handlers
 from flask_login import user_logged_in, user_unauthorized
 from .utils.vite import vite_asset
 from .database import setup_database_security
-
-from flask_cors import CORS
-from backend.extensions import db, migrate, login_manager
 from backend.config import Config
 from backend.database import init_db_command
 from backend.utils.vite import Vite
