@@ -536,7 +536,7 @@ def reset_password():
 
     except Exception as token_error:
         security_logger.error(f"Token verification error: {str(token_error)}")
-        raise UnauthorizedException("Invalid or expired token")
+        raise UnauthorizedException("Invalid or expired token") from token_error
 
 
 # Admin routes for managing user authentication
