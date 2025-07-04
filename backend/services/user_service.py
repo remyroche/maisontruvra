@@ -80,12 +80,10 @@ class UserService:
             raise
 
 
-    @staticmethod
     def get_user_profile(self, user_id):
         user = User.query.get_or_404(user_id)
         return user.to_dict()
 
-    @staticmethod
     def update_profile(self, user_id, data):
         """ Updates a user's profile after sanitizing inputs. """
         user = User.query.get(user_id)
@@ -107,7 +105,6 @@ class UserService:
         current_app.logger.info(f"User profile updated for {user.email}")
         return user
 
-    @staticmethod
     def admin_update_user(self, user_id, data):
         """ Allows an admin to update user details. """
         user = User.query.get(user_id)
@@ -134,13 +131,8 @@ class UserService:
         """ Allows an admin to create a new user. """
         from backend.services.auth_service import AuthService
         # Reusing the registration logic is better to keep things DRY
-        auth_service = AuthService()
-        user = auth_service.register_user(
-            first_name=data['first_name'],
-            last_name=data['last_name'],
-            email=data['email'],
-            password=data['password']
-        )
+        auth_service = AuthService(self.logger) # Pass logger
+        user = auth_service.register_user(data)
         
         # Admins might set additional properties upon creation
         if 'is_active' in data:
@@ -155,7 +147,6 @@ class UserService:
         return user
         
         
-
 
     def _create_user_logic(self, user_data: dict, role: Role, user_type: str, company_id: int = None):
         """
@@ -237,9 +228,9 @@ class UserService:
     
     def update_user_language(self, user_id, language, user_type='b2c'):
         if user_type == 'b2c':
-            user = self.db.session.get(User, user_id)
+            user = db.session.get(User, user_id)
         else:
-            user = self.db.session.get(User, user_id)
+            user = db.session.get(User, user_id)
             
         if not user:
             raise ValueError("User not found")
@@ -343,3 +334,4 @@ class UserService:
         self.get_user_by_id(user_id) # Ensures user exists
         logs = AdminAuditLog.query.filter_by(user_id=user_id).all()
         return [log.to_dict() for log in logs]
+
