@@ -4,24 +4,28 @@ import sys
 import json
 import subprocess
 import tempfile
-import ast # Required for analyze_file and check_missing_permissions
-import datetime # Required for dynamic log file naming
+import ast
+import datetime
 import re
 from collections import defaultdict
 
 # --- Configure logging to console and a file ---
 # Define a dynamic log file path based on a timestamp
-log_file_path = f"security_audit_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+log_file_path = f"logs/security_audit_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+
+# Ensure the 'logs' directory exists
+os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s', # Include timestamp in log format
+    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout), # Keep console output
-        logging.FileHandler(log_file_path) # Add file output
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file_path)
     ]
 )
-logging.info(f"All Python logging output will also be written to: {log_file_path}")
+logger = logging.getLogger(__name__) # Get a logger instance
+logger.info(f"All Python logging output will also be written to: {log_file_path}")
 
 
 class SecurityAuditor:
@@ -30,22 +34,35 @@ class SecurityAuditor:
         self.project_root = project_root
         self.backend_dir = backend_dir
         self.frontend_dir = frontend_dir
-        self.findings = [] # This list will store your audit findings
-        # Define permission decorators relevant to your Flask application
+        self.findings = []
         self.permission_decorators = {
             'login_required', 'b2b_user_required', 'staff_required',
             'admin_required', 'roles_required', 'permissions_required',
             'b2b_admin_required', 'jwt_required'
         }
+        self.severity_order = {'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3, 'UNKNOWN': 4, 'NOTE': 5, 'WARNING': 6} # Added for sorting
+
+        # Configuration for external tools (can be passed via config object or env vars)
+        self.codeql_sarif_output_file = "codeql_audit_results.sarif"
+        self.codeql_database_dir = "codeql_db_for_flask"
+        self.sonar_project_key = config.get('SONAR_PROJECT_KEY', 'YourProjectKey')
+        self.sonar_organization = config.get('SONAR_ORGANIZATION', None)
+        self.sonar_host_url = config.get('SONAR_HOST_URL', 'http://localhost:9000')
+        self.sonar_token = os.getenv("SONAR_TOKEN") # Always get from env for security
+        self.semgrep_python_output = "semgrep_python_results.json"
+        self.semgrep_vuejs_output = "semgrep_vuejs_results.json"
+        self.semgrep_python_config = config.get('SEMGREP_PYTHON_CONFIG', 'p/python')
+        self.semgrep_vuejs_config = config.get('SEMGREP_VUEJS_CONFIG', 'p/vuejs')
+
 
     def _print_header(self, text):
         """Prints a styled header for audit steps."""
-        logging.info(f"\n--- {text} ---")
+        logger.info(f"\n--- {text} ---")
 
     def add_finding(self, severity, category, title, description, file_path, line_number, recommendation=None, code_snippet=None, cwe_id=None):
         """Adds a new security finding to the auditor's list."""
         finding = {
-            'severity': severity,
+            'severity': severity.upper(), # Ensure uppercase for consistency
             'category': category,
             'title': title,
             'description': description,
@@ -56,7 +73,7 @@ class SecurityAuditor:
             'cwe_id': cwe_id
         }
         self.findings.append(finding)
-        logging.info(f"NEW FINDING: {title} in {file_path}:{line_number} (Severity: {severity})")
+        logger.info(f"NEW FINDING: {title} in {file_path}:{line_number} (Severity: {severity.upper()})")
 
     def _run_command(self, cmd_parts, cwd=None, env=None, stdout_target=subprocess.PIPE, stderr_target=subprocess.PIPE):
         """
@@ -66,8 +83,6 @@ class SecurityAuditor:
         Does NOT raise CalledProcessError by default.
         """
         try:
-            # Add a timeout to prevent the script from hanging indefinitely.
-            # 3 minutes should be more than enough for these tools.
             process = subprocess.run(
                 cmd_parts,
                 stdout=stdout_target,
@@ -77,43 +92,47 @@ class SecurityAuditor:
                 encoding='utf-8',
                 cwd=cwd,
                 env=env,
-                timeout=180
+                timeout=300 # Increased timeout to 5 minutes for potentially long scans
             )
             
             if stderr_target == subprocess.PIPE and process.stderr:
-                logging.warning(f"Command '{' '.join(cmd_parts)}' produced stderr:\n{process.stderr.strip()}")
+                # Log stderr as warning, unless it's a known non-error output (e.g., progress messages)
+                logger.warning(f"Command '{' '.join(cmd_parts)}' produced stderr:\n{process.stderr.strip()}")
 
             stdout_content = process.stdout if stdout_target == subprocess.PIPE else ""
             return stdout_content, process.returncode
 
         except subprocess.TimeoutExpired as e:
-            logging.error(f"Command '{' '.join(cmd_parts)}' timed out after 180 seconds. This can happen due to network issues or if the tool is unresponsive.")
-            # Log any partial output that was captured
+            logger.error(f"Command '{' '.join(cmd_parts)}' timed out after {e.timeout} seconds. This can happen due to network issues or if the tool is unresponsive.")
             if e.stdout:
-                logging.error(f"Partial STDOUT from timed-out command:\n{e.stdout}")
+                logger.error(f"Partial STDOUT from timed-out command:\n{e.stdout}")
             if e.stderr:
-                logging.error(f"Partial STDERR from timed-out command:\n{e.stderr}")
+                logger.error(f"Partial STDERR from timed-out command:\n{e.stderr}")
             return None, 1
         except FileNotFoundError:
-            logging.error(f"Command not found: '{cmd_parts[0]}'. Please ensure it's in your PATH.")
+            logger.error(f"Command not found: '{cmd_parts[0]}'. Please ensure it's in your PATH.")
             return None, 1
         except Exception as e:
-            logging.error(f"An unexpected error occurred while running command '{' '.join(cmd_parts)}': {e}")
+            logger.error(f"An unexpected error occurred while running command '{' '.join(cmd_parts)}': {e}")
             return None, 1
 
     def _find_files(self, directory, extensions, exclude_dirs=None):
         """Helper to find all files with given extensions in a directory, excluding specified subdirectories."""
         if exclude_dirs is None:
             exclude_dirs = []
-    
-        all_exclude_dirs = exclude_dirs + ['website/node_modules']
-        exclude_paths = {os.path.join(self.project_root, d) for d in all_exclude_dirs}
+        
+        # Ensure paths are relative to project_root if they are passed as absolute from os.walk
+        # Or, ensure exclude_dirs are relative paths from the directory being walked.
+        # For simplicity, let's assume exclude_dirs are relative to the directory passed to os.walk
+        # and convert them to absolute paths for comparison.
+        
+        # Convert exclude_dirs to absolute paths for robust comparison
+        abs_exclude_paths = {os.path.abspath(os.path.join(directory, d)) for d in exclude_dirs}
         
         matches = []
         for root, dirs, filenames in os.walk(directory):
-            # Modify dirs in-place to skip the excluded directories.
-            # This now checks against the pre-built set for better performance.
-            dirs[:] = [d for d in dirs if os.path.join(root, d) not in exclude_paths]
+            # Filter out excluded directories from the current level
+            dirs[:] = [d for d in dirs if os.path.abspath(os.path.join(root, d)) not in abs_exclude_paths]
             
             for filename in filenames:
                 if any(filename.endswith(ext) for ext in extensions):
@@ -126,45 +145,38 @@ class SecurityAuditor:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Parse the file content into an AST
             tree = ast.parse(content, filename=file_path)
             
-            # Call various check methods, passing the AST and other relevant data
             self.check_missing_permissions(file_path, tree)
             # Add other AST-based checks here as needed
 
         except FileNotFoundError:
-            logging.error(f"File not found: {file_path}")
+            logger.error(f"File not found: {file_path}")
         except SyntaxError as e:
-            logging.error(f"Syntax error in {file_path}: {e}")
+            logger.error(f"Syntax error in {file_path}: {e}")
         except Exception as e:
-            logging.error(f"Error analyzing {file_path}: {e}")
+            logger.error(f"Error analyzing {file_path}: {e}")
 
-    def run_codeql_scan(source_code_path, output_sarif_path, database_path):
+    def run_codeql_scan(self):
         """
-        Runs a CodeQL scan on the specified source code path.
-    
-        Args:
-            source_code_path (str): The path to the source code to be scanned (e.g., './backend').
-            output_sarif_path (str): The path to save the SARIF results (e.g., 'codeql_audit_results.sarif').
-            database_path (str): The path to store the CodeQL database (e.g., 'codeql_db_python').
-    
-        Returns:
-            bool: True if the CodeQL scan completes successfully, False otherwise.
+        Runs a CodeQL scan on the Python backend.
         """
+        self._print_header("CodeQL Security Scan (Python Backend)")
+        source_code_path = self.backend_dir
+        output_sarif_path = self.codeql_sarif_output_file
+        database_path = self.codeql_database_dir
+
         logger.info(f"Starting CodeQL scan for {source_code_path}...")
-    
+
         # Clean up previous database if it exists
         if os.path.exists(database_path):
             logger.info(f"Removing existing CodeQL database at {database_path}...")
-            try:
-                # Use shutil.rmtree for directory removal if available, or subprocess 'rm -rf'
-                subprocess.run(['rm', '-rf', database_path], check=True, capture_output=True, text=True)
-                logger.info("Existing CodeQL database removed.")
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to remove existing CodeQL database: {e.stderr}")
+            _, return_code = self._run_command(['rm', '-rf', database_path])
+            if return_code != 0:
+                logger.error(f"Failed to remove existing CodeQL database (exit code {return_code}).")
                 return False
-    
+            logger.info("Existing CodeQL database removed.")
+
         # 1. Create CodeQL database
         logger.info(f"Creating CodeQL database at {database_path} for language Python...")
         create_db_command = [
@@ -172,151 +184,136 @@ class SecurityAuditor:
             f"--source-root={source_code_path}",
             "--language=python"
         ]
-        try:
-            # Using shell=True for simpler command execution, but be mindful of security implications
-            # if input comes from untrusted sources. For a local audit script, it's generally acceptable.
-            process = subprocess.run(create_db_command, check=True, capture_output=True, text=True, shell=False)
-            logger.info(f"CodeQL database creation stdout:\n{process.stdout}")
-            logger.info("CodeQL database created successfully.")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to create CodeQL database. Stderr:\n{e.stderr}")
+        _, return_code = self._run_command(create_db_command)
+        if return_code != 0:
+            logger.error(f"Failed to create CodeQL database (exit code {return_code}).")
             return False
-        except FileNotFoundError:
-            logger.error("CodeQL CLI not found. Please ensure 'codeql' is in your system's PATH.")
-            return False
-    
+        logger.info("CodeQL database created successfully.")
+
         # 2. Run CodeQL analysis
         logger.info(f"Running CodeQL analysis on database {database_path}...")
-        # Use standard Python security queries. You can customize this or add more QLS files.
         analyze_command = [
             "codeql", "database", "analyze", database_path,
             "python-security-and-quality.qls", # Standard Python security and quality queries
             "--format=sarif-latest",
             f"--output={output_sarif_path}"
         ]
-        try:
-            process = subprocess.run(analyze_command, check=True, capture_output=True, text=True, shell=False)
-            logger.info(f"CodeQL analysis stdout:\n{process.stdout}")
-            logger.info(f"CodeQL analysis completed. Results saved to {output_sarif_path}")
-            return True
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to run CodeQL analysis. Stderr:\n{e.stderr}")
+        _, return_code = self._run_command(analyze_command)
+        if return_code != 0:
+            logger.error(f"Failed to run CodeQL analysis (exit code {return_code}).")
             return False
-    
-    def process_codeql_results(sarif_file_path):
+        logger.info(f"CodeQL analysis completed. Results saved to {output_sarif_path}")
+        self.process_codeql_results(output_sarif_path) # Process results immediately
+        return True
+        
+    def process_codeql_results(self, sarif_file_path):
         """
-        Processes CodeQL SARIF results and logs relevant findings.
-    
-        Args:
-            sarif_file_path (str): The path to the SARIF results file.
+        Processes CodeQL SARIF results and adds findings to the auditor's list.
         """
         if not os.path.exists(sarif_file_path):
             logger.warning(f"CodeQL SARIF file not found: {sarif_file_path}")
             return
-    
+
         logger.info(f"Processing CodeQL results from {sarif_file_path}...")
         try:
-            with open(sarif_file_path, 'r') as f:
+            with open(sarif_file_path, 'r', encoding='utf-8') as f:
                 sarif_data = json.load(f)
-    
+
+            findings_count = 0
             if "runs" in sarif_data:
                 for run in sarif_data["runs"]:
                     if "results" in run:
-                        if not run["results"]:
-                            logger.info("No findings reported by CodeQL for this run.")
                         for result in run["results"]:
+                            findings_count += 1
                             rule_id = result.get("ruleId", "N/A")
                             message = result["message"]["text"]
                             location = "N/A"
+                            file_path = "N/A"
+                            line_number = "N/A"
+
                             if "locations" in result and result["locations"]:
                                 physical_location = result["locations"][0].get("physicalLocation")
                                 if physical_location:
                                     artifact_location = physical_location.get("artifactLocation")
                                     region = physical_location.get("region")
                                     if artifact_location and "uri" in artifact_location:
-                                        # Convert file URI to a more readable path if necessary
-                                        location = artifact_location["uri"].replace("file://", "")
+                                        file_path = artifact_location["uri"].replace("file://", "")
                                     if region and "startLine" in region:
-                                        location += f":{region['startLine']}"
-                                    if "startColumn" in region:
-                                        location += f":{region['startColumn']}"
-    
-                            severity = result.get("level", "note") # 'error', 'warning', 'note'
-                            logger.info(f"CodeQL Finding ({severity.upper()}): Rule={rule_id}, Message='{message}', Location={location}")
-                    else:
-                        logger.info("No results array found in CodeQL SARIF run.")
-            else:
-                logger.info("No 'runs' array found in CodeQL SARIF data.")
-    
+                                        line_number = region['startLine']
+
+                            severity_map = {
+                                'error': 'CRITICAL', 'warning': 'HIGH', 'note': 'MEDIUM' # Map CodeQL levels to your severity
+                            }
+                            severity = severity_map.get(result.get("level", "note"), 'UNKNOWN')
+                            
+                            self.add_finding(
+                                severity=severity,
+                                category="Static Analysis (CodeQL)",
+                                title=f"CodeQL: {rule_id}",
+                                description=message,
+                                file_path=file_path,
+                                line_number=line_number,
+                                recommendation=f"Review CodeQL rule documentation for '{rule_id}'."
+                            )
+            if findings_count == 0:
+                logger.info("No findings reported by CodeQL.")
+
         except json.JSONDecodeError:
             logger.error(f"Error decoding JSON from CodeQL SARIF file: {sarif_file_path}. Is it a valid SARIF file?")
         except Exception as e:
             logger.error(f"An unexpected error occurred while processing CodeQL results: {e}")
-    
 
+    def run_sonarqube_scan(self):
+        """
+        Runs a SonarQube scan on the specified project directory.
+        """
+        self._print_header("SonarQube Analysis")
+        
+        # Sonar Scanner command construction
+        command = ["sonar-scanner"]
 
+        # Add mandatory properties
+        command.append(f"-Dsonar.projectKey={self.sonar_project_key}")
+        command.append(f"-Dsonar.sources={self.project_root}") # Scan entire project
+        command.append(f"-Dsonar.host.url={self.sonar_host_url}")
 
-def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_url="http://localhost:9000", token=None):
-    """
-    Runs a SonarQube scan on the specified project directory.
+        # Add optional properties
+        if self.sonar_organization:
+            command.append(f"-Dsonar.organization={self.sonar_organization}")
+        if self.sonar_token:
+            command.append(f"-Dsonar.token={self.sonar_token}")
+        else:
+            logger.warning("SONAR_TOKEN environment variable not set. SonarQube scan might fail if authentication is required.")
 
-    Args:
-        project_base_dir (str): The base directory of the project to scan.
-        project_key (str): The SonarQube project key.
-        organization (str, optional): The SonarQube organization key (if using SonarCloud).
-        sonar_url (str): The URL of your SonarQube server.
-        token (str, optional): Your SonarQube authentication token.
+        logger.info(f"Executing SonarQube command: {' '.join(command)}")
 
-    Returns:
-        bool: True if the scan completes successfully, False otherwise.
-    """
-    logger.info(f"Starting SonarQube scan for project {project_key} in {project_base_dir}...")
+        # SonarQube scanner often prints to stderr for progress,
+        # so we let it print directly to the console/log file for better visibility.
+        # We only care about the return code for success/failure.
+        _, return_code = self._run_command(command, stdout_target=sys.stdout, stderr_target=sys.stderr)
+        
+        if return_code == 0:
+            logger.info("SonarQube scan completed successfully. Results are available on your SonarQube dashboard.")
+            return True
+        else:
+            logger.error(f"SonarQube scan failed with exit code {return_code}. Please ensure SonarQube server is running, project key is correct, and 'sonar-scanner' is in your PATH.")
+            self.add_finding(
+                severity='CRITICAL',
+                category='Tool Execution Failure',
+                title='SonarQube Scan Failed',
+                description=f"SonarQube scan failed with exit code {return_code}. Check the detailed logs for reasons (e.g., server connectivity, invalid token, scanner not found).",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Investigate SonarQube server status, network connectivity, and scanner configuration."
+            )
+            return False
 
-    # Sonar Scanner command construction
-    command = ["sonar-scanner"]
-
-    # Add mandatory properties
-    command.append(f"-Dsonar.projectKey={project_key}")
-    command.append(f"-Dsonar.sources={project_base_dir}")
-    command.append(f"-Dsonar.host.url={sonar_url}")
-
-    # Add optional properties
-    if organization:
-        command.append(f"-Dsonar.organization={organization}")
-    if token:
-        command.append(f"-Dsonar.token={token}")
-
-    logger.info(f"Executing SonarQube command: {' '.join(command)}")
-
-    try:
-        # SonarQube scanner often prints to stderr for progress, so capture_output might hide useful info
-        # It's better to let it print to console and just check the return code.
-        process = subprocess.run(command, check=True, text=True, shell=False)
-        logger.info("SonarQube scan completed successfully.")
-        return True
-    except subprocess.CalledProcessError as e:
-        logger.error(f"SonarQube scan failed. Error:\n{e.stderr}\nOutput:\n{e.stdout}")
-        logger.error("Please ensure SonarQube server is running and 'sonar-scanner' is in your PATH.")
-        return False
-    except FileNotFoundError:
-        logger.error("SonarQube Scanner CLI ('sonar-scanner') not found. Please ensure it is installed and in your system's PATH.")
-        return False
-
-
-    def run_semgrep_scan(target_path, output_json_path, config_path="auto"):
+    def run_semgrep_scan(self, target_path, output_json_path, config_path):
         """
         Runs a Semgrep scan on the specified path with a given configuration.
-    
-        Args:
-            target_path (str): The file or directory to scan.
-            output_json_path (str): The path to save the JSON results.
-            config_path (str): The Semgrep configuration (e.g., 'p/python', 'p/vuejs', or a local path to rules).
-    
-        Returns:
-            bool: True if the scan completes successfully, False otherwise.
         """
-        logger.info(f"Starting Semgrep scan for {target_path} with config '{config_path}'...")
-    
+        self._print_header(f"Semgrep Security Scan for {os.path.basename(target_path)}")
+        
         command = [
             "semgrep",
             f"--config={config_path}",
@@ -324,68 +321,87 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
             "--json",
             target_path
         ]
-    
-        try:
-            # Semgrep exits with 0 even if findings are present, only non-zero on error.
-            process = subprocess.run(command, check=False, capture_output=True, text=True, shell=False)
-    
-            if process.returncode != 0:
-                logger.error(f"Semgrep scan failed with exit code {process.returncode}. Stderr:\n{process.stderr}")
-                return False
-    
-            logger.info(f"Semgrep scan completed. Results saved to {output_json_path}")
-            # Log stdout/stderr for debugging even on success, as warnings might be there
-            if process.stdout:
-                logger.debug(f"Semgrep stdout:\n{process.stdout}")
-            if process.stderr:
-                logger.debug(f"Semgrep stderr:\n{process.stderr}")
-    
-            return True
-        except FileNotFoundError:
-            logger.error("Semgrep CLI not found. Please ensure 'semgrep' is installed and in your system's PATH.")
+
+        output_str, return_code = self._run_command(command)
+        
+        if output_str is None:
+            logger.error(f"Semgrep scan for {target_path} could not be run or produced no output.")
+            self.add_finding(
+                severity='CRITICAL',
+                category='Tool Execution Failure',
+                title=f'Semgrep Scan Failed for {os.path.basename(target_path)}',
+                description=f"Semgrep command failed to execute or timed out. Check if Semgrep CLI is installed and in PATH.",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Ensure Semgrep CLI is installed and accessible."
+            )
             return False
-        except Exception as e:
-            logger.error(f"An unexpected error occurred during Semgrep scan: {e}")
+
+        if return_code != 0:
+            logger.error(f"Semgrep scan for {target_path} failed with exit code {return_code}.")
+            self.add_finding(
+                severity='CRITICAL',
+                category='Tool Execution Failure',
+                title=f'Semgrep Scan Failed for {os.path.basename(target_path)}',
+                description=f"Semgrep exited with non-zero code {return_code}. This might indicate a configuration issue or a critical error during scan.",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Review Semgrep configuration and logs for errors."
+            )
             return False
-    
-    def process_semgrep_results(json_file_path):
+        
+        logger.info(f"Semgrep scan completed. Results saved to {output_json_path}")
+        self.process_semgrep_results(output_json_path)
+        return True
+        
+    def process_semgrep_results(self, json_file_path):
         """
-        Processes Semgrep JSON results and logs relevant findings.
-    
-        Args:
-            json_file_path (str): The path to the Semgrep JSON results file.
+        Processes Semgrep JSON results and adds findings to the auditor's list.
         """
         if not os.path.exists(json_file_path):
             logger.warning(f"Semgrep JSON file not found: {json_file_path}")
             return
-    
+
         logger.info(f"Processing Semgrep results from {json_file_path}...")
         try:
-            with open(json_file_path, 'r') as f:
+            with open(json_file_path, 'r', encoding='utf-8') as f:
                 semgrep_data = json.load(f)
-    
+
+            findings_count = 0
             if "results" in semgrep_data:
-                if not semgrep_data["results"]:
-                    logger.info("No findings reported by Semgrep for this run.")
                 for result in semgrep_data["results"]:
+                    findings_count += 1
                     check_id = result.get("check_id", "N/A")
                     message = result.get("extra", {}).get("message", "No message provided.")
                     path = result.get("path", "N/A")
                     start_line = result.get("start", {}).get("line", "N/A")
-                    severity = result.get("extra", {}).get("severity", "UNKNOWN")
-    
-                    location = f"{path}:{start_line}"
-    
-                    logger.info(f"Semgrep Finding ({severity}): ID={check_id}, Message='{message}', Location={location}")
-            else:
-                logger.info("No 'results' array found in Semgrep JSON data.")
-    
+                    severity_raw = result.get("extra", {}).get("severity", "UNKNOWN").upper()
+                    
+                    # Map Semgrep severity to your own severity levels
+                    severity_map = {
+                        'ERROR': 'CRITICAL',
+                        'WARNING': 'HIGH',
+                        'INFO': 'MEDIUM',
+                        'UNKNOWN': 'UNKNOWN'
+                    }
+                    severity = severity_map.get(severity_raw, 'UNKNOWN')
+
+                    self.add_finding(
+                        severity=severity,
+                        category="Static Analysis (Semgrep)",
+                        title=f"Semgrep: {check_id}",
+                        description=message,
+                        file_path=path,
+                        line_number=start_line,
+                        recommendation=f"Review Semgrep rule documentation for '{check_id}'."
+                    )
+            if findings_count == 0:
+                logger.info("No findings reported by Semgrep.")
+
         except json.JSONDecodeError:
             logger.error(f"Error decoding JSON from Semgrep file: {json_file_path}. Is it a valid JSON file?")
         except Exception as e:
             logger.error(f"An unexpected error occurred while processing Semgrep results: {e}")
-
-
     
     def check_missing_permissions(self, file_path, tree):
         """
@@ -430,15 +446,13 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                     # code_snippet can be added here if 'content' is passed to this method
                 )
 
-    # --- Start of merged code from backend_code_scanner.py ---
-
     def run_code_integrity_scan(self):
         """Runs syntax checks and detects circular imports."""
         self._print_header("Backend Code Integrity (Syntax & Circular Imports)")
 
         backend_files = self._find_files(self.backend_dir, ['.py'], exclude_dirs=['website/node_modules'])
         if not backend_files:
-            logging.warning("No Python files found in backend to scan for integrity.")
+            logger.warning("No Python files found in backend to scan for integrity.")
             return
 
         # 1. Syntax Check
@@ -457,7 +471,7 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                     recommendation="Fix the syntax error to allow the application to run."
                 )
         if not syntax_errors_found:
-            logging.info("Syntax check passed for all backend files.")
+            logger.info("Syntax check passed for all backend files.")
 
         # 2. Circular Import Check
         dependency_graph = self._build_dependency_graph(backend_files)
@@ -477,7 +491,7 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                     recommendation="Refactor the code to break the import cycle. This often involves moving models, creating service locators, or using local imports within functions."
                 )
         else:
-            logging.info("No circular imports detected.")
+            logger.info("No circular imports detected.")
 
     def _check_syntax(self, file_path):
         """Vérifie la syntaxe d'un fichier Python en utilisant AST."""
@@ -503,11 +517,14 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                     visitor.visit(tree)
                     
                     module_name = visitor.current_module_name
-                    internal_deps = {dep for dep in visitor.dependencies if dep.startswith(os.path.basename(self.backend_dir))}
+                    # Filter for internal dependencies within the backend directory
+                    # This assumes backend_dir is like 'backend' and module names start with 'backend.'
+                    backend_base_module = os.path.basename(self.backend_dir)
+                    internal_deps = {dep for dep in visitor.dependencies if dep.startswith(backend_base_module)}
                     if internal_deps:
                         dependency_graph[module_name].update(internal_deps)
             except Exception as e:
-                logging.error(f"Could not analyze dependencies for {file_path}: {e}")
+                logger.error(f"Could not analyze dependencies for {file_path}: {e}")
         return dependency_graph
 
     def _find_circular_imports(self, dependency_graph):
@@ -526,10 +543,11 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                     try:
                         cycle_start_index = list(path).index(neighbour)
                         cycle = list(path)[cycle_start_index:] + [neighbour]
-                        sorted_cycle = tuple(sorted(cycle[:-1]))
+                        sorted_cycle = tuple(sorted(cycle[:-1])) # Use sorted tuple to avoid duplicate cycles
                         if sorted_cycle not in [tuple(sorted(c[:-1])) for c in cycles]:
                             cycles.append(cycle)
                     except ValueError:
+                        # Should not happen if neighbour in path, but as a fallback
                         cycles.append(list(path) + [neighbour])
                 visit(neighbour)
             path.remove(node)
@@ -546,8 +564,10 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
             self.current_module_name = self._path_to_module(current_module_path)
 
         def _path_to_module(self, path):
-            path = os.path.splitext(path)[0]
-            return path.replace(os.path.sep, '.')
+            # Convert absolute path to relative path from project root, then to module name
+            relative_path = os.path.relpath(path, start=os.getcwd()) # Get path relative to current working directory
+            path_parts = os.path.splitext(relative_path)[0].split(os.path.sep)
+            return '.'.join(path_parts)
             
         def visit_Import(self, node):
             for alias in node.names:
@@ -557,53 +577,96 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
         def visit_ImportFrom(self, node):
             module_name = node.module
             if node.level > 0:
+                # Handle relative imports correctly
                 parts = self.current_module_name.split('.')
-                base_path = '.'.join(parts[:-(node.level)])
+                base_path_parts = parts[:-(node.level)]
                 if module_name:
-                    module_name = f"{base_path}.{module_name}"
+                    module_name = '.'.join(base_path_parts + [module_name])
                 else:
-                    module_name = base_path
+                    module_name = '.'.join(base_path_parts)
             if module_name:
                 self.dependencies.add(module_name)
             self.generic_visit(node)
-    # --- End of merged code from backend_code_scanner.py ---
 
     def run_safety_scan(self):
         """Runs Safety to check for backend dependency vulnerabilities."""
         self._print_header("Backend Dependency Scan (Safety)")
-        logging.info("This scan may take a moment as it might need to fetch the latest vulnerability database...")
+        if self.config.get('skip_dependency_check', False):
+            logger.info("Skipping Safety scan as per configuration.")
+            return
+
+        logger.info("This scan may take a moment as it might need to fetch the latest vulnerability database...")
         req_file = os.path.join(self.backend_dir, 'requirements.txt')
         if not os.path.exists(req_file):
-            logging.warning(f"Could not find requirements.txt at '{self.backend_dir}'. Skipping Safety scan.")
+            logger.warning(f"Could not find requirements.txt at '{self.backend_dir}'. Skipping Safety scan.")
             return
 
         command = [sys.executable, '-m', 'safety', 'scan', f'--file={req_file}', '--json']
-        output, _ = self._run_command(command)
-        if not output:
-            logging.error("Safety command could not be run or produced no output.")
+        output, return_code = self._run_command(command)
+        
+        if output is None: # Command execution failed or timed out
+            self.add_finding(
+                severity="CRITICAL",
+                category="Tool Execution Failure",
+                title="Safety Scan Failed",
+                description="Safety command could not be run or produced no output. Check if 'safety' is installed.",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Ensure 'safety' is installed (`pip install safety`) and in your PATH."
+            )
             return
 
         try:
             report = json.loads(output)
-            for vuln_id, vuln_data in report.get('vulnerabilities', {}).items():
-                self.add_finding(
-                    severity="HIGH",
-                    category="Dependency Vulnerability (Safety)",
-                    title=f"Vulnerable package: {vuln_data.get('package_name')} ({vuln_data.get('analyzed_version')})",
-                    description=f"ID: {vuln_id}. {vuln_data.get('advisory')}",
-                    file_path=req_file,
-                    line_number=1,
-                    recommendation=f"Upgrade to a version > {vuln_data.get('vulnerable_version')}. Fixed in: {vuln_data.get('fixed_versions')}",
-                    cwe_id=vuln_id
-                )
-            logging.info(f"Safety scan found {len(report.get('vulnerabilities', {}))} vulnerabilities.")
+            vulnerabilities_found = 0
+            # Safety's JSON output format can vary; handle both list and dict of vulnerabilities
+            if isinstance(report, dict) and 'vulnerabilities' in report:
+                for vuln_id, vuln_data in report.get('vulnerabilities', {}).items():
+                    vulnerabilities_found += 1
+                    self.add_finding(
+                        severity="HIGH",
+                        category="Dependency Vulnerability (Safety)",
+                        title=f"Vulnerable package: {vuln_data.get('package_name')} ({vuln_data.get('analyzed_version')})",
+                        description=f"ID: {vuln_id}. {vuln_data.get('advisory')}",
+                        file_path=req_file,
+                        line_number=1,
+                        recommendation=f"Upgrade to a version > {vuln_data.get('vulnerable_version')}. Fixed in: {vuln_data.get('fixed_versions')}",
+                        cwe_id=vuln_id
+                    )
+            elif isinstance(report, list): # Older Safety versions or specific output
+                for vuln_data in report:
+                    vulnerabilities_found += 1
+                    self.add_finding(
+                        severity="HIGH",
+                        category="Dependency Vulnerability (Safety)",
+                        title=f"Vulnerable package: {vuln_data.get('package_name')} ({vuln_data.get('found_version')})",
+                        description=f"Advisory: {vuln_data.get('advisory')}",
+                        file_path=req_file,
+                        line_number=1,
+                        recommendation=f"Upgrade to a fixed version. Fixed in: {', '.join(vuln_data.get('fixed_versions', ['N/A']))}",
+                        cwe_id=vuln_data.get('vulnerability_id', 'N/A')
+                    )
+
+            if vulnerabilities_found > 0:
+                logger.info(f"Safety scan found {vulnerabilities_found} vulnerabilities.")
+            else:
+                logger.info("Safety scan completed with no vulnerabilities found.")
         except json.JSONDecodeError as e:
-            logging.error(f"Could not decode Safety JSON output: {e}")
+            logger.error(f"Could not decode Safety JSON output: {e}. Raw output (first 500 chars):\n{output[:500]}...")
+            self.add_finding(
+                severity="CRITICAL",
+                category="Tool Output Parsing Error",
+                title="Safety Output Parsing Failed",
+                description=f"Safety scan ran, but its output was not valid JSON: {e}",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Check Safety CLI version and output format."
+            )
 
     def run_pip_audit(self):
         """Runs pip-audit to check for backend dependency vulnerabilities using a temporary file for the report."""
-        if self.config.skip_dependency_check:
-            logging.info("Skipping pip-audit as per configuration.")
+        if self.config.get('skip_dependency_check', False):
+            logger.info("Skipping pip-audit as per configuration.")
             return
             
         self._print_header("Backend Dependency Scan (pip-audit)")
@@ -611,16 +674,13 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
         if not os.path.exists(req_file):
             req_file = os.path.join(self.project_root, 'requirements.txt')
             if not os.path.exists(req_file):
-                logging.warning(f"Could not find requirements.txt at '{self.backend_dir}' or '{self.project_root}'. Skipping pip-audit.")
+                logger.warning(f"Could not find requirements.txt at '{self.backend_dir}' or '{self.project_root}'. Skipping pip-audit.")
                 return
-    
-        # --- CHANGE START ---
-        # Use a temporary file for reliable JSON output.
+        
         with tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8', suffix=".json") as tmp_file:
             report_filename = tmp_file.name
-    
+        
         try:
-            # Command to write the JSON report directly to a file.
             command = [
                 sys.executable, '-m', 'pip_audit',
                 '-r', req_file,
@@ -628,38 +688,57 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                 '-o', report_filename
             ]
             
-            self._run_command(command)
+            _, return_code = self._run_command(command) # Capture return code
             
-            # Read the report from the temporary file.
+            if not os.path.exists(report_filename) or os.path.getsize(report_filename) == 0:
+                logger.error(f"pip-audit did not generate an output file at {report_filename} or it was empty.")
+                self.add_finding(
+                    severity="CRITICAL",
+                    category="Tool Execution Failure",
+                    title="pip-audit Scan Failed",
+                    description="pip-audit command failed to produce a valid report. Check if 'pip-audit' is installed.",
+                    file_path="N/A",
+                    line_number=0,
+                    recommendation="Ensure 'pip-audit' is installed (`pip install pip-audit`) and in your PATH."
+                )
+                return
+
             with open(report_filename, 'r', encoding='utf-8') as f:
                 try:
                     report = json.load(f)
                 except json.JSONDecodeError:
-                    logging.error(f"pip-audit ran, but its output at {report_filename} was not valid JSON. Please inspect the file.")
+                    logger.error(f"pip-audit ran, but its output at {report_filename} was not valid JSON. Please inspect the file.")
+                    self.add_finding(
+                        severity="CRITICAL",
+                        category="Tool Output Parsing Error",
+                        title="pip-audit Output Parsing Failed",
+                        description=f"pip-audit scan ran, but its output was not valid JSON: {e}",
+                        file_path="N/A",
+                        line_number=0,
+                        recommendation="Check pip-audit CLI version and output format."
+                    )
                     return
-    
+        
             if 'vulnerabilities' in report and report['vulnerabilities']:
-                logging.info(f"pip-audit found {len(report['vulnerabilities'])} vulnerabilities.")
-                # Read requirements file to find line numbers.
+                logger.info(f"pip-audit found {len(report['vulnerabilities'])} vulnerabilities.")
                 with open(req_file, 'r', encoding='utf-8') as f_req:
                     req_lines = f_req.readlines()
-    
+        
                 for vuln_data in report['vulnerabilities']:
                     package_name = vuln_data.get('name', 'N/A')
                     package_version = vuln_data.get('version', 'N/A')
                     vuln_id = vuln_data.get('id', 'N/A')
                     description = vuln_data.get('details', 'No description provided.')
                     fixed_versions = ', '.join(vuln_data.get('fix_versions', ['N/A']))
-    
-                    # Find the line number for the vulnerable package.
+        
                     line_number = "N/A"
                     for i, line in enumerate(req_lines):
                         if package_name.lower() in line.lower():
                             line_number = i + 1
                             break
-    
+        
                     self.add_finding(
-                        severity="HIGH", # All dependency issues are treated as high priority.
+                        severity="HIGH",
                         category="Dependency Vulnerability (pip-audit)",
                         title=f"Vulnerable package: {package_name}=={package_version}",
                         description=f"Vulnerability ID: {vuln_id}. Details: {description}",
@@ -668,23 +747,22 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                         recommendation=f"Upgrade to a fixed version, e.g.,: {fixed_versions}",
                     )
             else:
-                logging.info("pip-audit completed with no vulnerabilities found.")
-    
+                logger.info("pip-audit completed with no vulnerabilities found.")
+        
         finally:
-            # Clean up the temporary file.
             if os.path.exists(report_filename):
                 os.remove(report_filename)
                 
     def run_npm_audit(self):
         """Runs npm audit to check for frontend dependency vulnerabilities."""
-        if self.config.skip_dependency_check:
-            logging.info("Skipping npm audit as per configuration.")
+        if self.config.get('skip_dependency_check', False):
+            logger.info("Skipping npm audit as per configuration.")
             return
 
         self._print_header("Frontend Dependency Scan (npm audit)")
         
         if not os.path.isdir(self.frontend_dir):
-            logging.warning(f"Frontend directory '{self.frontend_dir}' not found. Skipping npm audit.")
+            logger.warning(f"Frontend directory '{self.frontend_dir}' not found. Skipping npm audit.")
             return
 
         npm_cmd = ['npm', 'audit', '--json']
@@ -692,15 +770,25 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
         output_str, return_code = self._run_command(npm_cmd, cwd=self.frontend_dir)
         
         if output_str is None:
-            logging.error("npm audit command could not be run or produced no output.")
+            self.add_finding(
+                severity="CRITICAL",
+                category="Tool Execution Failure",
+                title="npm audit Scan Failed",
+                description="npm audit command could not be run or produced no output. Check if 'npm' is installed.",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Ensure 'npm' is installed and accessible in your PATH."
+            )
             return
 
         try:
             report = json.loads(output_str)
 
             vulnerabilities_found = 0
-            if 'advisories' in report:
+            # npm audit output format can vary, handle both 'advisories' and 'vulnerabilities' top-level keys
+            if 'advisories' in report: # Newer npm audit output
                 for advisory_id, advisory_data in report['advisories'].items():
+                    vulnerabilities_found += 1
                     self.add_finding(
                         severity=advisory_data.get('severity', 'UNKNOWN').upper(),
                         category="Dependency Vulnerability (npm)",
@@ -711,11 +799,11 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                         recommendation=f"Upgrade: {advisory_data.get('fixString', 'Manual fix needed.')}",
                         cwe_id=advisory_id
                     )
-                    vulnerabilities_found += 1
-            elif 'vulnerabilities' in report and report['vulnerabilities']:
+            elif 'vulnerabilities' in report and report['vulnerabilities']: # Older npm audit output
                 for pkg_name, pkg_data in report['vulnerabilities'].items():
                     for vuln_info in pkg_data.get('via', []):
                         if isinstance(vuln_info, dict):
+                            vulnerabilities_found += 1
                             self.add_finding(
                                 severity=vuln_info.get('severity', 'UNKNOWN').upper(),
                                 category="Dependency Vulnerability (npm)",
@@ -726,84 +814,115 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                                 recommendation=f"Affected versions: {vuln_info.get('range', 'N/A')}. Fix: npm audit fix",
                                 cwe_id=vuln_info.get('id', 'N/A')
                             )
-                            vulnerabilities_found += 1
 
             if vulnerabilities_found > 0:
-                logging.info(f"npm audit found {vulnerabilities_found} vulnerabilities.")
+                logger.info(f"npm audit found {vulnerabilities_found} vulnerabilities.")
             else:
-                logging.info("npm audit completed with no vulnerabilities found.")
+                logger.info("npm audit completed with no vulnerabilities found.")
 
             if return_code != 0 and vulnerabilities_found == 0:
-                logging.warning(f"npm audit exited with non-zero code ({return_code}) but reported no vulnerabilities in its JSON output or parsing failed. Check stderr logs for details.")
+                logger.warning(f"npm audit exited with non-zero code ({return_code}) but reported no vulnerabilities in its JSON output or parsing failed. Check stderr logs for details.")
 
         except json.JSONDecodeError as e:
-            logging.error(f"Could not decode npm audit JSON output. Error: {e}")
-            logging.error(f"Raw npm audit output that failed to decode (first 500 chars):\n{output_str[:500]}...")
+            logger.error(f"Could not decode npm audit JSON output. Error: {e}")
+            logger.error(f"Raw npm audit output that failed to decode (first 500 chars):\n{output_str[:500]}...")
+            self.add_finding(
+                severity="CRITICAL",
+                category="Tool Output Parsing Error",
+                title="npm audit Output Parsing Failed",
+                description=f"npm audit scan ran, but its output was not valid JSON: {e}",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Check npm audit CLI version and output format."
+            )
         except KeyError as e:
-            logging.error(f"Missing expected key in npm audit JSON output: {e}. Ensure npm audit JSON format matches expectations.")
-            logging.error(f"Problematic JSON (full output, if short enough): {output_str}")
+            logger.error(f"Missing expected key in npm audit JSON output: {e}. Ensure npm audit JSON format matches expectations.")
+            logger.error(f"Problematic JSON (full output, if short enough): {output_str}")
+            self.add_finding(
+                severity="CRITICAL",
+                category="Tool Output Parsing Error",
+                title="npm audit Output Structure Error",
+                description=f"npm audit output structure was unexpected: Missing key '{e}'.",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Check npm audit CLI version and output format."
+            )
 
     def run_bandit_scan(self):
         """Runs Bandit static analysis on the backend directory, writing the report to a file for stable parsing."""
-        if self.config.skip_static_analysis:
-            logging.info("Skipping Bandit scan as per configuration.")
+        if self.config.get('skip_static_analysis', False):
+            logger.info("Skipping Bandit scan as per configuration.")
             return
-    
+        
         self._print_header("Backend Security Scan (Bandit)")
         if not os.path.isdir(self.backend_dir):
-            logging.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Bandit scan.")
+            logger.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Bandit scan.")
             return
-    
-        # --- CHANGE START ---
-        # Use a temporary file for reliable JSON output and exclude the 'tests' directory.
+        
         with tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8', suffix=".json") as tmp_file:
             report_filename = tmp_file.name
-    
+        
         try:
-            # Define the Bandit command with the output file and exclusions.
             bandit_cmd = [
                 sys.executable, '-m', 'bandit',
                 '-r', self.backend_dir,
                 '-f', 'json',
-                '-o', report_filename, # Write JSON output directly to a file.
-                '-x', 'tests'  # Exclude the tests directory.
+                '-o', report_filename,
+                '-x', 'tests'
             ]
-    
-            # Run the command. We don't need to capture stdout/stderr as output goes to the file.
-            self._run_command(bandit_cmd)
-    
-            # Read the JSON report from the file.
+            
+            _, return_code = self._run_command(bandit_cmd)
+            
+            if not os.path.exists(report_filename) or os.path.getsize(report_filename) == 0:
+                logger.error(f"Bandit did not generate an output file at {report_filename} or it was empty.")
+                self.add_finding(
+                    severity="CRITICAL",
+                    category="Tool Execution Failure",
+                    title="Bandit Scan Failed",
+                    description="Bandit command failed to produce a valid report. Check if 'bandit' is installed.",
+                    file_path="N/A",
+                    line_number=0,
+                    recommendation="Ensure 'bandit' is installed (`pip install bandit`) and in your PATH."
+                )
+                return
+
             with open(report_filename, 'r', encoding='utf-8') as f:
                 try:
                     report = json.load(f)
                 except json.JSONDecodeError:
-                    logging.error(f"Bandit ran, but its output at {report_filename} was not valid JSON. Please inspect the file.")
-                    return # Can't proceed without a valid report
-    
-            # Process the results from the report.
+                    logger.error(f"Bandit ran, but its output at {report_filename} was not valid JSON. Please inspect the file.")
+                    self.add_finding(
+                        severity="CRITICAL",
+                        category="Tool Output Parsing Error",
+                        title="Bandit Output Parsing Failed",
+                        description=f"Bandit scan ran, but its output was not valid JSON: {e}",
+                        file_path="N/A",
+                        line_number=0,
+                        recommendation="Check Bandit CLI version and output format."
+                    )
+                    return
+        
             if 'results' in report and report['results']:
-                logging.info(f"Bandit scan found {len(report['results'])} issues.")
+                logger.info(f"Bandit scan found {len(report['results'])} issues.")
                 for issue in report['results']:
-                    # Format the finding details from the issue.
                     test_name = issue.get('test_name', 'N/A')
                     confidence = issue.get('issue_confidence', 'UNKNOWN').upper()
                     more_info_url = issue.get('more_info', 'N/A')
                     line_number = issue.get('line_number', 'N/A')
-    
+        
                     description = (
                         f"Bandit Test: {test_name} ({issue.get('test_id', 'N/A')})\n"
                         f"Confidence: {confidence}\n"
                         f"This was flagged by Bandit, a static analysis tool for finding common security issues."
                     )
                     recommendation = f"Review the issue and guidance at: {more_info_url}"
-    
-                    # Format the code snippet with line numbers.
+        
                     code_lines = issue.get('code', '').split('\n')
                     start_line = issue.get('line_range', [line_number])[0]
                     formatted_code = "\n".join(
                         f"{start_line + i: >4}: {line}" for i, line in enumerate(code_lines)
                     )
-    
+        
                     self.add_finding(
                         severity=issue.get('issue_severity', 'UNKNOWN').upper(),
                         category="Static Analysis (Bandit)",
@@ -815,21 +934,23 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                         recommendation=recommendation
                     )
             else:
-                logging.info("Bandit scan completed with no security issues found.")
-    
+                logger.info("Bandit scan completed with no security issues found.")
+        
         finally:
-            # Clean up the temporary file.
             if os.path.exists(report_filename):
                 os.remove(report_filename)
                 
     def run_pylint_scan(self):
         """Runs Pylint static analysis on the backend directory and parses the JSON output."""
-        self._print_header("Backend Code Linting (Pylint)")
-        if not os.path.isdir(self.backend_dir):
-            logging.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Pylint scan.")
+        if self.config.get('skip_static_analysis', False):
+            logger.info("Skipping Pylint scan as per configuration.")
             return
 
-        # Using a temporary file for JSON output is more robust
+        self._print_header("Backend Code Linting (Pylint)")
+        if not os.path.isdir(self.backend_dir):
+            logger.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Pylint scan.")
+            return
+
         with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".json", encoding='utf-8') as tmp_file:
             pylint_output_file = tmp_file.name
 
@@ -839,13 +960,21 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
             '--output-format=json'
         ]
 
-        # Run Pylint and direct its JSON output to the temp file
-        # We capture stderr to see any Pylint configuration errors
         _, return_code = self._run_command(pylint_cmd, stdout_target=open(pylint_output_file, 'w'), stderr_target=subprocess.PIPE)
 
         if not os.path.exists(pylint_output_file) or os.path.getsize(pylint_output_file) == 0:
-            logging.error(f"Pylint did not generate an output file at {pylint_output_file}. Pylint might have crashed. Check stderr logs.")
-            os.remove(pylint_output_file)
+            logger.error(f"Pylint did not generate an output file at {pylint_output_file} or it was empty. Pylint might have crashed. Check stderr logs.")
+            self.add_finding(
+                severity="CRITICAL",
+                category="Tool Execution Failure",
+                title="Pylint Scan Failed",
+                description="Pylint command failed to produce a valid report. Check if 'pylint' is installed.",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Ensure 'pylint' is installed (`pip install pylint`) and in your PATH."
+            )
+            if os.path.exists(pylint_output_file): # Clean up even if empty
+                os.remove(pylint_output_file)
             return
 
         try:
@@ -853,10 +982,9 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                 report = json.load(f)
 
             if not report:
-                logging.info("Pylint scan completed with no issues found.")
+                logger.info("Pylint scan completed with no issues found.")
                 return
 
-            # Map Pylint message types to our severity levels
             severity_map = {
                 'fatal': 'CRITICAL', 'error': 'HIGH', 'warning': 'MEDIUM',
                 'convention': 'LOW', 'refactor': 'LOW',
@@ -873,20 +1001,33 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                     code_snippet=f"Module: {issue.get('module')}, Object: {issue.get('obj')}",
                     recommendation=f"Review Pylint rule {issue.get('message-id')} for best practices."
                 )
-            logging.info(f"Pylint scan found {len(report)} issues.")
+            logger.info(f"Pylint scan found {len(report)} issues.")
         except (json.JSONDecodeError, Exception) as e:
-            logging.error(f"An unexpected error occurred while parsing Pylint report from {pylint_output_file}: {e}")
+            logger.error(f"An unexpected error occurred while parsing Pylint report from {pylint_output_file}: {e}")
+            self.add_finding(
+                severity="CRITICAL",
+                category="Tool Output Parsing Error",
+                title="Pylint Output Parsing Failed",
+                description=f"Pylint scan ran, but its output was not valid JSON or unexpected: {e}",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Check Pylint CLI version and output format."
+            )
         finally:
-            os.remove(pylint_output_file)
+            if os.path.exists(pylint_output_file):
+                os.remove(pylint_output_file)
 
     def run_mypy_scan(self):
         """Runs Mypy for static type checking and parses the output."""
-        self._print_header("Backend Static Type Checking (Mypy)")
-        if not os.path.isdir(self.backend_dir):
-            logging.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Mypy scan.")
+        if self.config.get('skip_static_analysis', False):
+            logger.info("Skipping Mypy scan as per configuration.")
             return
 
-        # Mypy command. --ignore-missing-imports is useful to avoid errors from libs without type stubs.
+        self._print_header("Backend Static Type Checking (Mypy)")
+        if not os.path.isdir(self.backend_dir):
+            logger.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Mypy scan.")
+            return
+
         mypy_cmd = [
             sys.executable, '-m', 'mypy',
             self.backend_dir,
@@ -895,12 +1036,10 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
 
         output, return_code = self._run_command(mypy_cmd)
 
-        if return_code == 0 or not output:
-            logging.info("Mypy scan completed with no type errors found.")
+        if return_code == 0 or not output: # Mypy returns 0 on success, even with notes/warnings
+            logger.info("Mypy scan completed with no type errors found.")
             return
 
-        # Regex to parse Mypy's default output format.
-        # e.g., "path/to/file.py:123: error: Your error message here  [error-code]"
         mypy_pattern = re.compile(r"([^:]+):(\d+): (error|note): (.+)")
         
         issues_found = 0
@@ -908,11 +1047,19 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
             match = mypy_pattern.match(line)
             if match:
                 issues_found += 1
-                file_path, line_number, severity, description = match.groups()
+                file_path, line_number, severity_type, description = match.groups()
+                
+                # Map Mypy severity to your own severity levels
+                severity_map = {
+                    'error': 'HIGH',
+                    'note': 'LOW' # Mypy notes are usually informational
+                }
+                severity = severity_map.get(severity_type, 'UNKNOWN')
+
                 self.add_finding(
-                    severity='HIGH',  # All Mypy errors are considered high severity for code correctness.
+                    severity=severity,
                     category="Static Type Checking (Mypy)",
-                    title="Type Error",
+                    title=f"Mypy: {severity_type.capitalize()} Detected",
                     description=description.strip(),
                     file_path=file_path.strip(),
                     line_number=int(line_number),
@@ -920,10 +1067,18 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                 )
         
         if issues_found > 0:
-            logging.info(f"Mypy scan found {issues_found} type errors.")
+            logger.info(f"Mypy scan found {issues_found} type errors.")
         else:
-            # This can happen if mypy exits with an error code but parsing fails.
-            logging.warning("Mypy exited with a non-zero status but no issues could be parsed from its output.")
+            logger.warning("Mypy exited with a non-zero status but no issues could be parsed from its output. Check raw stderr for details.")
+            self.add_finding(
+                severity="CRITICAL",
+                category="Tool Output Parsing Error",
+                title="Mypy Output Parsing Failed",
+                description="Mypy scan ran, but its output could not be parsed. Check raw output for errors.",
+                file_path="N/A",
+                line_number=0,
+                recommendation="Check Mypy CLI version and output format."
+            )
 
 
     def run_best_practices_audit(self):
@@ -938,19 +1093,25 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                 
                 # Check for hardcoded secrets
                 secret_keywords = ['password', 'secret', 'api_key', 'token']
-                if any(keyword in content.lower() for keyword in secret_keywords):
-                    for i, line in enumerate(content.splitlines(), 1):
-                        if any(keyword in line.lower() for keyword in secret_keywords) and ('=' in line):
-                            if not (line.strip().startswith('#') or 'secret_key' in line):
-                                self.add_finding(
-                                    severity='HIGH', category='Security', title='Potential Hardcoded Secret',
-                                    description=f"Line contains a keyword that might indicate a hardcoded secret.",
-                                    file_path=file_path, line_number=i, code_snippet=line.strip(),
-                                    recommendation="Store secrets in environment variables or a secure vault, not in code."
-                                )
+                # Improved regex to reduce false positives for common variable names like 'secret_key'
+                # This pattern looks for assignments where the right-hand side is a string literal
+                # and the left-hand side contains a secret keyword.
+                # It's still heuristic but better than simple substring.
+                hardcoded_secret_pattern = re.compile(r'\b(?:' + '|'.join(secret_keywords) + r')\s*=\s*[\'"].+?[\'"]', re.IGNORECASE)
+
+                for i, line in enumerate(content.splitlines(), 1):
+                    if hardcoded_secret_pattern.search(line):
+                        # Further filter out common non-secret variable names if necessary
+                        if not (re.search(r'\b(secret_key|secret_message)\b', line, re.IGNORECASE) and 'config' in file_path.lower()):
+                            self.add_finding(
+                                severity='HIGH', category='Security', title='Potential Hardcoded Secret',
+                                description=f"Line contains a keyword that might indicate a hardcoded secret. Review manually.",
+                                file_path=file_path, line_number=i, code_snippet=line.strip(),
+                                recommendation="Store secrets in environment variables or a secure vault, not in code. Use a dedicated secrets scanning tool for more robust detection."
+                            )
 
                 # Check for insecure HTTP URLs
-                http_patterns = [r'http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0)']
+                http_patterns = [r'http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0|schemas\.openxmlformats\.org|www\.w3\.org|purl\.org)'] # Exclude common XML/schema URLs
                 for pattern in http_patterns:
                     for match in re.finditer(pattern, content, re.IGNORECASE):
                         line_num = content.count('\n', 0, match.start()) + 1
@@ -958,24 +1119,25 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
                             severity="HIGH", category="HTTPS", title="Insecure HTTP URL",
                             description=f"Insecure HTTP URL found: {match.group()}",
                             file_path=file_path, line_number=line_num,
-                            recommendation="Use HTTPS for all external connections."
+                            recommendation="Use HTTPS for all external connections. If this is an internal/local connection, ensure it's truly isolated."
                         )
 
-                # Check for bare except clauses
-                bare_except_pattern = r'except\s*:'
-                for match in re.finditer(bare_except_pattern, content):
-                    line_num = content.count('\n', 0, match.start()) + 1
-                    self.add_finding(
-                        severity="MEDIUM", category="Error Handling", title="Bare Except Clause",
-                        description="Bare except clause catches all exceptions, which can hide bugs.",
-                        file_path=file_path, line_number=line_num,
-                        recommendation="Catch specific exceptions instead of using a bare except."
-                    )
+                # Check for bare except clauses (Python specific)
+                if file_path.endswith('.py'):
+                    bare_except_pattern = r'except\s*:'
+                    for match in re.finditer(bare_except_pattern, content):
+                        line_num = content.count('\n', 0, match.start()) + 1
+                        self.add_finding(
+                            severity="MEDIUM", category="Error Handling", title="Bare Except Clause",
+                            description="Bare except clause catches all exceptions, which can hide bugs and make debugging difficult.",
+                            file_path=file_path, line_number=line_num,
+                            recommendation="Catch specific exceptions instead of using a bare except, or re-raise if not handled."
+                        )
 
             except Exception as e:
-                logging.warning(f"Could not process file {file_path} for best practices audit: {e}")
+                logger.warning(f"Could not process file {file_path} for best practices audit: {e}")
 
-        logging.info("Best practices audit checks completed.")
+        logger.info("Best practices audit checks completed.")
 
 
     def run_audit(self):
@@ -993,7 +1155,28 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
 
         # Run static security analysis (Bandit)
         self.run_bandit_scan()
-    
+        
+        # Run CodeQL Scan (for Python backend)
+        self.run_codeql_scan()
+
+        # Run SonarQube Scan (for entire project)
+        # Note: SonarQube results are viewed on the SonarQube dashboard, not directly added to self.findings
+        self.run_sonarqube_scan()
+
+        # Run Semgrep Scan (for Python Backend)
+        self.run_semgrep_scan(
+            target_path=self.backend_dir,
+            output_json_path=self.semgrep_python_output,
+            config_path=self.semgrep_python_config
+        )
+
+        # Run Semgrep Scan (for Vue.js Frontend)
+        self.run_semgrep_scan(
+            target_path=self.frontend_dir,
+            output_json_path=self.semgrep_vuejs_output,
+            config_path=self.semgrep_vuejs_config
+        )
+        
         # checks for type errors (Static Type Checking)
         self.run_mypy_scan()
         
@@ -1006,30 +1189,23 @@ def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_u
         # Run best practices audit
         self.run_best_practices_audit()
 
-        # Add other audit steps here as needed
-        # Example: self.run_code_linting()
-        # Example: self.run_code_formatting_checks()
-
         self._print_header("AUDIT SUMMARY")
         if self.findings:
-            # Sort findings by severity (assuming severity_order is defined elsewhere or in __init__)
-            severity_order = {'HIGH': 1, 'MEDIUM': 2, 'LOW': 3, 'UNKNOWN': 4, 'UNDEFINED': 5}
-            # Ensure 'severity' key exists in finding dictionary before sorting
-            self.findings.sort(key=lambda f: severity_order.get(f.get('severity', 'UNKNOWN'), 99))
+            self.findings.sort(key=lambda f: self.severity_order.get(f.get('severity', 'UNKNOWN'), 99))
             
-            logging.info(f"Found {len(self.findings)} potential issues:")
+            logger.info(f"Found {len(self.findings)} potential issues:")
             for i, finding in enumerate(self.findings):
-                logging.info(f"  {i+1}. [{finding.get('severity', 'UNKNOWN')}] {finding.get('title', 'No Title')}")
-                logging.info(f"      Category: {finding.get('category', 'N/A')}")
-                logging.info(f"      File: {finding.get('file_path', 'N/A')}:{finding.get('line_number', 'N/A')}")
-                logging.info(f"      Description: {finding.get('description', 'N/A')}")
+                logger.info(f"  {i+1}. [{finding.get('severity', 'UNKNOWN')}] {finding.get('title', 'No Title')}")
+                logger.info(f"      Category: {finding.get('category', 'N/A')}")
+                logger.info(f"      File: {finding.get('file_path', 'N/A')}:{finding.get('line_number', 'N/A')}")
+                logger.info(f"      Description: {finding.get('description', 'N/A')}")
                 if finding.get('recommendation'):
-                    logging.info(f"      Recommendation: {finding['recommendation']}")
+                    logger.info(f"      Recommendation: {finding['recommendation']}")
                 if finding.get('code_snippet'):
-                    logging.info(f"      Code Snippet:\n{finding['code_snippet']}")
-                logging.info("-" * 20)
+                    logger.info(f"      Code Snippet:\n{finding['code_snippet']}")
+                logger.info("-" * 20)
         else:
-            logging.info("No issues found during the audit.")
+            logger.info("No issues found during the audit.")
 
         return len(self.findings)
 
@@ -1038,101 +1214,27 @@ if __name__ == "__main__":
     # which is how it's called from `run_audits.sh`.
 
     # Define a simple default configuration for direct execution.
-    # In a real application, this might come from command-line arguments.
-    class SimpleConfig:
-        skip_dependency_check = False
-        skip_static_analysis = False
+    # In a real application, this might come from command-line arguments or a config file.
+    # Using a dictionary for config allows for easier passing of specific tool configurations.
+    default_config = {
+        'skip_dependency_check': False,
+        'skip_static_analysis': False,
+        'SONAR_PROJECT_KEY': "maison-truvra-project", # <<< IMPORTANT: CHANGE THIS
+        'SONAR_ORGANIZATION': None, # <<< IMPORTANT: CHANGE THIS if using SonarCloud
+        'SONAR_HOST_URL': "http://localhost:9000", # <<< IMPORTANT: CHANGE THIS if your SonarQube is elsewhere
+        'SEMGREP_PYTHON_CONFIG': "p/python",
+        'SEMGREP_VUEJS_CONFIG': "p/vuejs" # You might also use 'p/javascript', 'p/html', or custom rules
+    }
 
-    config = SimpleConfig()
-
-    project_root_backend = "./backend"
-    project_root_frontend = "./website" # Assuming Vue.js frontend is in a 'website' directory
-
-    # --- CodeQL Configuration ---
-    codeql_sarif_output_file = "codeql_audit_results.sarif"
-    codeql_database_dir = "codeql_db_for_flask"
-
-    # --- SonarQube Configuration ---
-    # IMPORTANT: Replace with your actual SonarQube/SonarCloud details
-    # SonarQube requires a running SonarQube server or SonarCloud account.
-    SONAR_PROJECT_KEY = "YourProjectKey" # e.g., "maison-truvra-backend"
-    SONAR_ORGANIZATION = None # e.g., "your-sonarcloud-org" if using SonarCloud
-    SONAR_HOST_URL = "http://localhost:9000" # Your SonarQube server URL
-    SONAR_TOKEN = os.getenv("SONAR_TOKEN") # It's recommended to use environment variables for tokens
-
-    # --- Semgrep Configuration ---
-    semgrep_python_output = "semgrep_python_results.json"
-    semgrep_vuejs_output = "semgrep_vuejs_results.json"
-    # You can specify default rulesets ('auto', 'p/python', 'p/vuejs', 'p/ci', etc.)
-    # or paths to local Semgrep rule files.
-    SEMGREP_PYTHON_CONFIG = "p/python"
-    SEMGREP_VUEJS_CONFIG = "p/vuejs" # Or more specific configs like 'p/javascript', 'p/html'
-
-    logger.info("Starting all security audits...")
-
-    # --- Run CodeQL Scan (for Python backend) ---
-    logger.info("\n--- Initiating CodeQL Security Scan (Python Backend) ---")
-    codeql_scan_successful = run_codeql_scan(
-        source_code_path=project_root_backend,
-        output_sarif_path=codeql_sarif_output_file,
-        database_path=codeql_database_dir
-    )
-    if codeql_scan_successful:
-        process_codeql_results(codeql_sarif_output_file)
-    else:
-        logger.error("CodeQL scan did not complete successfully. Check logs for details.")
-
-    # --- Run SonarQube Scan (for entire project) ---
-    logger.info("\n--- Initiating SonarQube Analysis ---")
-    # You typically run SonarQube Scanner from the root of your entire project
-    # for a full-stack analysis. Adjust project_base_dir as needed.
-    sonarqube_scan_successful = run_sonarqube_scan(
-        project_base_dir=".", # Scan the entire project directory
-        project_key=SONAR_PROJECT_KEY,
-        organization=SONAR_ORGANIZATION,
-        sonar_url=SONAR_HOST_URL,
-        token=SONAR_TOKEN
-    )
-    if sonarqube_scan_successful:
-        logger.info("SonarQube scan results are available on your SonarQube dashboard.")
-    else:
-        logger.error("SonarQube scan did not complete successfully. Check logs for details and server status.")
-
-
-    # --- Run Semgrep Scan (for Python Backend) ---
-    logger.info("\n--- Initiating Semgrep Security Scan (Python Backend) ---")
-    semgrep_python_successful = run_semgrep_scan(
-        target_path=project_root_backend,
-        output_json_path=semgrep_python_output,
-        config_path=SEMGREP_PYTHON_CONFIG
-    )
-    if semgrep_python_successful:
-        process_semgrep_results(semgrep_python_output)
-    else:
-        logger.error("Semgrep scan for Python backend did not complete successfully.")
-
-    # --- Run Semgrep Scan (for Vue.js Frontend) ---
-    logger.info("\n--- Initiating Semgrep Security Scan (Vue.js Frontend) ---")
-    semgrep_vuejs_successful = run_semgrep_scan(
-        target_path=project_root_frontend,
-        output_json_path=semgrep_vuejs_output,
-        config_path=SEMGREP_VUEJS_CONFIG # Use appropriate config for Vue.js/JS/TS
-    )
-    if semgrep_vuejs_successful:
-        process_semgrep_results(semgrep_vuejs_output)
-    else:
-        logger.error("Semgrep scan for Vue.js frontend did not complete successfully.")
-
-    
     # Determine project paths based on this script's location
     project_root = os.path.dirname(os.path.abspath(__file__))
     backend_dir = os.path.join(project_root, 'backend')
     frontend_dir = os.path.join(project_root, 'website')
 
-    logging.info("Security audit script is being run directly.")
+    logger.info("Security audit script is being run directly.")
 
     # Instantiate and run the auditor
-    auditor = SecurityAuditor(config, project_root, backend_dir, frontend_dir)
+    auditor = SecurityAuditor(default_config, project_root, backend_dir, frontend_dir)
     num_findings = auditor.run_audit()
 
     # Exit with a non-zero status code if findings are present
