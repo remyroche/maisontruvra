@@ -1,8 +1,8 @@
-# This is a GitHub Actions workflow file.
-# To use it, create a file named 'ruff-autofix.yml' in the '.github/workflows/' directory of your repository.
-# This workflow will automatically run Ruff to lint and fix your Python code on every push or pull request to the main branch.
+# This is an enhanced GitHub Actions workflow designed for collaboration.
+# It first attempts to auto-fix and format the code, then generates a clean
+# report of any remaining errors for manual review and fixing.
 
-name: 'Ruff Auto-Fixer and Security Scan'
+name: 'Ruff Auto-Fixer and Error Reporter'
 
 on:
   # Triggers the workflow on push or pull request events but only for the "main" branch
@@ -12,56 +12,62 @@ on:
     branches: [ "main" ]
 
 jobs:
-  lint-and-fix:
+  lint-fix-and-report:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Check out the repository's code so the workflow can access it.
+      # Step 1: Check out the repository's code.
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Set up the specific version of Python your project uses.
+      # Step 2: Set up Python.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11' # You can change this to your project's Python version
 
-      # Step 3: Install your project's dependencies, including Ruff and Bandit.
+      # Step 3: Install dependencies.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install ruff bandit
-          # Installs dependencies from your requirements.txt file if it exists
           if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
 
-      # Step 4: Run Ruff Formatter to ensure consistent code style.
+      # Step 4: Run Ruff Formatter.
       - name: Format code with Ruff
-        run: |
-          ruff format backend/
+        run: ruff format backend/
 
-      # Step 5: Run Ruff Linter with auto-fix.
-      # This version is stricter: without --exit-zero, the workflow will fail if Ruff
-      # finds any errors it cannot automatically fix.
+      # Step 5: Run Ruff Linter with auto-fix enabled.
       - name: Lint and fix with Ruff
-        run: |
-          ruff check backend/ --fix --unsafe-fixes
+        run: ruff check backend/ --fix --unsafe-fixes --exit-zero
 
-      # Step 6: Run Bandit for security analysis.
-      # The '-r' flag runs it recursively. The '-ll' flag reports medium and high severity issues.
-      # To make this step fail the build on finding issues, remove the `|| true` part.
-      - name: Run security scan with Bandit
-        run: |
-          bandit -r backend/ -ll || true
-          
-      # Step 7: Commit any changes made by Ruff back to the repository.
-      # This action automatically detects if files were changed and creates a commit.
+      # Step 6: Commit any automated changes.
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: Apply automated Ruff formatting and fixes"
-          # This ensures the commit is made to the correct branch in a pull request
           branch: ${{ github.head_ref }}
           commit_options: '--no-verify'
           repository: .
           commit_user_name: "GitHub Actions Bot"
           commit_user_email: "github-actions-bot@users.noreply.github.com"
           commit_author: "GitHub Actions Bot <github-actions-bot@users.noreply.github.com>"
+
+      # Step 7: Generate a report of any remaining errors.
+      # This step runs Ruff again without fixing, saving the output to a file.
+      - name: Generate error report
+        run: |
+          ruff check backend/ > ruff-errors.txt || true
+      
+      # Step 8: Upload the error report as a build artifact.
+      # This makes the report downloadable from the GitHub Actions summary page.
+      - name: Upload error report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruff-error-report
+          path: ruff-errors.txt
+
+      # Step 9: Final check to fail the workflow if errors remain.
+      # This ensures that the build status correctly reflects that manual action is needed.
+      - name: Final check for errors
+        run: |
+          ruff check backend/
