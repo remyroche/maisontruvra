@@ -9,3 +9,50 @@ dependencies = [
     "pyotp>=2.9.0",
     "qrcode>=8.2",
 ]
+
+# This is the central configuration file for Ruff.
+# Place this file in the root directory of your project.
+
+[tool.ruff]
+# Same as Black.
+line-length = 88
+indent-width = 4
+# Set the Python version to target for fixes and checks.
+target-version = "py311" # Assuming Python 3.11
+
+[tool.ruff.lint]
+# --- DEVELOPMENT CONFIGURATION ---
+# A balanced set of rules for active development.
+# E, F: Default Pyflakes/pycodestyle errors
+# B: flake8-bugbear (finds likely bugs)
+# S: flake8-bandit (finds security issues)
+# I: isort (import sorting)
+# UP: pyupgrade (modernizes syntax)
+select = ["E", "F", "B", "S", "I", "UP"]
+
+# --- STRICT PRODUCTION CONFIGURATION ---
+# To enable for production, uncomment the line below and comment out the development one.
+# select = ["E", "F", "B", "S", "PL", "I", "D", "UP", "ANN", "C4", "T20", "PT", "TRY"]
+
+
+# Ignore certain rules globally.
+ignore = [
+    "E501",      # Line too long (handled by the formatter)
+    "B008",      # Do not perform function calls in argument defaults (can be overly strict)
+]
+
+# Ignore specific rules for specific files.
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "E402"]
+"tests/*" = ["S101"] # Ignore `assert` statements in tests
+"manage.py" = ["T201"] # Allow `print` in manage.py (if T20 is enabled)
+"seed.py" = ["T201"] # Allow `print` in seed.py (if T20 is enabled)
+
+
+# Configure the import sorter (isort).
+[tool.ruff.lint.isort]
+known-first-party = ["backend"] # Mark 'backend' as our own code
+
+# Configure docstring style (pydocstyle).
+[tool.ruff.lint.pydocstyle]
+convention = "google" # Use Google-style docstrings
