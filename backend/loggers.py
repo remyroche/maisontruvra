@@ -5,9 +5,7 @@ This module defines all loggers used throughout the application to ensure consis
 
 import json
 import logging
-import os
 from logging.config import dictConfig
-from logging.handlers import TimedRotatingFileHandler
 
 from flask import g, request
 
@@ -160,8 +158,6 @@ def setup_logging(app):
         logger = logging.getLogger("backend")
         logger.error(f"Unhandled exception: {e}", exc_info=True)
         return jsonify(error="An unexpected error occurred."), 500
-
-
 
 
 __all__ = [
