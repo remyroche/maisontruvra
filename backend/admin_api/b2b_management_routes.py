@@ -1,4 +1,5 @@
-from flask import Blueprint, jsonify, request, g, current_app
+from flask import Blueprint, current_app, g, jsonify, request
+
 from backend.extensions import limiter
 from backend.models.b2b_models import B2BPartnershipRequest, B2BTier
 from backend.models.enums import B2BStatus
