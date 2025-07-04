@@ -7,6 +7,9 @@
 FLASK_APP_PATH="manage.py"
 FLASK_DEBUG_MODE=1
 
+CODEQL_SARIF_OUTPUT="codeql_audit_results.sarif"
+CODEQL_DATABASE_DIR="codeql_db_for_flask"
+
 VITE_CONFIG_PATH="website/vite.config.js"
 VENV_PATH="venv" # Common name for virtual environment folder
 
