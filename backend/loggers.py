@@ -104,11 +104,6 @@ LOGGING_CONFIG = {
 }
 
 
-def setup_logging():
-    """Applies the logging configuration."""
-    dictConfig(LOGGING_CONFIG)
-
-
 class JsonFormatter(logging.Formatter):
     """
     Formats log records as JSON strings.
@@ -132,52 +127,41 @@ def setup_logging(app):
     """
     Configures comprehensive logging for the Flask application.
     """
-    if not app.debug and not app.testing:
-        # Get configuration from app config
-        log_dir = app.config.get("LOG_DIR", "logs")
-        log_level_str = app.config.get("LOG_LEVEL", "INFO").upper()
-        log_level = getattr(logging, log_level_str, logging.INFO)
-        use_json_formatter = app.config.get("USE_JSON_LOGS", False)
+    # Apply the configuration from the dictionary
+    dictConfig(LOGGING_CONFIG)
 
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-
-        # File Handler with daily rotation
-        file_handler = TimedRotatingFileHandler(
-            os.path.join(log_dir, "app.log"),
-            when="midnight",
-            interval=1,
-            backupCount=30,
-        )
-
-        if use_json_formatter:
-            formatter = JsonFormatter()
+    # Add a request ID to each log message for better traceability
+    @app.before_request
+    def before_request_logging():
+        if "X-Request-ID" in request.headers:
+            g.request_id = request.headers["X-Request-ID"]
         else:
-            formatter = logging.Formatter(
-                "%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]"
-            )
+            g.request_id = str(uuid.uuid4())
 
-        file_handler.setFormatter(formatter)
+    # After request, log details about the response
+    @app.after_request
+    def after_request_logging(response):
+        if request.path.startswith("/static"):
+            return response
 
-        # Console handler for simple output
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        logger = logging.getLogger("backend")
+        logger.info(
+            f"{request.remote_addr} - {request.method} {request.path} - {response.status_code}"
         )
+        return response
 
-        # Configure all loggers
-        for logger in [
-            app.logger,
-            app_logger,
-            security_logger,
-            database_logger,
-            api_logger,
-        ]:
-            logger.addHandler(file_handler)
-            logger.addHandler(console_handler)
-            logger.setLevel(log_level)
+    # Handle exceptions by logging them
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        # Pass through HTTP exceptions
+        if isinstance(e, HTTPException):
+            return e
 
-        app.logger.info("Application Logging Started")
+        logger = logging.getLogger("backend")
+        logger.error(f"Unhandled exception: {e}", exc_info=True)
+        return jsonify(error="An unexpected error occurred."), 500
+
+
 
 
 __all__ = [
