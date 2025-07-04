@@ -2,7 +2,7 @@
 # To use it, create a file named 'ruff-autofix.yml' in the '.github/workflows/' directory of your repository.
 # This workflow will automatically run Ruff to lint and fix your Python code on every push or pull request to the main branch.
 
-name: 'Ruff Auto-Fixer'
+name: 'Ruff Auto-Fixer and Security Scan'
 
 on:
   # Triggers the workflow on push or pull request events but only for the "main" branch
@@ -12,7 +12,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  ruff-fix:
+  lint-and-fix:
     runs-on: ubuntu-latest
     steps:
       # Step 1: Check out the repository's code so the workflow can access it.
@@ -25,27 +25,39 @@ jobs:
         with:
           python-version: '3.11' # You can change this to your project's Python version
 
-      # Step 3: Install your project's dependencies, including Ruff.
+      # Step 3: Install your project's dependencies, including Ruff and Bandit.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff
+          pip install ruff bandit
           # Installs dependencies from your requirements.txt file if it exists
           if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
 
-      # Step 4: Run Ruff with the --fix and --unsafe-fixes flags.
-      # The --exit-zero flag ensures that the workflow step doesn't fail if Ruff finds issues,
-      # allowing the subsequent commit step to run.
-      - name: Run Ruff with auto-fix
+      # Step 4: Run Ruff Formatter to ensure consistent code style.
+      - name: Format code with Ruff
         run: |
-          ruff check backend/ --fix --unsafe-fixes --exit-zero
+          ruff format backend/
 
-      # Step 5: Commit any changes made by Ruff back to the repository.
+      # Step 5: Run Ruff Linter with auto-fix.
+      # This version is stricter: without --exit-zero, the workflow will fail if Ruff
+      # finds any errors it cannot automatically fix.
+      - name: Lint and fix with Ruff
+        run: |
+          ruff check backend/ --fix --unsafe-fixes
+
+      # Step 6: Run Bandit for security analysis.
+      # The '-r' flag runs it recursively. The '-ll' flag reports medium and high severity issues.
+      # To make this step fail the build on finding issues, remove the `|| true` part.
+      - name: Run security scan with Bandit
+        run: |
+          bandit -r backend/ -ll || true
+          
+      # Step 7: Commit any changes made by Ruff back to the repository.
       # This action automatically detects if files were changed and creates a commit.
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: Apply automated Ruff fixes"
+          commit_message: "chore: Apply automated Ruff formatting and fixes"
           # This ensures the commit is made to the correct branch in a pull request
           branch: ${{ github.head_ref }}
           commit_options: '--no-verify'
@@ -53,4 +65,3 @@ jobs:
           commit_user_name: "GitHub Actions Bot"
           commit_user_email: "github-actions-bot@users.noreply.github.com"
           commit_author: "GitHub Actions Bot <github-actions-bot@users.noreply.github.com>"
-
