@@ -1,10 +1,10 @@
 import logging
 
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
-from backend.extensions import cache, db
+from backend.extensions import cache
 from backend.models.product_models import Product, Review
 from backend.schemas import ProductSchema, ProductSearchSchema, ReviewSchema
 from backend.services.exceptions import NotFoundException, ValidationException
@@ -50,7 +50,11 @@ def get_products():
     except ValidationError as err:
         return (
             jsonify(
-                {"status": "error", "message": "Invalid query parameters", "errors": err.messages}
+                {
+                    "status": "error",
+                    "message": "Invalid query parameters",
+                    "errors": err.messages,
+                }
             ),
             400,
         )
@@ -73,7 +77,12 @@ def get_products():
     except Exception as e:
         logger.error(f"Error fetching products: {e}", exc_info=True)
         return (
-            jsonify({"status": "error", "message": "An error occurred while fetching products."}),
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "An error occurred while fetching products.",
+                }
+            ),
             500,
         )
 
@@ -104,7 +113,9 @@ def request_stock_notification(product_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        logger.exception(f"Failed to create stock notification for product {product_id}: {e}")
+        logger.exception(
+            f"Failed to create stock notification for product {product_id}: {e}"
+        )
         return jsonify({"error": "An internal error occurred."}), 500
 
 
@@ -119,7 +130,12 @@ def get_product_categories():
     except Exception as e:
         logger.error(f"Error fetching categories: {e}", exc_info=True)
         return (
-            jsonify({"status": "error", "message": "An error occurred while fetching categories."}),
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "An error occurred while fetching categories.",
+                }
+            ),
             500,
         )
 
@@ -130,11 +146,20 @@ def get_product_reviews(product_id):
     """Get all approved reviews for a specific product."""
     try:
         reviews = review_service.get_reviews_for_product(product_id)
-        return jsonify({"status": "success", "data": ReviewSchema(many=True).dump(reviews)})
+        return jsonify(
+            {"status": "success", "data": ReviewSchema(many=True).dump(reviews)}
+        )
     except Exception as e:
-        logger.error(f"Error fetching reviews for product {product_id}: {e}", exc_info=True)
+        logger.error(
+            f"Error fetching reviews for product {product_id}: {e}", exc_info=True
+        )
         return (
-            jsonify({"status": "error", "message": "An error occurred while fetching reviews."}),
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "An error occurred while fetching reviews.",
+                }
+            ),
             500,
         )
 
@@ -142,18 +167,19 @@ def get_product_reviews(product_id):
 @products_bp.route("/<int:product_id>/reviews", methods=["POST"])
 @jwt_required()
 @api_resource_handler(
-    model=Review, request_schema=ReviewSchema, response_schema=ReviewSchema, cache_timeout=0, log_action=True
+    model=Review,
+    request_schema=ReviewSchema,
+    response_schema=ReviewSchema,
+    cache_timeout=0,
+    log_action=True,
 )
 def create_product_review(validated_data, product_id):
     """Submit a new review for a product. Requires authentication."""
     user_id = get_jwt_identity()
     try:
-        review = review_service.submit_review(
-            user_id, product_id, validated_data
-        )
+        review = review_service.submit_review(user_id, product_id, validated_data)
         return review
     except ValueError as e:
         raise ValidationException(str(e)) from e
     except NotFoundException as e:
         return jsonify({"error": str(e)}), 404
-
