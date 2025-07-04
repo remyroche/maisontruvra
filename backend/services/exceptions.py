@@ -164,7 +164,6 @@ class UserNotFoundException(NotFoundException):
     def __init__(self, user_id=None):
         super().__init__(resource_name="user", resource_id=user_id)
 
-
     # --- Authentication and Authorization Errors ---
 
 
@@ -201,12 +200,16 @@ class InvalidCredentialsError(AuthenticationException):
 
     message = "Invalid email or password."
 
+
 class PermissionError(ServiceException):
     """Raised when an authenticated user is not permitted to perform an action. (HTTP 403 Forbidden)"""
+
     def __init__(self, message="You do not have permission to perform this action"):
         super().__init__(message, 403)
-        
+
+
 class AuthorizationException(PermissionError):
     """Raised when an authenticated user is not permitted to perform a specific action."""
+
     def __init__(self, message="You are not authorized to perform this action"):
         super().__init__(message)
