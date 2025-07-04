@@ -1,18 +1,17 @@
-import logging
+from flask import Blueprint, request, g, jsonify
+from sqlalchemy.orm import joinedload
 
-from flask import Blueprint, g, jsonify
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from backend.models import Order
+from backend.models.order_schemas import OrderSchema, OrderStatusUpdateSchema
+from backend.services.order_service import OrderService
+from backend.services.exceptions import ValidationException, NotFoundException
+from backend.utils.decorators import api_resource_handler, permissions_required, roles_required
+from backend.utils.input_sanitizer import InputSanitizer
+from backend.database import db
 
-from backend.models.order_models import Order
-from backend.schemas import B2BOrderCreationSchema, OrderSchema
-from backend.services.b2b_service import B2BService
-from backend.services.exceptions import ValidationException
-from backend.utils.decorators import api_resource_handler
 
-# --- Blueprint and Service Initialization ---
-b2b_order_bp = Blueprint("b2b_order_bp", __name__, url_prefix="/api/b2b/orders")
-logger = logging.getLogger(__name__)
-b2b_service = B2BService(logger)
+order_routes = Blueprint('order_routes', __name__, url_prefix='/b2b/orders')
+
 
 
 @b2b_order_bp.route("/", methods=["POST"])
@@ -116,7 +115,7 @@ def update_order_status(order_id):
         # Return the updated order (decorator will handle serialization)
         return updated_order
     except ValueError as e:
-        raise ValidationException(str(e))
+        raise ValidationException(str(e)) from e
 
 
 @order_routes.route("/", methods=["GET"])
