@@ -85,7 +85,7 @@ class AssetService:
                     img_format = img.format or "JPEG"
                     img.save(sanitized_buffer, format=img_format)
                     sanitized_buffer.seek(0)
-                
+
                 logger.info(f"Successfully sanitized image with MIME type {mime_type}.")
                 return sanitized_buffer, mime_type
             except Exception as e:
@@ -93,10 +93,9 @@ class AssetService:
                 raise ValidationException(
                     "The uploaded image file appears to be corrupted or invalid."
                 ) from e
-        
+
         # For non-image files like PDFs, return the original buffer
         return file_storage.stream, mime_type
-
 
     @staticmethod
     def upload_asset(file_storage, folder="general"):
@@ -135,7 +134,9 @@ class AssetService:
 
             db.session.delete(asset)
             db.session.commit()
-            MonitoringService.log_info(f"Deleted asset: {asset.filename}", "AssetService")
+            MonitoringService.log_info(
+                f"Deleted asset: {asset.filename}", "AssetService"
+            )
             return True
         except Exception as e:
             db.session.rollback()
