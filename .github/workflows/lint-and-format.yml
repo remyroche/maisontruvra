@@ -1,0 +1,66 @@
+# .github/workflows/lint-and-format.yml
+
+# Name of the workflow that will appear in the "Actions" tab of your GitHub repository.
+name: Code Quality Check
+
+# --- Trigger Conditions ---
+# This workflow runs automatically on two events:
+# 1. When code is pushed to the 'main' or 'develop' branch.
+# 2. When a pull request is opened or updated for any branch.
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+# --- Job Definition ---
+# A workflow is made up of one or more jobs that run in parallel by default.
+jobs:
+  # The name of our single job.
+  lint-and-format:
+    # The type of virtual machine to run the job on. 'ubuntu-latest' is a good default.
+    runs-on: ubuntu-latest
+
+    # --- Steps ---
+    # A sequence of tasks that will be executed as part of the job.
+    steps:
+      # Step 1: Check out the repository code
+      # This action checks out your repository under $GITHUB_WORKSPACE, so your job can access it.
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Python environment
+      # This action sets up a Python environment for use in subsequent steps.
+      # We specify Python 3.11 to match the version in your pyupgrade command.
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Step 3: Install dependencies
+      # This step installs the exact tools defined in your run_audits.sh script.
+      - name: Install code quality tools
+        run: |
+          pip install black isort ruff pyupgrade
+
+      # Step 4: Run the formatters and linters
+      # This runs the same commands from your script.
+      # We add the '--check' and '--diff' flags to the formatters.
+      # Instead of changing files, these flags will make the step fail if the code is not formatted,
+      # which is what you want in an automated CI check.
+      - name: Run formatters and linters
+        run: |
+          echo "Checking formatting with Black..."
+          black . --check --diff
+
+          echo "Checking import sorting with isort..."
+          isort . --check-only --diff
+
+          echo "Checking syntax upgrades with pyupgrade..."
+          # Note: pyupgrade does not have a simple '--check' flag, its exit code reflects changes needed.
+          pyupgrade --py3-spec 3.11 .
+
+          echo "Linting with Ruff..."
+          # Ruff runs without --fix here. We just want it to report errors, not change files.
+          ruff check . --select E,F,B,SIM,PL,D --ignore E501
