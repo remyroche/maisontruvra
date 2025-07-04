@@ -274,7 +274,7 @@ class CheckoutService:
                 notify_admin_of_new_order_task,
                 notify_user_of_loyalty_points_task,  # This now exists and can be imported
                 send_order_confirmation_email_task,
-                update_inventory_on_order_task,
+                update_inventory_on_order_task
             )
 
             # Dispatch tasks
@@ -282,8 +282,8 @@ class CheckoutService:
             notify_admin_of_new_order_task.delay(order.id)
 
             # Assuming order.items exists and is iterable
-            # for item in order.items:
-            #     update_inventory_on_order_task.delay(item.product_id, item.quantity)
+            for item in order.items:
+                update_inventory_on_order_task.delay(item.product_id, item.quantity)
 
             if user and points_earned > 0:
                 notify_user_of_loyalty_points_task.delay(user.id, points_earned)
