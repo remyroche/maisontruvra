@@ -8,6 +8,7 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 # Load environment variables from .env file
 load_dotenv()
 
+
 class Config:
     """Base configuration."""
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=2)
@@ -15,8 +16,8 @@ class Config:
     JWT_BLOCKLIST_ENABLED = True
     JWT_BLOCKLIST_TOKEN_CHECKS = ['access', 'refresh']
 
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'a-default-secret-key-that-is-not-so-secret')
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'a-default-jwt-secret-key')
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    DATABASE_URL = os.environ.get('DATABASE_URL')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
         'sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'app.db')
