@@ -61,9 +61,49 @@ mkdir -p "$LOG_DIR"
 # Redirect all output to both console and log file
 exec > >(tee -a "${AUDIT_LOG_FILE}") 2>&1
 
-# --- IMPORTANT CHANGE START ---
-# Replace the problematic direct echo -e lines with print_step calls
-# or just simple echoes until the environment is fully stable.
+# Install or update all necessary code quality tools in a single command.
+echo "--- Installing/Updating Code Quality Tools (Black, isort, Ruff)... ---"
+pip install black isort ruff
+echo "--- Tool installation complete. ---"
+echo ""
+
+
+# --- Phase 2: Code Formatting and Linting ---
+# Run the tools in sequence to clean up the codebase.
+
+echo "--- Formatting code with Black... ---"
+# Black is an opinionated code formatter that ensures uniform style.
+black .
+echo "--- Black formatting complete. ---"
+echo ""
+
+echo "--- Sorting imports with isort... ---"
+# isort sorts and organizes import statements alphabetically and into sections.
+isort .
+echo "--- isort complete. ---"
+echo ""
+
+echo "--- Upgrading Python syntax with pyupgrade... ---"
+# pyupgrade automatically upgrades syntax for newer Python versions.
+# It's run on all .py files in the current directory and subdirectories.
+pyupgrade --py3-spec 3.11 .
+echo "--- pyupgrade complete. ---"
+echo ""
+
+echo "--- Linting and auto-fixing with a comprehensive Ruff configuration... ---"
+# Ruff is an extremely fast linter that can find errors and also fix many of them.
+# The --select flag enables specific rule sets:
+# E, F: Standard flake8 rules (errors and warnings)
+# B: flake8-bugbear (finds potential bugs and design problems)
+# SIM: flake8-simplify (suggests simpler code patterns)
+# PL: Pylint (enables many common pylint rules)
+# D: pydocstyle (validates docstring formatting and conventions)
+# The --fix flag applies safe fixes for issues like unused imports.
+# The --ignore E501 flag prevents conflicts with Black over line length.
+ruff check . --fix --select E,F,B,SIM,PL,D --ignore E501
+echo "--- Ruff linting complete. ---"
+echo ""
+
 
 # Use simple echoes for the very initial banner to avoid variable issues
 echo "=========================================="
