@@ -1,8 +1,24 @@
+import re
+import os
+import logging
+import secrets
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
 
-import re # Added: For regular expressions
-import os # Added: For os.environ.get
-from backend.models.user_models import User, UserRole
-from backend.database import db
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, InvalidHash
+from flask import current_app, session, url_for
+from flask_login import login_user
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
+from sqlalchemy.exc import SQLAlchemyError
+
+from backend.extensions import db
+from backend.models import User, Role, UserRole
+from backend.services.email_service import EmailService
+from backend.services.user_service import UserService
+from backend.services.referral_service import ReferralService
+from backend.services.mfa_service import MfaService
+from backend.services.monitoring_service import MonitoringService
 from backend.services.exceptions import (
     ServiceError,
     ValidationException,
@@ -11,30 +27,8 @@ from backend.services.exceptions import (
     InvalidPasswordException,
     InvalidCredentialsError
 )
-from backend.services.mfa_service import MfaService
-# generate_tokens is defined as a method in this class
-from backend.services.email_service import EmailService
-from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature # Added: For token serialization
-import logging
-from flask import current_app, session, url_for
-from flask_login import login_user # Added: For login_user
-from ..extensions import socketio
-from .monitoring_service import MonitoringService
-import hashlib
-import secrets
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, InvalidHash
-from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.encryption import hash_password, check_password
-from sqlalchemy.exc import SQLAlchemyError
-from backend.extensions import db
-from backend.models import User, Role, UserRole
-from backend.services.email_service import EmailService
-from backend.services.user_service import UserService
-from backend.services.referral_service import ReferralService
-
+from backend.utils.input_sanitizer import InputSanitizer
 
 # Instantiate the PasswordHasher. It's thread-safe and can be shared.
 ph = PasswordHasher()
@@ -47,6 +41,7 @@ class AuthService:
         self.user_service = UserService(logger)
         self.referral_service = ReferralService(logger)
         self.serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        self.sessions = {} # In-memory session store, replace with Redis/DB in production
 
     def register_user(self, user_data):
         """
@@ -88,6 +83,7 @@ class AuthService:
             db.session.rollback()
             self.logger.error(f"Error during user registration: {e}")
             raise
+
     def authenticate_user(self, email, password):
         """
         Authenticates a user by checking their email and password.
@@ -164,8 +160,6 @@ class AuthService:
             self.logger.error("Password reset token is invalid or has expired.")
             return False
 
-
-
     def get_reset_token(self, user, expires_sec=1800):
         s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
         return s.dumps(user.email, salt=current_app.config.get('SECURITY_PASSWORD_SALT', 'password-salt'))
@@ -177,9 +171,7 @@ class AuthService:
         except (SignatureExpired, BadTimeSignature):
             return None
         return User.query.filter_by(email=email).first()
-
-
-        
+    
     @staticmethod
     def verify_password(hashed_password: str, password: str) -> bool:
         """
@@ -210,18 +202,18 @@ class AuthService:
             if session_token not in self.sessions:
                 return None
             
-            session = self.sessions[session_token]
+            session_data = self.sessions[session_token]
             
             # Check if session is expired
-            if datetime.now() > session["expires_at"]:
+            if datetime.now() > session_data["expires_at"]:
                 del self.sessions[session_token]
                 MonitoringService.log_security_event(
-                    f"Expired session removed for user: {db.session.get('email', 'unknown')}",
+                    f"Expired session removed for user: {session_data.get('email', 'unknown')}",
                     "AuthService"
                 )
                 return None
             
-            return session
+            return session_data
             
         except Exception as e:
             MonitoringService.log_security_event(
@@ -234,14 +226,14 @@ class AuthService:
     def get_user_profile(self, session_token: str) -> Dict[str, Any]:
         """Get user profile data"""
         try:
-            session = self.validate_session(session_token)
-            if not session:
+            session_data = self.validate_session(session_token)
+            if not session_data:
                 return {"success": False, "message": "Invalid session"}
             
-            user = self.db.get_user_by_id(session["user_id"])
+            user = self.user_service.get_user_by_id(session_data["user_id"])
             if not user:
                 MonitoringService.log_error(
-                    f"User not found for session: {session['user_id']}",
+                    f"User not found for session: {session_data['user_id']}",
                     "AuthService"
                 )
                 return {"success": False, "message": "User not found"}
@@ -401,7 +393,7 @@ class AuthService:
     def login_user(self, email: str, password: str) -> Dict[str, Any]:
         """Authenticate user and create session"""
         try:
-            user = self.db.get_user_by_email(email)
+            user = self.user_service.get_user_by_email(email)
             if not user:
                 MonitoringService.log_security_event(
                     f"Login attempt with non-existent email: {email}",
@@ -419,10 +411,8 @@ class AuthService:
                 return {"success": False, "message": "Invalid credentials"}
             
             # --- Automatic Re-hashing for Security Upgrades ---
-            # If verification is successful, check if the hash uses outdated parameters.
             if ph.check_needs_rehash(user.password_hash):
                 try:
-                    # Rehash the password with the new, more secure parameters.
                     user.password_hash = ph.hash(password)
                     db.session.commit()
                     MonitoringService.log_security_event(
@@ -511,7 +501,7 @@ class AuthService:
         Verifies the MFA token for a user with a pending db.session.
         If successful, it "upgrades" the session to be fully authenticated.
         """
-        user_id = db.session.get('mfa_pending_user_id')
+        user_id = session.get('mfa_pending_user_id')
         if not user_id:
             raise ServiceError("No MFA login attempt is pending.", 401)
 
@@ -520,11 +510,10 @@ class AuthService:
             raise ServiceError("User not found.", 401)
         
         # Verify the token against the user's secret
-        if MfaService.verify_token(user.two_factor_secret, mfa_token): # Corrected attribute name
-            # Success! Now we can fully log the user in. # Corrected: login_user was not defined
+        if MfaService.verify_token(user.two_factor_secret, mfa_token):
             login_user(user)
             session['mfa_authenticated'] = True
-            db.session.pop('mfa_pending_user_id', None) # Clean up the pending key
+            session.pop('mfa_pending_user_id', None) # Clean up the pending key
             MonitoringService.log_security_event(
                 f"MFA successful for user {user.email}",
                 "AuthService"
@@ -534,8 +523,7 @@ class AuthService:
         # If verification fails
         raise ServiceError("Invalid MFA token.", 401)
     
-
-            
+        
     @staticmethod
     def verify_mfa_login(user_id, mfa_token):
         """Verify MFA token and complete login."""
@@ -543,10 +531,10 @@ class AuthService:
         if not user:
             raise NotFoundException("User not found")
             
-        if not user.two_factor_secret: # Corrected attribute name
+        if not user.two_factor_secret:
             raise ValidationException("MFA not enabled for this user")
             
-        if not MfaService.verify_token(user.two_factor_secret, mfa_token): # Corrected attribute name
+        if not MfaService.verify_token(user.two_factor_secret, mfa_token):
             MonitoringService.log_security_event(
                 f"Failed MFA verification for user ID: {user_id}",
                 "AuthService",
