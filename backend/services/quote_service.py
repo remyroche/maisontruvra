@@ -1,78 +1,29 @@
-from backend.database import db
-from backend.models.invoice_models import Quote, Invoice
-from backend.models.b2b_models import B2BAccount
-from backend.services.monitoring_service import MonitoringService
-from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.services.audit_log_service import AuditLogService
-from flask import current_app
 from datetime import datetime
 import uuid
-from backend.models import db, Quote, QuoteItem
-from backend.services.email_service import EmailService
-from backend.services.pos_service import POSService # Changed import
+from flask import current_app
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
+
 from backend.extensions import db
+from backend.models import Quote, QuoteItem, Invoice, B2BAccount
+from backend.services.email_service import EmailService
+from backend.services.pos_service import POSService
+from backend.services.monitoring_service import MonitoringService
+from backend.services.audit_log_service import AuditLogService
+from backend.services.exceptions import NotFoundException, ValidationException, ServiceError
+from backend.utils.input_sanitizer import InputSanitizer
+
 
 class QuoteService:
     def __init__(self, logger):
         self.logger = logger
         self.email_service = EmailService(logger)
-        self.pos_service = POSService(logger) # Use the new POS Service
+        self.pos_service = POSService(logger)
+        # Assuming cart_service and product_service are available or injected elsewhere
+        # self.cart_service = CartService(logger)
+        # self.product_service = ProductService(logger)
 
-    def respond_and_add_to_cart(self, quote_id, response_data):
-        """
-        Admin responds to a quote, which triggers the POS service
-        to create an exclusive product and add it to the user's cart.
-        """
-        try:
-            quote = self.get_quote_by_id(quote_id)
-            if not quote:
-                raise ValueError("Quote not found.")
-            
-            # Prepare item data for the POS service
-            items_for_pos = []
-            for item_response in response_data['items']:
-                quote_item = db.session.query(QuoteItem).get(item_response['item_id'])
-                if not quote_item or quote_item.quote_id != quote.id:
-                    continue
-                
-                quote_item.response_price = item_response['price']
 
-                pos_item = {
-                    "quantity": quote_item.quantity,
-                    "price": item_response['price']
-                }
-                if quote_item.custom_item_name:
-                    pos_item["custom_item_name"] = quote_item.custom_item_name
-                    pos_item["custom_item_description"] = quote_item.custom_item_description
-                else:
-                    pos_item["product_id"] = quote_item.product_id
-                
-                items_for_pos.append(pos_item)
-
-            # Call the POS service to create the cart
-            self.pos_service.create_custom_cart_for_user(quote.user_id, items_for_pos)
-
-            quote.status = 'accepted'
-            quote.responded_at = datetime.utcnow()
-            db.session.commit()
-
-            self.logger.info(f"Quote {quote_id} processed. POS service created cart for user {quote.user_id}.")
-            return quote
-
-        except (SQLAlchemyError, ValueError) as e:
-            db.session.rollback()
-            self.logger.error(f"Error in quote response for quote {quote_id}: {e}")
-            raise
-
-    # create_quote_request and get_quote_by_id remain the same
-    def create_quote_request(self, user_id, items_data):
-        pass
-    def get_quote_by_id(self, quote_id):
-        pass
-    
     def create_quote_request(self, user_id, items_data):
         """Creates a new quote request for a B2B user."""
         try:
@@ -96,6 +47,12 @@ class QuoteService:
             db.session.rollback()
             self.logger.error(f"Error creating quote request for user {user_id}: {e}")
             raise
+
+    def get_quote_by_id(self, quote_id):
+        return db.session.query(Quote).options(
+            joinedload(Quote.items).joinedload(QuoteItem.product),
+            joinedload(Quote.user)
+        ).filter_by(id=quote_id).first()
 
     def respond_to_quote(self, quote_id, response_data):
         """Allows an admin to respond to a quote with custom prices."""
@@ -147,6 +104,7 @@ class QuoteService:
 
                 # If it's a custom item, create the exclusive product now
                 if quote_item.custom_item_name:
+                    # This assumes product_service is available on self
                     exclusive_product = self.product_service.create_exclusive_product_for_quote(
                         name=quote_item.custom_item_name,
                         description=quote_item.custom_item_description,
@@ -156,6 +114,7 @@ class QuoteService:
                     product_id_to_add = exclusive_product.id
                 
                 # Add the item (existing or new) directly to the user's cart
+                # This assumes cart_service is available on self
                 self.cart_service.add_item_to_cart(
                     user_id=user_id,
                     product_id=product_id_to_add,
@@ -178,14 +137,6 @@ class QuoteService:
             self.logger.error(f"Error in respond_and_add_to_cart for quote {quote_id}: {e}")
             raise
 
-    
-            
-    def get_quote_by_id(self, quote_id):
-        return db.session.query(Quote).options(
-            joinedload(Quote.items).joinedload(QuoteItem.product),
-            joinedload(Quote.user)
-        ).filter_by(id=quote_id).first()
-    
     @staticmethod
     def update_quote(quote_id, data):
         """Update a quote"""
@@ -208,7 +159,6 @@ class QuoteService:
             
             db.session.commit()
             
-            # Log the action
             AuditLogService.log_action(
                 user_id=None,  # System action
                 action="UPDATE_QUOTE",
@@ -238,14 +188,12 @@ class QuoteService:
             if not quote:
                 return False
             
-            # Check if quote has been converted to invoice
             if hasattr(quote, 'invoice') and quote.invoice:
                 raise ValidationException("Cannot delete quote that has been converted to invoice")
             
             db.session.delete(quote)
             db.session.commit()
             
-            # Log the action
             AuditLogService.log_action(
                 user_id=None,  # System action
                 action="DELETE_QUOTE",
@@ -283,7 +231,6 @@ class QuoteService:
             
             db.session.commit()
             
-            # Log the action
             AuditLogService.log_action(
                 user_id=None,  # System action
                 action="APPROVE_QUOTE",
@@ -324,7 +271,6 @@ class QuoteService:
             
             db.session.commit()
             
-            # Log the action
             AuditLogService.log_action(
                 user_id=None,  # System action
                 action="REJECT_QUOTE",
@@ -351,7 +297,7 @@ class QuoteService:
             b2b_account_id = InputSanitizer.sanitize_input(b2b_account_id)
             
             quotes = Quote.query.filter_by(b2b_account_id=b2b_account_id)\
-                              .order_by(Quote.created_at.desc()).all()
+                                 .order_by(Quote.created_at.desc()).all()
             return quotes
             
         except Exception as e:
