@@ -76,3 +76,4 @@ jobs:
       - name: Final check for errors
         run: |
           ruff check backend/
+
