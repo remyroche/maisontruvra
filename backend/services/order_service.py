@@ -63,9 +63,7 @@ class OrderService:
 
         # Extract data from the checkout payload
         shipping_address_id = checkout_data.get("shipping_address_id")
-        checkout_data.get(
-            "payment_token"
-        )  # Placeholder for payment gateway token
+        checkout_data.get("payment_token")  # Placeholder for payment gateway token
         creator_ip = checkout_data.get("creator_ip_address")
 
         if not shipping_address_id:

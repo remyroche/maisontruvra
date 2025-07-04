@@ -1,5 +1,4 @@
 from flask import Blueprint, jsonify, request
-from backend.services.audit_log_service import AuditLogService
 from backend.utils.decorators import admin_required
 from backend.models import AdminAuditLog
 from backend.schemas import AdminAuditLogSchema
@@ -7,7 +6,7 @@ from backend.schemas import AdminAuditLogSchema
 admin_audit_log_routes = Blueprint(
     "admin_audit_log_routes", __name__, url_prefix="/api/admin/audit-log"
 )
-from sqlalchemy.orm import joinedload # noqa: E402
+from sqlalchemy.orm import joinedload  # noqa: E402
 
 
 @admin_audit_log_routes.route("/", methods=["GET"])
@@ -32,7 +31,7 @@ def get_audit_logs():
         logs_query = logs_query.filter_by(action=action)
 
     logs = logs_query.paginate(page=page, per_page=per_page, error_out=False)
-    
+
     return jsonify(
         {
             "logs": AdminAuditLogSchema(many=True).dump(logs.items),

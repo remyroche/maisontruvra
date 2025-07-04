@@ -7,8 +7,6 @@ from backend.extensions import mail
 from backend.services.monitoring_service import MonitoringService
 
 
-
-
 class EmailService:
     def __init__(self):
         # Email configuration from environment variables

@@ -209,9 +209,7 @@ def update_tier(tier_id):
 )
 def assign_tier_to_user(user_id):
     """Assigns a tier to a B2B user."""
-    b2b_service.assign_tier_to_b2b_user(
-        user_id, g.validated_data["tier_id"]
-    )
+    b2b_service.assign_tier_to_b2b_user(user_id, g.validated_data["tier_id"])
     return None  # Return None to let api_resource_handler generate a default success message
 
 

@@ -356,9 +356,7 @@ class ProductService:
 
         # Sanitize user-provided string fields to prevent XSS.
         InputSanitizer.sanitize_html(product_data["name"])
-        InputSanitizer.sanitize_html(
-            product_data["description"]
-        )
+        InputSanitizer.sanitize_html(product_data["description"])
 
         # Verify that the foreign key references are valid.
         if not Category.query.get(product_data["category_id"]):

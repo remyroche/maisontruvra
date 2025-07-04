@@ -446,7 +446,5 @@ def update_address(address_id):
 def delete_address(address_id):
     """Delete an address."""
     # user_id is implicit from login_required and check_ownership
-    address_service.delete_address(
-        address_id=address_id, user_id=current_user.id
-    )
+    address_service.delete_address(address_id=address_id, user_id=current_user.id)
     return None  # Return None for successful deletion, decorator will send message

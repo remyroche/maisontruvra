@@ -276,9 +276,7 @@ def search_users_for_recommendations():
         except ValueError:
             pass
 
-        users = (
-            User.query.filter(User.is_active, search_filter).limit(limit).all()
-        )
+        users = User.query.filter(User.is_active, search_filter).limit(limit).all()
 
         results = []
         for user in users:

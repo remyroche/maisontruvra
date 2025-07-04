@@ -34,9 +34,7 @@ def get_invoices():
     try:
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 20, type=int)
-        InputSanitizer.InputSanitizer.sanitize_input(
-            request.args.get("status")
-        )
+        InputSanitizer.InputSanitizer.sanitize_input(request.args.get("status"))
 
         invoices_pagination = B2BService.get_user_invoices_paginated(
             user_id, page=page, per_page=per_page
