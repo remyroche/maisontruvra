@@ -82,7 +82,7 @@ echo "--------------------------------------------------"
 
 # --- Installation/Mise à jour des outils d'audit Python ---
 print_step "Installation/Mise à jour des outils d'audit Python"
-pip install --upgrade pip bandit safety pip-audit pylint black isort
+pip install --upgrade pip bandit safety pip-audit pylint black isort codeql sonar-scanner semgrep 
 if [ $? -ne 0 ]; then
     print_error "Échec de l'installation des outils d'audit Python."
 fi
