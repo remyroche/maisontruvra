@@ -1,11 +1,10 @@
 import logging
 
-from flask import Blueprint, g, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_login import current_user, login_required, logout_user
 
 from backend.extensions import db
-from backend.models import Company
 from backend.models.address_models import Address
 from backend.schemas import (
     AddressSchema,
@@ -14,7 +13,6 @@ from backend.schemas import (
     B2BUserInviteSchema,
     B2BUserRemoveSchema,
     B2BUserSchema,
-    UserSchema,
 )
 from backend.services.b2b_service import B2BService
 from backend.services.user_service import UserService
@@ -57,9 +55,7 @@ def get_b2b_users(instance):
 @b2b_profile_bp.route("/users/invite", methods=["POST"])
 @login_required
 @b2b_admin_required
-@api_resource_handler(
-    request_schema=B2BUserInviteSchema, response_schema=B2BUserSchema
-)
+@api_resource_handler(request_schema=B2BUserInviteSchema, response_schema=B2BUserSchema)
 def invite_b2b_user(validated_data):
     """
     Invites a new user to the B2B account.
