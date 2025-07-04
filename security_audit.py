@@ -140,6 +140,120 @@ class SecurityAuditor:
         except Exception as e:
             logging.error(f"Error analyzing {file_path}: {e}")
 
+    def run_codeql_scan(source_code_path, output_sarif_path, database_path):
+        """
+        Runs a CodeQL scan on the specified source code path.
+    
+        Args:
+            source_code_path (str): The path to the source code to be scanned (e.g., './backend').
+            output_sarif_path (str): The path to save the SARIF results (e.g., 'codeql_audit_results.sarif').
+            database_path (str): The path to store the CodeQL database (e.g., 'codeql_db_python').
+    
+        Returns:
+            bool: True if the CodeQL scan completes successfully, False otherwise.
+        """
+        logger.info(f"Starting CodeQL scan for {source_code_path}...")
+    
+        # Clean up previous database if it exists
+        if os.path.exists(database_path):
+            logger.info(f"Removing existing CodeQL database at {database_path}...")
+            try:
+                # Use shutil.rmtree for directory removal if available, or subprocess 'rm -rf'
+                subprocess.run(['rm', '-rf', database_path], check=True, capture_output=True, text=True)
+                logger.info("Existing CodeQL database removed.")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to remove existing CodeQL database: {e.stderr}")
+                return False
+    
+        # 1. Create CodeQL database
+        logger.info(f"Creating CodeQL database at {database_path} for language Python...")
+        create_db_command = [
+            "codeql", "database", "create", database_path,
+            f"--source-root={source_code_path}",
+            "--language=python"
+        ]
+        try:
+            # Using shell=True for simpler command execution, but be mindful of security implications
+            # if input comes from untrusted sources. For a local audit script, it's generally acceptable.
+            process = subprocess.run(create_db_command, check=True, capture_output=True, text=True, shell=False)
+            logger.info(f"CodeQL database creation stdout:\n{process.stdout}")
+            logger.info("CodeQL database created successfully.")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to create CodeQL database. Stderr:\n{e.stderr}")
+            return False
+        except FileNotFoundError:
+            logger.error("CodeQL CLI not found. Please ensure 'codeql' is in your system's PATH.")
+            return False
+    
+        # 2. Run CodeQL analysis
+        logger.info(f"Running CodeQL analysis on database {database_path}...")
+        # Use standard Python security queries. You can customize this or add more QLS files.
+        analyze_command = [
+            "codeql", "database", "analyze", database_path,
+            "python-security-and-quality.qls", # Standard Python security and quality queries
+            "--format=sarif-latest",
+            f"--output={output_sarif_path}"
+        ]
+        try:
+            process = subprocess.run(analyze_command, check=True, capture_output=True, text=True, shell=False)
+            logger.info(f"CodeQL analysis stdout:\n{process.stdout}")
+            logger.info(f"CodeQL analysis completed. Results saved to {output_sarif_path}")
+            return True
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to run CodeQL analysis. Stderr:\n{e.stderr}")
+            return False
+    
+    def process_codeql_results(sarif_file_path):
+        """
+        Processes CodeQL SARIF results and logs relevant findings.
+    
+        Args:
+            sarif_file_path (str): The path to the SARIF results file.
+        """
+        if not os.path.exists(sarif_file_path):
+            logger.warning(f"CodeQL SARIF file not found: {sarif_file_path}")
+            return
+    
+        logger.info(f"Processing CodeQL results from {sarif_file_path}...")
+        try:
+            with open(sarif_file_path, 'r') as f:
+                sarif_data = json.load(f)
+    
+            if "runs" in sarif_data:
+                for run in sarif_data["runs"]:
+                    if "results" in run:
+                        if not run["results"]:
+                            logger.info("No findings reported by CodeQL for this run.")
+                        for result in run["results"]:
+                            rule_id = result.get("ruleId", "N/A")
+                            message = result["message"]["text"]
+                            location = "N/A"
+                            if "locations" in result and result["locations"]:
+                                physical_location = result["locations"][0].get("physicalLocation")
+                                if physical_location:
+                                    artifact_location = physical_location.get("artifactLocation")
+                                    region = physical_location.get("region")
+                                    if artifact_location and "uri" in artifact_location:
+                                        # Convert file URI to a more readable path if necessary
+                                        location = artifact_location["uri"].replace("file://", "")
+                                    if region and "startLine" in region:
+                                        location += f":{region['startLine']}"
+                                    if "startColumn" in region:
+                                        location += f":{region['startColumn']}"
+    
+                            severity = result.get("level", "note") # 'error', 'warning', 'note'
+                            logger.info(f"CodeQL Finding ({severity.upper()}): Rule={rule_id}, Message='{message}', Location={location}")
+                    else:
+                        logger.info("No results array found in CodeQL SARIF run.")
+            else:
+                logger.info("No 'runs' array found in CodeQL SARIF data.")
+    
+        except json.JSONDecodeError:
+            logger.error(f"Error decoding JSON from CodeQL SARIF file: {sarif_file_path}. Is it a valid SARIF file?")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred while processing CodeQL results: {e}")
+    
+        
     def check_missing_permissions(self, file_path, tree):
         """
         Vérifie les routes Flask pour les permissions manquantes en utilisant l'AST.
@@ -798,6 +912,26 @@ if __name__ == "__main__":
 
     config = SimpleConfig()
 
+    project_root_for_codeql = "./backend"
+    codeql_sarif_output_file = "codeql_audit_results.sarif"
+    codeql_database_dir = "codeql_db_for_flask"
+
+    logger.info("Starting all security audits...")
+
+    # --- Run CodeQL Scan ---
+    logger.info("\n--- Initiating CodeQL Security Scan ---")
+    codeql_scan_successful = run_codeql_scan(
+        source_code_path=project_root_for_codeql,
+        output_sarif_path=codeql_sarif_output_file,
+        database_path=codeql_database_dir
+    )
+
+    if codeql_scan_successful:
+        process_codeql_results(codeql_sarif_output_file)
+    else:
+        logger.error("CodeQL scan did not complete successfully. Check logs for details.")
+    logger.info("CodeQL Scan completed.")
+    
     # Determine project paths based on this script's location
     project_root = os.path.dirname(os.path.abspath(__file__))
     backend_dir = os.path.join(project_root, 'backend')
