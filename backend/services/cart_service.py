@@ -1,16 +1,16 @@
 import logging
-from sqlalchemy.exc import SQLAlchemyError
+
 from backend.database import db
-from backend.models import Cart, CartItem, Product, User, InventoryReservation
+from backend.models import Cart, CartItem, InventoryReservation, Product, User
 from backend.services.exceptions import (
-    ServiceError,
     NotFoundException,
+    ServiceError,
     ValidationException,
-    InsufficientStockException,
 )
 from backend.services.inventory_service import InventoryService
 
 logger = logging.getLogger(__name__)
+
 
 class CartService:
     def __init__(self, logger):
