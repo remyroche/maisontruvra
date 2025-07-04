@@ -479,152 +479,86 @@ class SecurityAuditor:
             logging.error(f"Missing expected key in npm audit JSON output: {e}. Ensure npm audit JSON format matches expectations.")
             logging.error(f"Problematic JSON (full output, if short enough): {output_str}")
 
+
     def run_bandit_scan(self):
-        """Runs Bandit static analysis on the backend directory."""
+        """Runs Bandit static analysis on the backend directory, writing the report to a file for stable parsing."""
         if self.config.skip_static_analysis:
             logging.info("Skipping Bandit scan as per configuration.")
             return
-
+    
         self._print_header("Backend Security Scan (Bandit)")
         if not os.path.isdir(self.backend_dir):
             logging.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Bandit scan.")
             return
-
-        # Command is now more exhaustive by removing the severity filter '-ll'.
-        # It will now report issues of ALL severities (LOW, MEDIUM, HIGH).
-        # Confidence level defaults to MEDIUM and HIGH, which is a good balance.
-        # To include LOW confidence, add: '--confidence-level', 'low'
-        bandit_cmd = [sys.executable, '-m', 'bandit', '-r', self.backend_dir, '-f', 'json']
-
-        output_str, return_code = self._run_command(
-            bandit_cmd,
-            stdout_target=subprocess.PIPE,
-            stderr_target=subprocess.DEVNULL
-        )
-
-        logging.info("\n--- Raw Bandit Output (captured by Python) ---")
-        logging.info(f"Length of raw output: {len(output_str)}")
-        logging.info(f"First 200 chars of raw output:\n{output_str[:200]}")
-        logging.info(f"Last 200 chars of raw output:\n{output_str[-200:]}")
-        logging.info("--- End Raw Bandit Output ---")
-
-        clean_json_str = ""
+    
+        # --- CHANGE START ---
+        # Use a temporary file for reliable JSON output and exclude the 'tests' directory.
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8', suffix=".json") as tmp_file:
+            report_filename = tmp_file.name
+    
         try:
-            json_start_index = -1
-            for i, char in enumerate(output_str):
-                if char == '{' or char == '[':
-                    json_start_index = i
-                    break
-
-            json_end_index = -1
-            for i in range(len(output_str) - 1, -1, -1):
-                char = output_str[i]
-                if char == '}' or char == ']':
-                    json_end_index = i
-                    break
-
-            if json_start_index != -1 and json_end_index != -1 and json_end_index > json_start_index:
-                clean_json_str = output_str[json_start_index : json_end_index + 1]
-                logging.info(f"Extracted potential JSON substring from Bandit output (length: {len(clean_json_str)}).")
-                
-                clean_json_str = ''.join(c for c in clean_json_str if c.isprintable() or c.isspace())
-                clean_json_str = clean_json_str.strip()
-            else:
-                logging.warning("No complete JSON structure ({...} or [...]) found in Bandit output after initial capture.")
-                clean_json_str = ""
-
-        except Exception as e:
-            logging.error(f"Error trying to extract JSON substring from Bandit output: {e}")
-            clean_json_str = ""
-
-        logging.info("\n--- Cleaned JSON String (before json.loads) ---")
-        logging.info(f"Length of cleaned JSON: {len(clean_json_str)}")
-        logging.info(f"First 200 chars of cleaned JSON:\n{clean_json_str[:200]}")
-        logging.info(f"Last 200 chars of cleaned JSON:\n{clean_json_str[-200:]}")
-        logging.info("--- End Cleaned JSON String ---")
-
-
-        if not clean_json_str.strip():
-            logging.info("Bandit scan completed with no issues found (empty or non-parsable JSON after cleaning).")
-            if return_code != 0:
-                 logging.warning(f"Bandit exited with non-zero code ({return_code}) but produced no parsable JSON output.")
-            return
-
-        try:
-            report = json.loads(clean_json_str)
-
+            # Define the Bandit command with the output file and exclusions.
+            bandit_cmd = [
+                sys.executable, '-m', 'bandit',
+                '-r', self.backend_dir,
+                '-f', 'json',
+                '-o', report_filename, # Write JSON output directly to a file.
+                '-x', 'tests'  # Exclude the tests directory.
+            ]
+    
+            # Run the command. We don't need to capture stdout/stderr as output goes to the file.
+            self._run_command(bandit_cmd)
+    
+            # Read the JSON report from the file.
+            with open(report_filename, 'r', encoding='utf-8') as f:
+                try:
+                    report = json.load(f)
+                except json.JSONDecodeError:
+                    logging.error(f"Bandit ran, but its output at {report_filename} was not valid JSON. Please inspect the file.")
+                    return # Can't proceed without a valid report
+    
+            # Process the results from the report.
             if 'results' in report and report['results']:
+                logging.info(f"Bandit scan found {len(report['results'])} issues.")
                 for issue in report['results']:
-                    # --- Enhanced and more specific finding details ---
+                    # Format the finding details from the issue.
                     test_name = issue.get('test_name', 'N/A')
                     confidence = issue.get('issue_confidence', 'UNKNOWN').upper()
                     more_info_url = issue.get('more_info', 'N/A')
-
-                    # Create a more detailed description
+                    line_number = issue.get('line_number', 'N/A')
+    
                     description = (
                         f"Bandit Test: {test_name} ({issue.get('test_id', 'N/A')})\n"
                         f"Confidence: {confidence}\n"
-                        f"This issue was flagged by Bandit, a static analysis tool for finding common security issues in Python code."
+                        f"This was flagged by Bandit, a static analysis tool for finding common security issues."
                     )
-
-                    # Create a more helpful recommendation
-                    recommendation = f"Review the issue and the guidance available at: {more_info_url}"
-
-                    # Format the code snippet with line numbers for better context
+                    recommendation = f"Review the issue and guidance at: {more_info_url}"
+    
+                    # Format the code snippet with line numbers.
                     code_lines = issue.get('code', '').split('\n')
-                    line_range = issue.get('line_range', [issue.get('line_number', 0)])
-                    start_line = line_range[0]
+                    start_line = issue.get('line_range', [line_number])[0]
                     formatted_code = "\n".join(
                         f"{start_line + i: >4}: {line}" for i, line in enumerate(code_lines)
                     )
-
+    
                     self.add_finding(
                         severity=issue.get('issue_severity', 'UNKNOWN').upper(),
                         category="Static Analysis (Bandit)",
-                        title=issue.get('issue_text', 'No issue description'),
+                        title=issue.get('issue_text', 'No issue description provided'),
                         description=description,
                         file_path=issue.get('filename', 'N/A'),
-                        line_number=issue.get('line_number', 'N/A'),
+                        line_number=line_number,
                         code_snippet=formatted_code,
-                        recommendation=recommendation,
-                        cwe_id=issue.get('test_id', 'N/A')
+                        recommendation=recommendation
                     )
-                logging.info(f"Bandit scan found {len(report['results'])} issues.")
             else:
-                logging.info("Bandit scan completed with no security issues found in 'results' section.")
-
-            if 'metrics' in report and report['metrics']:
-                for file_path_metric, metrics_data in report['metrics'].items():
-                    for severity_key in ['SEVERITY.HIGH', 'SEVERITY.MEDIUM', 'SEVERITY.LOW', 'SEVERITY.UNDEFINED']:
-                        if metrics_data.get(severity_key, 0) > 0:
-                            self.add_finding(
-                                severity=severity_key.replace('SEVERITY.', ''),
-                                category="Static Analysis (Bandit Metrics)",
-                                title=f"Bandit detected {metrics_data[severity_key]} {severity_key} issues in {file_path_metric}",
-                                description=f"Summary metrics for {file_path_metric} show {metrics_data[severity_key]} issues with {severity_key.replace('SEVERITY.', '')} severity. Review the detailed 'results' section if available.",
-                                file_path=file_path_metric,
-                                line_number=0,
-                                recommendation="Review the file for potential security vulnerabilities identified by Bandit."
-                            )
-                            break
-            else:
-                logging.info("No 'metrics' section found in Bandit report or it's empty.")
-
-
-            if return_code != 0 and not (report.get('results') or report.get('metrics')):
-                logging.warning(f"Bandit exited with non-zero code ({return_code}) but reported no vulnerabilities in its JSON output (after parsing). This might indicate a configuration error or other non-finding issue. Please check Bandit's configuration and execution context.")
-
-        except json.JSONDecodeError as e:
-            logging.error(f"Could not decode Bandit JSON output. Error: {e}")
-            logging.error(f"Problematic JSON (first 500 chars):\n{clean_json_str[:500]}...")
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, encoding='utf-8') as tmp_file:
-                tmp_file.write(clean_json_str)
-                logging.error(f"Problematic Bandit JSON saved to: {tmp_file.name} for manual inspection.")
-            raise
-        except KeyError as e:
-            logging.error(f"Missing expected key in Bandit JSON output: {e}. Ensure Bandit JSON format matches expectations.")
-            logging.error(f"Problematic JSON (full output, if short enough): {clean_json_str}")
-            raise
+                logging.info("Bandit scan completed with no security issues found.")
+    
+        finally:
+            # Clean up the temporary file.
+            if os.path.exists(report_filename):
+                os.remove(report_filename)
+        # --- CHANGE END ---
 
     def run_pylint_scan(self):
         """Runs Pylint static analysis on the backend directory and parses the JSON output."""
