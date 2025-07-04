@@ -1,6 +1,6 @@
 import logging
 
-from flask import Blueprint, current_app, g, jsonify
+from flask import Blueprint, g, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_login import current_user
 
@@ -58,7 +58,10 @@ def get_b2b_applications():
     # Use a schema to serialize user data properly
     return (
         jsonify(
-            [{"id": u.id, "email": u.email, "company_name": u.company_name} for u in users]
+            [
+                {"id": u.id, "email": u.email, "company_name": u.company_name}
+                for u in users
+            ]
         ),
         200,
     )
@@ -148,9 +151,7 @@ def accept_quote(quote_id):
     try:
         cart = quote_service.accept_quote_and_create_cart(quote_id, current_user.id)
         return (
-            jsonify(
-                {"message": "Quote accepted. Cart created.", "cart_id": cart.id}
-            ),
+            jsonify({"message": "Quote accepted. Cart created.", "cart_id": cart.id}),
             200,
         )
     except ValueError as e:
