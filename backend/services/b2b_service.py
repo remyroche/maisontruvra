@@ -1,8 +1,9 @@
 from flask import current_app
 from sqlalchemy.exc import SQLAlchemyError
+
 from backend.database import db
-from backend.models import B2BAccount, User, B2BUser, Tier
-from backend.services.exceptions import ServiceException, ServiceError
+from backend.models import B2BAccount, Tier, User
+from backend.services.exceptions import ServiceError, ServiceException
 
 
 class B2BService:
