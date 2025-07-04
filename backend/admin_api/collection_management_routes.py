@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
+
 from backend.models import Collection
 from backend.schemas import CollectionSchema
 from backend.services.exceptions import ServiceException
@@ -89,7 +90,9 @@ def delete_collection(instance):
 @bp.route("/<int:collection_id>/restore", methods=["POST"])
 @jwt_required()
 @roles_required("Admin", "Manager")
-@api_resource_handler(model=Collection, response_schema=CollectionSchema, log_action=True)
+@api_resource_handler(
+    model=Collection, response_schema=CollectionSchema, log_action=True
+)
 def restore_collection(instance):
     """
     Restores a soft-deleted collection.
