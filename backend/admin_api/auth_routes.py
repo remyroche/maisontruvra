@@ -6,7 +6,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_login import current_user, login_user, logout_user
 from marshmallow import ValidationError
 
-from backend.extensions import db, limiter
+from backend.extensions import limiter
 from backend.services.audit_log_service import AuditLogService
 from backend.services.auth_service import AuthService
 from backend.services.exceptions import ServiceError
