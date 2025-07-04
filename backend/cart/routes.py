@@ -1,5 +1,6 @@
 import logging
-from flask import Blueprint, g, jsonify, request
+
+from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 from marshmallow import ValidationError
 
