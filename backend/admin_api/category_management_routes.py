@@ -1,13 +1,13 @@
-"""
-This module defines the API endpoints for category management in the admin panel.
-"""
+from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required
 
-from flask import Blueprint, request, g, jsonify
-from ..models import Category
-from ..schemas import CategorySchema
-from ..utils.decorators import api_resource_handler, roles_required
-from ..services.product_service import ProductService
+from backend.models import Category
+from backend.schemas import CategorySchema
+from backend.services.exceptions import ServiceException
+from backend.services.product_service import ProductService
+from backend.utils.decorators import api_resource_handler, roles_required
 
+# Blueprint for category management
 bp = Blueprint("category_management", __name__, url_prefix="/api/admin/categories")
 
 
@@ -16,12 +16,14 @@ bp = Blueprint("category_management", __name__, url_prefix="/api/admin/categorie
 @roles_required("Admin", "Manager")
 def get_all_categories():
     """
-    Retrieves a list of all product categories.
-    Supports including soft-deleted items via a query parameter.
+    Retrieves all product categories.
+    An optional `include_deleted` query parameter can be used.
     """
+    include_deleted = request.args.get("include_deleted", "false").lower() == "true"
     try:
-        include_deleted = request.args.get("include_deleted", "false").lower() == "true"
-        categories = ProductService.get_all_categories(include_deleted=include_deleted)
+        categories = ProductService.get_all_categories(
+            include_deleted=include_deleted
+        )
         return jsonify(CategorySchema(many=True).dump(categories)), 200
     except ServiceException as e:
         return jsonify(e.to_dict()), e.status_code
@@ -36,24 +38,24 @@ def get_all_categories():
     response_schema=CategorySchema,
     log_action=True,
 )
-def create_category():
+def create_category(validated_data):
     """
     Creates a new product category.
-    The decorator handles validation, session management, and response serialization.
+    The decorator handles validation, creation, and response.
     """
-    return ProductService.create_category(g.validated_data)
+    return validated_data  # The decorator returns the created object
 
 
 @bp.route("/<int:category_id>", methods=["GET"])
 @jwt_required()
 @roles_required("Admin", "Manager")
 @api_resource_handler(model=Category, response_schema=CategorySchema)
-def get_category(category_id):
+def get_category(instance):
     """
     Retrieves a single category by its ID.
     The decorator handles fetching and serialization.
     """
-    return g.target_object
+    return instance
 
 
 @bp.route("/<int:category_id>", methods=["PUT"])
@@ -65,35 +67,34 @@ def get_category(category_id):
     response_schema=CategorySchema,
     log_action=True,
 )
-def update_category(category_id):
+def update_category(instance, validated_data):
     """
     Updates an existing category.
-    The decorator fetches the category, validates input, and handles the response.
+    The decorator handles fetching, validation, updating, and response.
     """
-    return ProductService.update_category(g.target_object, g.validated_data)
+    return instance
 
 
 @bp.route("/<int:category_id>", methods=["DELETE"])
 @jwt_required()
 @roles_required("Admin", "Manager")
 @api_resource_handler(model=Category, allow_hard_delete=True, log_action=True)
-def delete_category(category_id):
+def delete_category(instance):
     """
     Deletes a category.
-    - Soft-delete by default.
-    - Use ?hard=true for a permanent, irreversible delete.
-    The decorator handles all fetching and deletion logic automatically.
+    The decorator handles fetching and deletion.
     """
-    return None
+    return {"message": "Category deleted successfully"}
 
 
 @bp.route("/<int:category_id>/restore", methods=["POST"])
 @jwt_required()
 @roles_required("Admin", "Manager")
 @api_resource_handler(model=Category, response_schema=CategorySchema, log_action=True)
-def restore_category(category_id):
+def restore_category(instance):
     """
     Restores a soft-deleted category.
-    The decorator handles all fetching and restoration logic automatically.
+    The decorator handles fetching and restoration logic.
     """
-    return g.target_object
+    instance.deleted_at = None
+    return instance
