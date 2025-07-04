@@ -2,12 +2,13 @@
 This module defines the API endpoints for managing global site settings.
 """
 
-from flask import Blueprint, request, jsonify
-from ..schemas import SiteSettingsSchema
-from ..utils.decorators import roles_required
-from ..services.site_settings_service import SiteSettingsService
-from ..extensions import db
+from flask import Blueprint, jsonify, request
 from marshmallow import ValidationError
+
+from ..extensions import db
+from ..schemas import SiteSettingsSchema
+from ..services.site_settings_service import SiteSettingsService
+from ..utils.decorators import roles_required
 
 # --- Blueprint Setup ---
 bp = Blueprint("site_management", __name__, url_prefix="/api/admin/site-settings")

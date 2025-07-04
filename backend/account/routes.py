@@ -1,37 +1,36 @@
-from flask import Blueprint, request, jsonify, current_app, g
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask import Blueprint, current_app, g, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_login import current_user
 
 from backend.database import db
-from backend.models.user_models import User
 from backend.models.address_models import Address
-from backend.services.user_service import UserService
-from backend.services.mfa_service import MfaService
-from backend.services.address_service import AddressService
-from backend.services.email_service import EmailService
-from backend.utils.decorators import (
-    b2b_user_required,
-    admin_required,
-    api_resource_handler,
-    roles_required,
-)
-from backend.services.product_service import ProductService  # For product_service
-from backend.services.order_service import OrderService  # For order_service
+from backend.models.user_models import User
 from backend.schemas import (
     AddressSchema,
+    ChangePasswordSchema,
     LanguageUpdateSchema,
     TwoFactorSetupSchema,
     TwoFactorVerifySchema,
     UserProfileUpdateSchema,
-    ChangePasswordSchema,
     UserSchema,
 )  # Updated schemas
-
+from backend.services.address_service import AddressService
 from backend.services.auth_service import AuthService
+from backend.services.email_service import EmailService
 from backend.services.exceptions import InvalidCredentialsError, UnauthorizedException
+from backend.services.mfa_service import MfaService
+from backend.services.order_service import OrderService  # For order_service
+from backend.services.product_service import ProductService  # For product_service
+from backend.services.user_service import UserService
 
 # from backend.schemas import UserProfileUpdateSchema, AddressSchema, ChangePasswordSchema # Duplicate import, removed
-from backend.utils.decorators import login_required
+from backend.utils.decorators import (
+    admin_required,
+    api_resource_handler,
+    b2b_user_required,
+    login_required,
+    roles_required,
+)
 
 account_bp = Blueprint("account_bp", __name__)
 user_service = UserService()

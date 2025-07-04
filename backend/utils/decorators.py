@@ -1,24 +1,27 @@
 import logging
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Any
-from flask import jsonify, request, g, Response, abort, current_app
-from flask_jwt_extended import get_jwt_identity, get_jwt, jwt_required
+from typing import Any
+
+from flask import Response, abort, current_app, g, jsonify, request
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from flask_login import current_user
-from backend.models.user_models import User
-from backend.services.audit_log_service import AuditLogService
-from backend.utils.csrf_protection import CSRFProtection
 from marshmallow import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
+from backend.models.user_models import User
+from backend.services.audit_log_service import AuditLogService
+from backend.utils.csrf_protection import CSRFProtection
+
+from ..extensions import cache, db
+
 # Import the base class and all specific exceptions.
 from ..services.exceptions import (
-    ServiceException,
-    NotFoundException,
     AuthorizationException,
+    NotFoundException,
+    ServiceException,
 )
-from ..extensions import db, cache
-
 
 # Initialize loggers
 logger = logging.getLogger(__name__)

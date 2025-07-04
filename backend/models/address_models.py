@@ -1,6 +1,7 @@
-from backend.database import db
 from sqlalchemy.ext.hybrid import hybrid_property
-from backend.utils.encryption import encrypt_data, decrypt_data
+
+from backend.database import db
+from backend.utils.encryption import decrypt_data, encrypt_data
 
 
 class Address(db.Model):

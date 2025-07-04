@@ -1,13 +1,16 @@
-import os
 import io
+import os
+
 import magic
-from PIL import Image
 from flask import current_app
+from PIL import Image
+from werkzeug.utils import secure_filename
+
 from backend.database import db
 from backend.models.asset_models import Asset
-from .exceptions import ServiceError, NotFoundException, ValidationException
+
+from .exceptions import NotFoundException, ServiceError, ValidationException
 from .monitoring_service import MonitoringService
-from werkzeug.utils import secure_filename
 
 # Define constants for file validation
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB

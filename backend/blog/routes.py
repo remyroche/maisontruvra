@@ -1,11 +1,12 @@
 # backend/blog/routes.py
 
-from flask import Blueprint, jsonify, g
-from backend.schemas import BlogPostSchema, BlogCategorySchema
-from backend.services.blog_service import BlogService
-from backend.services.exceptions import NotFoundException
+from flask import Blueprint, g, jsonify
+
 from backend.extensions import cache
 from backend.models.blog_models import BlogPost
+from backend.schemas import BlogCategorySchema, BlogPostSchema
+from backend.services.blog_service import BlogService
+from backend.services.exceptions import NotFoundException
 from backend.utils.decorators import api_resource_handler
 
 blog_bp = Blueprint("blog_bp", __name__, url_prefix="/blog")

@@ -1,12 +1,14 @@
+import io
+
 from flask import Blueprint, jsonify, send_file
+
 from backend.services.passport_service import (
     PassportService,
 )  # Assuming this service exists
 from backend.utils.decorators import (
-    roles_required,
     permissions_required,
+    roles_required,
 )
-import io
 
 passport_bp = Blueprint(
     "admin_passport_routes", __name__, url_prefix="/api/admin/passports"

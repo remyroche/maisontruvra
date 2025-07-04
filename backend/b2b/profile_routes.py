@@ -1,26 +1,27 @@
 from flask import (
     Blueprint,
-    request,
-    jsonify,
-    g,
-    redirect,
-    url_for,
     flash,
+    g,
+    jsonify,
+    redirect,
     render_template,
+    request,
+    url_for,
 )
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_login import current_user
+
+from backend.extensions import db
+from backend.models import Company, db
+from backend.models.address_models import Address
+from backend.schemas import AddressSchema, UserSchema
 from backend.services.b2b_service import B2BService
 from backend.utils.decorators import (
-    b2b_user_required,
-    b2b_admin_required,
     api_resource_handler,
+    b2b_admin_required,
+    b2b_user_required,
+    login_required,
 )
-from backend.models.address_models import Address
-from backend.schemas import UserSchema, AddressSchema
-from backend.extensions import db
-from flask_login import current_user
-from backend.models import db, Company
-from backend.utils.decorators import login_required
 
 b2b_profile_bp = Blueprint("b2b_profile_bp", __name__, url_prefix="/api/b2b/profile")
 b2b_service = B2BService()

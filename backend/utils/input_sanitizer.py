@@ -5,13 +5,15 @@ This module provides a unified InputSanitizer class that combines functionality
 from both previous implementations.
 """
 
-from typing import Any
 import re
-import bleach
 from collections.abc import Mapping
-from flask import request, g
-from backend.services.exceptions import ValidationException
+from typing import Any
+
+import bleach
+from flask import g, request
+
 from backend.loggers import security_logger
+from backend.services.exceptions import ValidationException
 
 
 class InputSanitizer:

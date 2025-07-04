@@ -1,20 +1,21 @@
-from flask import Blueprint, jsonify, current_app, g
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask import Blueprint, current_app, g, jsonify
+from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_login import current_user
+
+from backend.models.quote_models import Quote
+from backend.models.user_models import User
+from backend.schemas import QuoteResponseSchema, QuoteSchema, UserSchema
 from backend.services.b2b_service import B2BService
+from backend.services.exceptions import (
+    AuthorizationException,
+    ValidationException,
+)
 from backend.services.quote_service import QuoteService
 from backend.utils.decorators import (
     admin_required,
-    login_required,
     api_resource_handler,
+    login_required,
 )
-from backend.models.quote_models import Quote
-from backend.models.user_models import User
-from backend.schemas import QuoteSchema, QuoteResponseSchema, UserSchema
-from backend.services.exceptions import (
-    ValidationException,
-    AuthorizationException,
-)
-from flask_login import current_user
 
 b2b_bp = Blueprint("b2b_api", __name__, url_prefix="/api/b2b")
 

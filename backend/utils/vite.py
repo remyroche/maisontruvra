@@ -5,6 +5,7 @@
 # ==============================================================================
 import json
 import os
+
 from flask import current_app, url_for
 from markupsafe import Markup
 
@@ -40,7 +41,7 @@ def vite_asset(path: str) -> Markup:
     if not os.path.exists(manifest_path):
         raise RuntimeError("Vite manifest not found. Did you run 'npm run build'?")
 
-    with open(manifest_path, "r") as f:
+    with open(manifest_path) as f:
         manifest = json.load(f)
 
     if path not in manifest:

@@ -3,48 +3,46 @@ Service layer for handling the checkout process.
 This includes order creation, payment processing, and orchestrating post-order tasks.
 """
 
-from backend.extensions import db
-from backend.models.order_models import Order, OrderItem
-from backend.models.product_models import Product
-from backend.models.user_models import UserType
-from backend.models.delivery_models import DeliveryOption
-from backend.models.cart_models import Cart, CartItem
-
-from backend.services.referral_service import ReferralService
-
-
 from flask import current_app
-from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
+
+from backend.extensions import db
 from backend.models import (
-    db,
-    Order,
-    OrderItem,
-    Product,
     Cart,
     CartItem,
     DiscountType,
+    Order,
+    OrderItem,
+    Product,
+    db,
 )
+from backend.models.cart_models import Cart, CartItem
+from backend.models.delivery_models import DeliveryOption
+from backend.models.order_models import Order, OrderItem
+from backend.models.product_models import Product
+from backend.models.user_models import UserType
+from backend.services.address_service import AddressService
+from backend.services.background_task_service import BackgroundTaskService
+from backend.services.discount_service import DiscountService
 from backend.services.email_service import EmailService
 from backend.services.inventory_service import InventoryService
 from backend.services.loyalty_service import (
     LoyaltyService,
 )
-from backend.services.discount_service import DiscountService
 
 # from backend.services.payment_service import PaymentService
 from backend.services.pdf_service import PDFService
-from backend.services.background_task_service import BackgroundTaskService
+from backend.services.referral_service import ReferralService
 from backend.services.user_service import UserService
-from backend.services.address_service import AddressService
-from backend.extensions import db
+
 from .exceptions import (
-    CheckoutError,
     CartEmptyError,
-    ProductNotFoundError,
+    CheckoutError,
     InsufficientStockError,
-    PaymentError,
     LoyaltyError,
+    PaymentError,
+    ProductNotFoundError,
 )
 
 

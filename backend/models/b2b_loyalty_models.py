@@ -1,12 +1,15 @@
-from sqlalchemy.dialects.postgresql import UUID
-import uuid
-from backend.extensions import db
 import enum
+import uuid
+
 from sqlalchemy import (
     Column,
     Numeric,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+
+from backend.extensions import db
+
 from .base import BaseModel
 
 

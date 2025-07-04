@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta
+
 from sqlalchemy import func
+
 from backend.database import db
 from backend.models.order_models import Order, OrderStatusEnum
-from backend.models.user_models import User
 from backend.models.product_models import Product, Review
+from backend.models.user_models import User
 
 
 class AdminDashboardService:

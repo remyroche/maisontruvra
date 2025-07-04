@@ -4,18 +4,7 @@ It leverages the @api_resource_handler to create clean, secure, and consistent C
 and includes separate endpoints for specialized user actions.
 """
 
-from flask import Blueprint, request, g, jsonify
-from ..models import User
-from ..schemas import (
-    RoleSchema,
-    TierAssignmentSchema,
-    CustomDiscountSchema,
-)  # Assuming these new schemas exist
-from ..utils.decorators import api_resource_handler, roles_required
-from ..services.user_service import UserService
-from ..services.rbac_service import RBACService
-from ..services.discount_service import DiscountService
-
+from flask import Blueprint, g, jsonify, request
 from flask_jwt_extended import jwt_required
 
 from backend.models.user_models import User
@@ -23,13 +12,25 @@ from backend.schemas import UserSchema, UserUpdateSchema
 from backend.services.user_service import UserService
 from backend.utils.decorators import api_resource_handler, roles_required
 
+from ..models import User
+from ..schemas import (
+    CustomDiscountSchema,
+    RoleSchema,
+    TierAssignmentSchema,
+)  # Assuming these new schemas exist
+from ..services.discount_service import DiscountService
+from ..services.rbac_service import RBACService
+from ..services.user_service import UserService
+from ..utils.decorators import api_resource_handler, roles_required
+
 # --- Blueprint Setup ---
 bp = Blueprint("user_management", __name__, url_prefix="/api/admin/users")
 
 from flask import Blueprint
-from backend.services.auth_service import AuthService
-from backend.services.exceptions import UserNotFoundException, UpdateException
 from pydantic import ValidationError
+
+from backend.services.auth_service import AuthService
+from backend.services.exceptions import UpdateException, UserNotFoundException
 
 user_management_bp = Blueprint(
     "user_management_bp", __name__, url_prefix="/api/admin/users"

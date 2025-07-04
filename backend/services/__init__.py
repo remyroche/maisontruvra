@@ -4,8 +4,8 @@ from backend.services.admin_dashboard_service import AdminDashboardService
 from backend.services.asset_service import AssetService
 from backend.services.audit_log_service import AuditLogService
 from backend.services.auth_service import AuthService
-from backend.services.background_task_service import BackgroundTaskService
 from backend.services.b2b_service import B2BService
+from backend.services.background_task_service import BackgroundTaskService
 from backend.services.blog_service import BlogService
 from backend.services.cart_service import CartService
 from backend.services.checkout_service import CheckoutService
@@ -94,6 +94,6 @@ class ServiceProvider:
 
 def init_app(app):
     """Initializes the services with the Flask app context."""
-    from backend.extensions import db, mail, celery
+    from backend.extensions import celery, db, mail
 
     app.service_provider = ServiceProvider(db.session, app.config, mail, celery)

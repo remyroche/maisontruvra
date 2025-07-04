@@ -1,22 +1,28 @@
+from decimal import Decimal
+
 from flask_login import current_user
+from sqlalchemy.orm import joinedload
+
 from backend.database import db
-from backend.models.product_models import Product
+from backend.extensions import db
 from backend.models.inventory_models import (
     InventoryReservation,
 )  # Added: Import InventoryReservation
-from .exceptions import ServiceError, ValidationException, NotFoundException
+from backend.models.product_models import Product
+from backend.services.b2b_service import B2BService
+from backend.utils.input_sanitizer import InputSanitizer
+
+from .. import db
+from ..models import Cart, CartItem, ExclusiveReward, Product, User
+from ..models.enums import UserType
+from .exceptions import (
+    NotFoundException,
+    ProductNotFoundError,
+    ServiceError,
+    ValidationException,
+)
 from .inventory_service import InventoryService
 from .monitoring_service import MonitoringService
-from backend.utils.input_sanitizer import InputSanitizer
-from ..models import ExclusiveReward, Product, User
-from backend.services.b2b_service import B2BService
-from decimal import Decimal
-from .. import db
-from ..models import Cart, CartItem
-from sqlalchemy.orm import joinedload
-from backend.extensions import db
-from .exceptions import ProductNotFoundError
-from ..models.enums import UserType
 
 
 class CartService:

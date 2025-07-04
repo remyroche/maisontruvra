@@ -1,7 +1,8 @@
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, current_app, jsonify
+from flask_login import current_user
+
 from backend.services.referral_service import ReferralService
 from backend.utils.decorators import login_required
-from flask_login import current_user
 
 referral_bp = Blueprint("referral_api", __name__, url_prefix="/api/referrals")
 

@@ -2,8 +2,9 @@
 This module defines the base model and common mixins for all SQLAlchemy models.
 """
 
-from backend.extensions import db
 from sqlalchemy.orm import Query
+
+from backend.extensions import db
 
 
 class SoftDeleteQuery(Query):

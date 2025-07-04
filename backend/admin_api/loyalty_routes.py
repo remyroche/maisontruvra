@@ -1,12 +1,14 @@
-from flask import Blueprint, request, jsonify, jwt_required, g
-from ..services.loyalty_service import LoyaltyService, LoyaltyTier, LoyaltyTierSchema
-from backend.utils.input_sanitizer import InputSanitizer
+from flask import Blueprint, g, jsonify, jwt_required, request
+
 from backend.utils.decorators import (
     api_resource_handler,
-    roles_required,
     permissions_required,
+    roles_required,
 )
+from backend.utils.input_sanitizer import InputSanitizer
+
 from ..extensions import cache
+from ..services.loyalty_service import LoyaltyService, LoyaltyTier, LoyaltyTierSchema
 
 loyalty_bp = Blueprint(
     "admin_loyalty_routes", __name__, url_prefix="/api/admin/loyalty"

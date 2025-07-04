@@ -1,10 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
+
+from backend.services.email_service import EmailService
 from backend.services.newsletter_service import NewsletterService
 from backend.utils.decorators import (
-    roles_required,
     permissions_required,
+    roles_required,
 )
-from backend.services.email_service import EmailService
 
 newsletter_bp = Blueprint(
     "admin_newsletter_routes", __name__, url_prefix="/api/admin/newsletter"

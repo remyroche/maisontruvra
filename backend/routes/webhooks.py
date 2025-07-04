@@ -1,7 +1,8 @@
 import stripe
 from flask import Blueprint, current_app, jsonify, request
-from backend.services.order_service import get_order_by_id, update_order_status
+
 from backend.models.order_models import OrderStatus
+from backend.services.order_service import get_order_by_id, update_order_status
 from backend.tasks import (
     generate_invoice_for_order_task,
     send_order_confirmation_email_task,

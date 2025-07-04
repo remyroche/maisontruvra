@@ -1,10 +1,12 @@
+import logging
+
 from backend.extensions import db
 from backend.models.product_models import StockNotificationRequest
 from backend.models.user_models import User
 from backend.models.utility_models import StockNotification
-from .monitoring_service import MonitoringService
+
 from .exceptions import ValidationException
-import logging
+from .monitoring_service import MonitoringService
 
 logger = logging.getLogger(__name__)
 

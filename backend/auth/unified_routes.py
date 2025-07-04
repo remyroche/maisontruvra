@@ -7,37 +7,38 @@ All authentication flows (password, TOTP, magic link) are handled through these 
 
 import logging
 from datetime import datetime
-from flask import Blueprint, request, jsonify, session, redirect, g
+
+from flask import Blueprint, g, jsonify, redirect, request, session
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
-    jwt_required,
     get_jwt_identity,
+    jwt_required,
 )
 from marshmallow import ValidationError
 
-from backend.services.unified_auth_service import UnifiedAuthService
+from backend.models.user_models import User
+from backend.schemas import (
+    AuthMethodUpdateSchema,
+    LoginSchema,
+    MagicLinkRequestSchema,
+    MfaVerificationSchema,
+    PasswordChangeSchema,
+    PasswordResetConfirmSchema,
+    PasswordResetRequestSchema,
+    SetupTotpSchema,
+    UserRegistrationSchema,
+)
 from backend.services.email_service import EmailService
 from backend.services.exceptions import (
-    UnauthorizedException,
-    NotFoundException,
-    UserAlreadyExistsError,
     InvalidCredentialsError,
+    NotFoundException,
+    UnauthorizedException,
+    UserAlreadyExistsError,
 )
-from backend.schemas import (
-    UserRegistrationSchema,
-    LoginSchema,
-    MfaVerificationSchema,
-    SetupTotpSchema,
-    MagicLinkRequestSchema,
-    AuthMethodUpdateSchema,
-    PasswordResetRequestSchema,
-    PasswordResetConfirmSchema,
-    PasswordChangeSchema,
-)
-from backend.utils.rate_limiter import limiter
+from backend.services.unified_auth_service import UnifiedAuthService
 from backend.utils.decorators import api_resource_handler
-from backend.models.user_models import User
+from backend.utils.rate_limiter import limiter
 
 # Create blueprint
 unified_auth_bp = Blueprint("unified_auth", __name__, url_prefix="/api/auth")
@@ -513,8 +514,8 @@ def reset_password():
     reset_data = g.validated_data
 
     # Verify token and reset password
-    from backend.utils.token_utils import verify_password_reset_token
     from backend.utils.encryption import hash_password
+    from backend.utils.token_utils import verify_password_reset_token
 
     try:
         # Verify the token

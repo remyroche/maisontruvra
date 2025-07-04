@@ -1,19 +1,20 @@
-from flask import Blueprint, request, jsonify, g, current_app
+from flask import Blueprint, current_app, g, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_login import current_user
-from flask_jwt_extended import jwt_required, get_jwt_identity
 from marshmallow import ValidationError
-from backend.services.order_service import OrderService
-from backend.services.cart_service import CartService
-from backend.utils.decorators import login_required, api_resource_handler
-from backend.services.exceptions import ServiceError, AuthorizationException
-from backend.services.email_service import EmailService
+
+from backend.models.order_models import Order
 from backend.schemas import (
-    OrderSchema,
-    GuestOrderSchema,
     AuthenticatedOrderSchema,
     CheckoutOrderSchema,
+    GuestOrderSchema,
+    OrderSchema,
 )
-from backend.models.order_models import Order
+from backend.services.cart_service import CartService
+from backend.services.email_service import EmailService
+from backend.services.exceptions import AuthorizationException, ServiceError
+from backend.services.order_service import OrderService
+from backend.utils.decorators import api_resource_handler, login_required
 
 orders_bp = Blueprint("orders_bp", __name__, url_prefix="/api/orders")
 

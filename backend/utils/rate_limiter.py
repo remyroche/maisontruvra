@@ -1,9 +1,11 @@
-from typing import Dict, List, Set, Callable, Any, Union
+import logging
 import time
 from collections import defaultdict
-from flask import request, jsonify, Response
+from collections.abc import Callable
 from functools import wraps
-import logging
+from typing import Any
+
+from flask import Response, jsonify, request
 
 # Set up logger for this module
 logger = logging.getLogger(__name__)
@@ -20,8 +22,8 @@ class RateLimiter:
     """
 
     def __init__(self):
-        self.requests: Dict[str, List[float]] = defaultdict(list)
-        self.blocked_ips: Set[str] = set()
+        self.requests: dict[str, list[float]] = defaultdict(list)
+        self.blocked_ips: set[str] = set()
 
     def is_rate_limited(self, identifier: str, max_requests: int, window: int) -> bool:
         """
@@ -67,7 +69,7 @@ class RateLimiter:
 
         def decorator(f: Callable) -> Callable:
             @wraps(f)
-            def decorated_function(*args: Any, **kwargs: Any) -> Union[Response, tuple]:
+            def decorated_function(*args: Any, **kwargs: Any) -> Response | tuple:
                 # In a production environment behind a proxy, use 'X-Forwarded-For'.
                 identifier = request.headers.get("X-Forwarded-For", request.remote_addr)
 

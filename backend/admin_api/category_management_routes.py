@@ -21,9 +21,7 @@ def get_all_categories():
     """
     include_deleted = request.args.get("include_deleted", "false").lower() == "true"
     try:
-        categories = ProductService.get_all_categories(
-            include_deleted=include_deleted
-        )
+        categories = ProductService.get_all_categories(include_deleted=include_deleted)
         return jsonify(CategorySchema(many=True).dump(categories)), 200
     except ServiceException as e:
         return jsonify(e.to_dict()), e.status_code

@@ -1,29 +1,30 @@
-from functools import wraps
-from flask import request, jsonify, g, session, current_app, redirect, Flask
 import os
+
+# Assuming RBACService is defined elsewhere and imported, or defined below for self-containment
+# from backend.services.rbac_service import RBACService
+import time
 import uuid
 from datetime import datetime
-from flask_login import current_user
-from backend.loggers import security_logger
+from functools import wraps
 
+from flask import Flask, current_app, g, jsonify, redirect, request, session
+from flask_compress import Compress
+from flask_cors import CORS
 
 # New imports for middleware functionality
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_cors import CORS
-from flask_compress import Compress
+from flask_login import current_user
+from prometheus_client import Counter, Histogram
 from werkzeug.exceptions import (
     default_exceptions,
 )  # For payload size error handling
 
+from backend.loggers import security_logger
+from backend.models.user_models import User
+
 # Import utilities
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.models.user_models import User
-# Assuming RBACService is defined elsewhere and imported, or defined below for self-containment
-# from backend.services.rbac_service import RBACService
-
-import time
-from prometheus_client import Counter, Histogram
 
 # Prometheus metrics
 REQUEST_LATENCY = Histogram(
@@ -36,7 +37,6 @@ REQUEST_COUNT = Counter(
 
 # Import centralized loggers
 from backend.loggers import app_logger as logger
-
 
 # --- Global Flask Extensions Initialization ---
 # These are initialized globally and then `init_app` is called within setup_middleware

@@ -5,21 +5,21 @@ database models, encapsulating the business logic away from the API endpoints.
 """
 
 import re
-import bleach
-from sqlalchemy.orm import Session
-from flask import current_app
 
-from ..extensions import db, cache
-from ..models import BlogPost, BlogCategory
+import bleach
+from flask import current_app
+from sqlalchemy.orm import Session
+
+from ..extensions import cache, db
+from ..models import BlogCategory, BlogPost
 from ..services.exceptions import NotFoundException, ValidationException
+from ..utils.cache_helpers import (
+    clear_blog_cache,
+    get_blog_post_by_slug_key,
+    get_blog_post_list_key,
+)
 from ..utils.input_sanitizer import InputSanitizer
 from ..utils.slug_utility import generate_unique_slug
-from ..utils.cache_helpers import (
-    get_blog_post_list_key,
-    get_blog_post_by_slug_key,
-    clear_blog_cache,
-)
-
 
 ALLOWED_TAGS = [
     "p",

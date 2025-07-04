@@ -1,31 +1,32 @@
-import uuid
 import logging
-from sqlalchemy.orm import joinedload, subqueryload
+import uuid
+
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload, subqueryload
 
 from .. import db
 from ..extensions import socketio
 from ..models import (
+    Cart,
+    CartItem,  # Added CartItem to the import list
     Order,
     OrderItem,
-    Product,
-    Cart,
     OrderStatusEnum,
-    CartItem,  # Added CartItem to the import list
+    Product,
 )
+from .email_service import EmailService
 from .exceptions import (
-    ServiceException,
-    NotFoundException,
-    ValidationException,
     BusinessRuleException,
+    NotFoundException,
+    ServiceException,
+    ValidationException,
 )
 from .inventory_service import InventoryService
+from .invoice_service import InvoiceService
 from .loyalty_service import LoyaltyService
 
 # Note: NotificationService is no longer imported here to prevent circular dependency
 from .monitoring_service import MonitoringService
-from .invoice_service import InvoiceService
-from .email_service import EmailService
 
 # Configure a logger for this service
 logger = logging.getLogger(__name__)

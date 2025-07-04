@@ -1,8 +1,10 @@
 # backend/models/discount_models.py
 
-from .. import db
-from sqlalchemy.dialects.postgresql import UUID
 import uuid
+
+from sqlalchemy.dialects.postgresql import UUID
+
+from .. import db
 from .enums import DiscountType  # <-- Correctly import the Enum
 
 

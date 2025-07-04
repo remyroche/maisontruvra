@@ -1,12 +1,14 @@
 # backend/products/review_routes.py
 
-from flask import Blueprint, jsonify, g
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..services.review_service import ReviewService
-from ..services.exceptions import NotFoundException, ServiceError
-from ..utils.decorators import api_resource_handler  # Assuming this is the path
+from flask import Blueprint, g, jsonify
+from flask_jwt_extended import get_jwt_identity, jwt_required
+
 from backend.models.product_models import Review  # Assuming this is the path
+
 from ..schemas import ReviewSchema  # Assuming this exists for validation
+from ..services.exceptions import NotFoundException, ServiceError
+from ..services.review_service import ReviewService
+from ..utils.decorators import api_resource_handler  # Assuming this is the path
 
 # Create a Blueprint for review routes, nested under products
 review_bp = Blueprint(

@@ -1,6 +1,7 @@
 # backend/tasks.py
 
 import logging
+
 from flask import current_app
 
 from .celery_worker import celery_app

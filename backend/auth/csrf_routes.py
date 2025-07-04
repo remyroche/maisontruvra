@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
-from backend.utils.csrf_protection import CSRFProtection
 from flask_jwt_extended import jwt_required
+
+from backend.utils.csrf_protection import CSRFProtection
 
 csrf_bp = Blueprint("csrf", __name__)
 

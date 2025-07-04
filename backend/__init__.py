@@ -1,37 +1,37 @@
-from flask import Flask, request, session
-from flask_talisman import Talisman
+import logging
 from datetime import datetime
-from .celery_worker import init_celery
+
 import Celery
+from flask import Flask, request, session
+from flask_login import user_logged_in, user_unauthorized
+from flask_talisman import Talisman
+
+from backend.database import init_db_command
+from backend.utils.vite import Vite
+
+from . import config, services
+from .celery_worker import init_celery
+from .database import setup_database_security
 
 # Import extension instances from the central extensions file
 from .extensions import (
-    db,
-    migrate,
-    login_manager,
-    mail,
-    limiter,
-    redis_client,
-    socketio,
-    jwt,
-    csrf,
     cache,
     cors,
+    csrf,
+    db,
+    jwt,
+    limiter,
+    login_manager,
+    mail,
+    migrate,
+    redis_client,
+    socketio,
 )
-
-from . import config
-from . import services
-from .middleware import setup_middleware, check_staff_session, mfa_check_middleware
-from .utils.input_sanitizer import init_app_middleware
-from .loggers import setup_logging, security_logger
 from .logger_and_error_handler import register_error_handlers
-from flask_login import user_logged_in, user_unauthorized
+from .loggers import security_logger, setup_logging
+from .middleware import check_staff_session, mfa_check_middleware, setup_middleware
+from .utils.input_sanitizer import init_app_middleware
 from .utils.vite import vite_asset
-from .database import setup_database_security
-from backend.database import init_db_command
-from backend.utils.vite import Vite
-import logging
-
 
 # Configure extensions that need it before app context
 login_manager.login_view = "auth.login"

@@ -3,6 +3,7 @@ import os
 
 from flask import current_app, render_template, url_for
 from flask_mail import Message
+
 from backend.extensions import mail
 from backend.services.monitoring_service import MonitoringService
 

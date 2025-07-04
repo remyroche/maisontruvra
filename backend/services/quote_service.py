@@ -1,18 +1,19 @@
 from datetime import datetime
+
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from backend.extensions import db
 from backend.models import Quote, QuoteItem
-from backend.services.email_service import EmailService
-from backend.services.pos_service import POSService
-from backend.services.monitoring_service import MonitoringService
 from backend.services.audit_log_service import AuditLogService
+from backend.services.email_service import EmailService
 from backend.services.exceptions import (
     NotFoundException,
-    ValidationException,
     ServiceError,
+    ValidationException,
 )
+from backend.services.monitoring_service import MonitoringService
+from backend.services.pos_service import POSService
 from backend.utils.input_sanitizer import InputSanitizer
 
 

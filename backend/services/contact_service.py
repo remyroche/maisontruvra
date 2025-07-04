@@ -1,8 +1,10 @@
+from flask import current_app
+
+from backend.services.email_service import EmailService
+
 from .. import db
 from ..models.utility_models import ContactMessage
 from .background_task_service import BackgroundTaskService
-from flask import current_app
-from backend.services.email_service import EmailService
 
 
 class ContactService:

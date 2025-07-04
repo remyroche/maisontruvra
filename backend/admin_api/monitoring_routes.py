@@ -1,8 +1,9 @@
 from flask import Blueprint, jsonify, request
+
+from backend.services.monitoring_service import MonitoringService
 from backend.utils.decorators import (
     roles_required,
 )
-from backend.services.monitoring_service import MonitoringService
 
 monitoring_bp = Blueprint("monitoring_bp", __name__, url_prefix="/admin/monitoring")
 

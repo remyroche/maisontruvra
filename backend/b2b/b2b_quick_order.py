@@ -1,12 +1,12 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 from redis import Redis
 from rq import Queue
 
+from backend.database import db  # Assumer que db a une méthode get_connection
+from backend.services.monitoring_service import MonitoringService
 from backend.utils.decorators import b2b_user_required
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.services.monitoring_service import MonitoringService
-from backend.database import db  # Assumer que db a une méthode get_connection
 
 b2b_quick_order_bp = Blueprint("b2b_quick_order", __name__, url_prefix="/b2b")
 

@@ -8,24 +8,25 @@ This service handles authentication for both B2B and B2C users with support for:
 - Unified registration and login flows
 """
 
-import pyotp
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, Tuple
+from typing import Any
+
+import pyotp
 from flask import url_for
 
-from backend.models.user_models import User
-from backend.models.enums import UserType
 from backend.database import db
+from backend.models.enums import UserType
+from backend.models.user_models import User
 from backend.services.email_service import EmailService
-from backend.services.mfa_service import MfaService
 from backend.services.exceptions import (
-    ValidationException,
-    UnauthorizedException,
-    NotFoundException,
-    UserAlreadyExistsError,
     InvalidCredentialsError,
+    NotFoundException,
+    UnauthorizedException,
+    UserAlreadyExistsError,
+    ValidationException,
 )
-from backend.utils.encryption import hash_password, check_password
+from backend.services.mfa_service import MfaService
+from backend.utils.encryption import check_password, hash_password
 
 
 class UnifiedAuthService:
@@ -34,7 +35,7 @@ class UnifiedAuthService:
     def __init__(self):
         self.mfa_service = MfaService()
 
-    def register_user(self, user_data: Dict[str, Any]) -> User:
+    def register_user(self, user_data: dict[str, Any]) -> User:
         """
         Register a new user (B2B or B2C) with optional 2FA setup.
 
@@ -89,7 +90,7 @@ class UnifiedAuthService:
 
         return user
 
-    def authenticate_user(self, email: str, password: str) -> Tuple[User, bool]:
+    def authenticate_user(self, email: str, password: str) -> tuple[User, bool]:
         """
         Authenticate user with email and password.
 
@@ -160,7 +161,7 @@ class UnifiedAuthService:
         else:
             raise UnauthorizedException("Invalid 2FA method")
 
-    def setup_totp(self, user_id: int) -> Dict[str, str]:
+    def setup_totp(self, user_id: int) -> dict[str, str]:
         """
         Setup TOTP for user and return QR code data.
 
@@ -243,8 +244,8 @@ class UnifiedAuthService:
         user_id: int,
         action: str,
         current_password: str,
-        totp_code: Optional[str] = None,
-        magic_link_token: Optional[str] = None,
+        totp_code: str | None = None,
+        magic_link_token: str | None = None,
     ) -> bool:
         """
         Update user's authentication methods.

@@ -1,5 +1,6 @@
-from .base import BaseModel
 from backend.extensions import db
+
+from .base import BaseModel
 
 
 class Asset(BaseModel):

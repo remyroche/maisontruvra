@@ -5,9 +5,10 @@ separating input validation from output serialization.
 """
 
 import re
-from marshmallow import Schema, fields, validate, ValidationError
-from typing import List, Optional
 from datetime import datetime
+from typing import Optional
+
+from marshmallow import Schema, ValidationError, fields, validate
 from pydantic import BaseModel, EmailStr, Field
 
 from .extensions import ma
@@ -49,15 +50,15 @@ class RoleSchema(BaseSchema):
 
 
 class AddressSchema(BaseModel):
-    id: Optional[int] = None
+    id: int | None = None
     address_line_1: str
-    address_line_2: Optional[str] = None
+    address_line_2: str | None = None
     city: str
     state_province_region: str
     postal_code: str
     country: str
-    is_default_shipping: Optional[bool] = False
-    is_default_billing: Optional[bool] = False
+    is_default_shipping: bool | None = False
+    is_default_billing: bool | None = False
 
     class Config:
         from_attributes = True
@@ -86,7 +87,7 @@ class B2BUserSchema(BaseModel):
     email: EmailStr
     first_name: str
     last_name: str
-    roles: List[str] = []
+    roles: list[str] = []
 
     class Config:
         from_attributes = True
@@ -116,7 +117,7 @@ class B2BProfileSchema(BaseModel):
 
     id: int
     company_name: str
-    vat_number: Optional[str] = None
+    vat_number: str | None = None
     status: str
     user: "UserSchema"  # Embed the user details
 
@@ -130,8 +131,8 @@ class B2BProfileUpdateSchema(BaseModel):
     A B2B user can update their company info and their personal info.
     """
 
-    company_name: Optional[str] = Field(default=None, min_length=1)
-    vat_number: Optional[str] = Field(default=None, min_length=1)
+    company_name: str | None = Field(default=None, min_length=1)
+    vat_number: str | None = Field(default=None, min_length=1)
     # Nested schema for updating the associated user details
     user_details: Optional["UserProfileUpdateSchema"] = None
 
@@ -212,10 +213,10 @@ class UserProfileUpdateSchema(BaseModel):
     They can only update a limited set of fields.
     """
 
-    email: Optional[EmailStr] = None
-    first_name: Optional[str] = Field(default=None, min_length=1)
-    last_name: Optional[str] = Field(default=None, min_length=1)
-    language: Optional[str] = Field(default=None, min_length=2, max_length=10)
+    email: EmailStr | None = None
+    first_name: str | None = Field(default=None, min_length=1)
+    last_name: str | None = Field(default=None, min_length=1)
+    language: str | None = Field(default=None, min_length=2, max_length=10)
 
     class Config:
         from_attributes = True
@@ -374,12 +375,12 @@ class UserUpdateSchema(BaseModel):
     More permissive schema for admins updating a user.
     """
 
-    email: Optional[EmailStr] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    is_active: Optional[bool] = None
-    is_b2b: Optional[bool] = None
-    roles: Optional[List[str]] = None
+    email: EmailStr | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    is_active: bool | None = None
+    is_b2b: bool | None = None
+    roles: list[str] | None = None
 
     class Config:
         from_attributes = True

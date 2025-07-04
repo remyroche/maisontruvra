@@ -1,5 +1,6 @@
-from backend.database import db
 from datetime import datetime
+
+from backend.database import db
 
 
 class Quote(db.Model):

@@ -1,32 +1,32 @@
-import re
 import os
+import re
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Any
 
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, InvalidHash
+from argon2.exceptions import InvalidHash, VerifyMismatchError
 from flask import current_app, session, url_for
 from flask_login import login_user
-from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
+from itsdangerous import BadTimeSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.exc import SQLAlchemyError
 
 from backend.extensions import db
-from backend.models import User, Role, UserRole
+from backend.models import Role, User, UserRole
 from backend.services.email_service import EmailService
-from backend.services.user_service import UserService
-from backend.services.referral_service import ReferralService
+from backend.services.exceptions import (
+    InvalidCredentialsError,
+    InvalidPasswordException,
+    NotFoundException,
+    ServiceError,
+    UnauthorizedException,
+    ValidationException,
+)
 from backend.services.mfa_service import MfaService
 from backend.services.monitoring_service import MonitoringService
-from backend.services.exceptions import (
-    ServiceError,
-    ValidationException,
-    UnauthorizedException,
-    NotFoundException,
-    InvalidPasswordException,
-    InvalidCredentialsError,
-)
-from backend.utils.encryption import hash_password, check_password
+from backend.services.referral_service import ReferralService
+from backend.services.user_service import UserService
+from backend.utils.encryption import check_password, hash_password
 
 # Instantiate the PasswordHasher. It's thread-safe and can be shared.
 ph = PasswordHasher()
@@ -211,7 +211,7 @@ class AuthService:
             )
             return False
 
-    def validate_session(self, session_token: str) -> Optional[Dict[str, Any]]:
+    def validate_session(self, session_token: str) -> dict[str, Any] | None:
         """Validate session token and return user data"""
         try:
             if session_token not in self.sessions:
@@ -236,7 +236,7 @@ class AuthService:
             )
             return None
 
-    def get_user_profile(self, session_token: str) -> Dict[str, Any]:
+    def get_user_profile(self, session_token: str) -> dict[str, Any]:
         """Get user profile data"""
         try:
             session_data = self.validate_session(session_token)
@@ -411,7 +411,7 @@ class AuthService:
         except Exception:
             return False
 
-    def login_user(self, email: str, password: str) -> Dict[str, Any]:
+    def login_user(self, email: str, password: str) -> dict[str, Any]:
         """Authenticate user and create session"""
         try:
             user = self.user_service.get_user_by_email(email)
@@ -481,7 +481,7 @@ class AuthService:
             )
             return {"success": False, "message": "Login failed"}
 
-    def logout_user(self, session_token: str) -> Dict[str, Any]:
+    def logout_user(self, session_token: str) -> dict[str, Any]:
         """Logout user and invalidate session"""
         try:
             if session_token in self.sessions:

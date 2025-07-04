@@ -1,4 +1,5 @@
 from backend.database import db
+
 from .base import BaseModel, SoftDeleteMixin
 
 

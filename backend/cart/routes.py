@@ -1,13 +1,14 @@
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, g, jsonify, request
 from flask_login import current_user, login_required
 from marshmallow import ValidationError
+
 from backend.models import CartItem
+from backend.schemas import AddToCartSchema
+from backend.services.cart_service import CartService
 from backend.services.exceptions import (
     NotFoundException,
     ServiceError,
 )
-from backend.services.cart_service import CartService
-from backend.schemas import AddToCartSchema
 from backend.utils.decorators import api_resource_handler
 
 cart_bp = Blueprint("cart_bp", __name__, url_prefix="/api/cart")

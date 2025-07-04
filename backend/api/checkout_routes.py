@@ -1,30 +1,33 @@
 # backend/api/checkout_routes.py
-from flask import Blueprint, request, jsonify, g, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from marshmallow import ValidationError
-from ..services.discount_service import DiscountService
-from ..utils.decorators import roles_required, api_resource_handler
-from backend.services.exceptions import (
-    NotFoundException,
-    DiscountInvalidException,
-    AuthorizationException,
-)
-from flask_login import current_user
-from backend.services.checkout_service import (
-    process_user_checkout,
-    process_guest_checkout,
-    process_b2b_checkout,
-)
-from backend.services.cart_service import get_cart_by_id_or_session
-from backend.models.enums import UserType
-from backend.schemas import ApplyDiscountSchema, CheckoutSchema, AddressSchema
-from backend.services.checkout_service import CheckoutService
-from backend.models.address_models import Address
-from backend.extensions import db
-from backend.utils.decorators import login_required
 import logging
+
+from flask import Blueprint, current_app, g, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_login import current_user
+from marshmallow import ValidationError
+
+from backend.extensions import db
+from backend.models.address_models import Address
+from backend.models.enums import UserType
+from backend.schemas import AddressSchema, ApplyDiscountSchema, CheckoutSchema
+from backend.services.cart_service import get_cart_by_id_or_session
+from backend.services.checkout_service import (
+    CheckoutService,
+    process_b2b_checkout,
+    process_guest_checkout,
+    process_user_checkout,
+)
+from backend.services.exceptions import (
+    AuthorizationException,
+    DiscountInvalidException,
+    NotFoundException,
+)
 from backend.services.inventory_service import InventoryService
 from backend.services.loyalty_service import LoyaltyService
+from backend.utils.decorators import login_required
+
+from ..services.discount_service import DiscountService
+from ..utils.decorators import api_resource_handler, roles_required
 
 logger = logging.getLogger(__name__)
 
@@ -268,10 +271,10 @@ class CheckoutService:
             # --- THIS IS THE KEY FIX ---
             # Import tasks here, inside the method, not at the top of the file.
             from backend.tasks import (
-                send_order_confirmation_email_task,
                 notify_admin_of_new_order_task,
-                update_inventory_on_order_task,
                 notify_user_of_loyalty_points_task,  # This now exists and can be imported
+                send_order_confirmation_email_task,
+                update_inventory_on_order_task,
             )
 
             # Dispatch tasks

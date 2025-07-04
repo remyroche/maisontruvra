@@ -2,20 +2,19 @@ import secrets
 import string
 from datetime import datetime
 
-
 from backend.database import db
-from backend.models.user_models import User
 from backend.models.referral_models import Referral
-from backend.services.loyalty_service import LoyaltyService
-from backend.services.notification_service import NotificationService
-from backend.services.monitoring_service import MonitoringService
+from backend.models.user_models import User
 from backend.services.audit_log_service import AuditLogService
 from backend.services.exceptions import (
     NotFoundException,
-    ValidationException,
-    ServiceError,
     ReferralException,
+    ServiceError,
+    ValidationException,
 )
+from backend.services.loyalty_service import LoyaltyService
+from backend.services.monitoring_service import MonitoringService
+from backend.services.notification_service import NotificationService
 from backend.utils.input_sanitizer import InputSanitizer
 
 

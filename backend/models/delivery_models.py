@@ -1,6 +1,8 @@
-from backend.extensions import db
-from .base import BaseModel
 from sqlalchemy.orm import relationship
+
+from backend.extensions import db
+
+from .base import BaseModel
 
 # Association table for the many-to-many relationship
 # between countries and delivery options.

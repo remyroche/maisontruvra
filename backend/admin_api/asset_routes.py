@@ -4,11 +4,12 @@ in the admin panel. It uses a hybrid approach: a custom endpoint for uploads
 and a decorator-driven endpoint for managing existing assets.
 """
 
-from flask import Blueprint, request, g, jsonify
+from flask import Blueprint, g, jsonify, request
+
 from ..models import Asset
 from ..schemas import AssetSchema
-from ..utils.decorators import api_resource_handler, roles_required
 from ..services.asset_service import AssetService
+from ..utils.decorators import api_resource_handler, roles_required
 
 # --- Blueprint Setup ---
 bp = Blueprint("asset_management", __name__, url_prefix="/api/admin/assets")

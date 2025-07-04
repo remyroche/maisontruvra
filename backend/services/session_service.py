@@ -5,8 +5,9 @@ to provide functionalities like listing and revoking active sessions.
 """
 
 from flask import current_app
+
 from ...extensions import db
-from ...models import User, PersistentSession
+from ...models import PersistentSession, User
 
 
 class SessionService:

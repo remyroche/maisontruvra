@@ -1,8 +1,10 @@
 # backend/models/loyalty_program.py
 
-from backend.extensions import db
-from sqlalchemy.dialects.postgresql import UUID
 import uuid
+
+from sqlalchemy.dialects.postgresql import UUID
+
+from backend.extensions import db
 
 
 class LoyaltyProgram(db.Model):

@@ -2,8 +2,8 @@
 Token utilities for authentication and security operations.
 """
 
-from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
 from flask import current_app
+from itsdangerous import BadTimeSignature, SignatureExpired, URLSafeTimedSerializer
 
 
 def generate_token(data, salt="default-salt", expiry_hours=24):

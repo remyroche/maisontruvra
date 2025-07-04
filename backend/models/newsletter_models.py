@@ -1,6 +1,10 @@
 import enum
-from sqlalchemy import String, Boolean, Enum as SQLAlchemyEnum
+
+from sqlalchemy import Boolean, String
+from sqlalchemy import Enum as SQLAlchemyEnum
+
 from backend.database import db
+
 from .base import BaseModel
 
 

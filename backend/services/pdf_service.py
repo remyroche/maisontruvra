@@ -1,10 +1,11 @@
 # backend/services/pdf_service.py
 # This is a new service dedicated to PDF generation.
 
-from playwright.sync_api import sync_playwright
-from flask import render_template, current_app
 import os
 from datetime import datetime
+
+from flask import current_app, render_template
+from playwright.sync_api import sync_playwright
 
 
 class PDFService:

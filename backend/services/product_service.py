@@ -1,30 +1,30 @@
 # backend/Services/product_service.py
 from sqlalchemy import func
-from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload, selectinload
 
-from backend.extensions import db, cache
-from backend.models import Product, Category, Collection
-from backend.models.product_models import ProductVariant, Stock
-from backend.models.order_models import OrderItem
+from backend.extensions import cache, db
+from backend.models import Category, Collection, Product
 from backend.models.b2b_loyalty_models import LoyaltyTier
+from backend.models.order_models import OrderItem
+from backend.models.product_models import ProductVariant, Stock
+from backend.services.audit_log_service import AuditLogService
 from backend.services.exceptions import (
-    NotFoundException,
-    ValidationException,
-    ServiceError,
-    ProductNotFoundError,
     DuplicateProductError,
     InvalidAPIRequestError,
+    NotFoundException,
+    ProductNotFoundError,
+    ServiceError,
+    ValidationException,
 )
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.services.audit_log_service import AuditLogService
 from backend.services.monitoring_service import MonitoringService
 from backend.utils.cache_helpers import (
-    get_product_list_key,
-    get_product_by_slug_key,
-    get_product_by_id_key,
     clear_product_cache,
+    get_product_by_id_key,
+    get_product_by_slug_key,
+    get_product_list_key,
 )
+from backend.utils.input_sanitizer import InputSanitizer
 
 
 class ProductService:

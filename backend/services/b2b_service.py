@@ -1,19 +1,20 @@
 from decimal import Decimal
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import func
+
 from flask_login import current_user
+from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 
 from backend import db
-from backend.models import User, Tier, Order, Company, B2BAccount
-from backend.services.email_service import EmailService
-from backend.services.user_service import UserService
+from backend.models import B2BAccount, Company, Order, Tier, User
 from backend.services.audit_log_service import AuditLogService
+from backend.services.email_service import EmailService
 from backend.services.exceptions import (
+    DataConflictException,
     NotFoundException,
     ServiceError,
-    DataConflictException,
     ServiceException,
 )
+from backend.services.user_service import UserService
 
 
 class B2BService:

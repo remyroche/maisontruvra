@@ -1,10 +1,10 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask import Blueprint, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from marshmallow import ValidationError
-from backend.services.wishlist_service import WishlistService
 
 # from backend.utils.decorators import api_resource_handler # Not using it currently for these routes
 from backend.schemas import AddToWishlistSchema
+from backend.services.wishlist_service import WishlistService
 
 # Assuming WishlistItem is properly imported or defined elsewhere and accessible via models.__init__
 # If WishlistItem is strictly within wishlist_service.py as a local class, it cannot be used as a model for decorators directly.

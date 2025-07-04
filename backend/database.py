@@ -1,6 +1,7 @@
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 from flask import request
+from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+
 from backend.loggers import database_logger as db_logger
 
 db = SQLAlchemy()

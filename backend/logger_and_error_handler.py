@@ -5,15 +5,16 @@ It ensures all error responses are consistent, secure, and well-documented.
 
 import logging
 import logging.handlers
-from flask import jsonify, Blueprint, current_app, request
-from werkzeug.exceptions import HTTPException
+
+from flask import Blueprint, current_app, jsonify, request
 from marshmallow import ValidationError
+from werkzeug.exceptions import HTTPException
 
 # Import all custom exceptions from the service layer
 from ..services.exceptions import (
+    AuthorizationException,
     NotFoundException,
     ValidationException,
-    AuthorizationException,
 )
 
 # Create a Blueprint for error handlers to make them modular

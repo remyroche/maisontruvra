@@ -1,19 +1,20 @@
-from flask import Blueprint, jsonify, request, session, g
+from flask import Blueprint, g, jsonify, request, session
 from flask_jwt_extended import get_jwt_identity
+
+from backend.database import db
+from backend.models.b2b_models import B2BUser
+from backend.models.invoice_models import Invoice, Quote
+from backend.schemas import InvoiceSignatureSchema, QuoteRequestSchema
 from backend.services.b2b_service import B2BService
 from backend.services.invoice_service import (
     InvoiceService,
 )  # Assuming this service exists
 from backend.utils.decorators import (
+    api_resource_handler,
     b2b_user_required,
     roles_required,
-    api_resource_handler,
 )
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.database import db
-from backend.models.b2b_models import B2BUser
-from backend.models.invoice_models import Quote, Invoice
-from backend.schemas import QuoteRequestSchema, InvoiceSignatureSchema
 
 b2b_invoice_bp = Blueprint("b2b_invoice_bp", __name__, url_prefix="/api/b2b")
 # InvoiceService uses static methods, no instantiation needed

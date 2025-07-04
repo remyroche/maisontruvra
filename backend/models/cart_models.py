@@ -1,5 +1,5 @@
-from backend.models.base import BaseModel
 from backend.extensions import db
+from backend.models.base import BaseModel
 
 
 class Cart(BaseModel):

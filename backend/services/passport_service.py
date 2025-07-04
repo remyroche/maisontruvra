@@ -1,11 +1,14 @@
 import os
-from flask import render_template, current_app
-from backend.database import db
-from backend.models.product_models import Product
-from backend.models.passport_models import ProductPassport
-from .monitoring_service import MonitoringService
-from .exceptions import ServiceError, NotFoundException
+
+from flask import current_app, render_template
 from playwright.sync_api import sync_playwright
+
+from backend.database import db
+from backend.models.passport_models import ProductPassport
+from backend.models.product_models import Product
+
+from .exceptions import NotFoundException, ServiceError
+from .monitoring_service import MonitoringService
 
 
 class PassportService:

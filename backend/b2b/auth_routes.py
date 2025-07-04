@@ -1,15 +1,18 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 from marshmallow import ValidationError
-from backend.utils.auth_helpers import b2b_required  # Assumed to handle B2B auth
-from backend.services.auth_service import AuthService  # Corrected import
-from backend.services.email_service import EmailService  # Corrected import
-from ..services.exceptions import ServiceError
+
 from backend.schemas import (
     B2BRegistrationSchema,
     LoginSchema,
-    PasswordResetRequestSchema,
     PasswordResetConfirmSchema,
+    PasswordResetRequestSchema,
 )
+from backend.services.auth_service import AuthService  # Corrected import
+from backend.services.email_service import EmailService  # Corrected import
+from backend.utils.auth_helpers import b2b_required  # Assumed to handle B2B auth
+
+from ..services.exceptions import ServiceError
+
 # b2b_register function is defined in this file
 
 

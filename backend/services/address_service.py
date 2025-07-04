@@ -1,8 +1,9 @@
-from backend.models.user_models import User
-from backend.models.address_models import Address
-from backend.database import db
-from backend.utils.input_sanitizer import InputSanitizer
 from flask import current_app
+
+from backend.database import db
+from backend.models.address_models import Address
+from backend.models.user_models import User
+from backend.utils.input_sanitizer import InputSanitizer
 
 
 class AddressService:

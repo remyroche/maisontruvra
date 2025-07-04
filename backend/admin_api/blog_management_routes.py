@@ -3,13 +3,15 @@ This module defines the API endpoints for managing blog posts and categories
 in the admin panel, using the declarative @api_resource_handler.
 """
 
-from flask import Blueprint, request, g, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..utils.decorators import api_resource_handler, roles_required
-from backend.models.blog_models import BlogPost, BlogCategory
-from backend.schemas import BlogPostSchema, BlogCategorySchema
+from flask import Blueprint, g, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
+
+from backend.models.blog_models import BlogCategory, BlogPost
+from backend.schemas import BlogCategorySchema, BlogPostSchema
 from backend.services.blog_service import BlogService
 from backend.services.exceptions import ServiceException
+
+from ..utils.decorators import api_resource_handler, roles_required
 
 # --- Blueprint Setup ---
 bp = Blueprint("blog_management", __name__, url_prefix="/api/admin/blog")

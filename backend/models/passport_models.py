@@ -1,7 +1,9 @@
 import uuid
+
 from sqlalchemy.dialects.postgresql import (
     UUID as pgUUID,
 )  # Use a distinct alias for PostgreSQL UUID
+
 from .. import db
 from .base import BaseModel, SoftDeleteMixin  # Assuming you have these base models
 

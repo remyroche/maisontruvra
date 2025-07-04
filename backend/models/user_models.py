@@ -1,18 +1,23 @@
-from .base import BaseModel, SoftDeleteMixin
-from backend.extensions import db
+import datetime
+
 from sqlalchemy import (
-    Column,
-    String,
     Boolean,
+    Column,
     DateTime,
+    String,
+)
+from sqlalchemy import (
     Enum as SQLAlchemyEnum,
 )
-from sqlalchemy.orm import relationship
-from werkzeug.security import generate_password_hash, check_password_hash
-from .enums import UserType, UserStatus, NotificationFrequency, RoleType
-import datetime
-from backend.utils.encryption import decrypt_data, encrypt_data
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import relationship
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from backend.extensions import db
+from backend.utils.encryption import decrypt_data, encrypt_data
+
+from .base import BaseModel, SoftDeleteMixin
+from .enums import NotificationFrequency, RoleType, UserStatus, UserType
 
 
 class User(BaseModel):

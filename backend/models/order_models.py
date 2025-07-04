@@ -1,6 +1,8 @@
 import enum
 import uuid
+
 from sqlalchemy.dialects.postgresql import UUID
+
 from .. import db  # Use relative import to avoid circular dependencies
 from .base import BaseModel, SoftDeleteMixin  # Assuming these are in a 'base.py' file
 

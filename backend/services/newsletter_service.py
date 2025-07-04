@@ -3,12 +3,13 @@ Newsletter Service for managing newsletter subscriptions and campaigns.
 """
 
 import logging
-from backend.database import db
-from backend.models import db, NewsletterSubscription
-from backend.services.email_service import EmailService
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from backend.extensions import db
 
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from backend.database import db
+from backend.extensions import db
+from backend.models import NewsletterSubscription, db
+from backend.services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
 

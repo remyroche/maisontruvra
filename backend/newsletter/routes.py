@@ -1,8 +1,9 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 from marshmallow import ValidationError
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.services import newsletter_service
+
 from backend.schemas import NewsletterSubscriptionSchema
+from backend.services import newsletter_service
+from backend.utils.input_sanitizer import InputSanitizer
 
 newsletter_bp = Blueprint("newsletter_bp", __name__, url_prefix="/api/newsletter")
 

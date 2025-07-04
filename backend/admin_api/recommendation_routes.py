@@ -2,8 +2,9 @@
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
-from ..services.recommendation_service import RecommendationService
+
 from ..services.exceptions import NotFoundException, ServiceError
+from ..services.recommendation_service import RecommendationService
 from ..utils.decorators import roles_required
 from ..utils.input_sanitizer import InputSanitizer
 
@@ -259,8 +260,9 @@ def search_users_for_recommendations():
             max(1, InputSanitizer.sanitize_integer(request.args.get("limit", 20))), 50
         )
 
-        from ..models import User
         from sqlalchemy import or_
+
+        from ..models import User
 
         # Search users by email, name, or ID
         search_filter = or_(

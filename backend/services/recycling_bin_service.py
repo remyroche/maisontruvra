@@ -1,17 +1,18 @@
+from flask_login import current_user
+
+from backend.database import db
 from backend.models import (
-    Product,
-    Category,
-    Collection,
-    User,
+    AdminAuditLog,
     B2BAccount,
     BlogPost,
+    Category,
+    Collection,
     Order,
+    Product,
     Review,
-    AdminAuditLog,
+    User,
 )
-from backend.database import db
 from backend.services.audit_log_service import AuditLogService
-from flask_login import current_user
 
 # A mapping from a string identifier to the corresponding model class.
 # This allows the service to be generic across different types of items.

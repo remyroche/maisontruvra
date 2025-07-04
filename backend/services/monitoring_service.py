@@ -2,10 +2,12 @@
 # It also provides centralized logging functionality for all services.
 
 import os
-from flask import current_app
-from backend.loggers import app_logger, security_logger, database_logger, api_logger
-from typing import Optional, Any, Dict
 from functools import wraps
+from typing import Any
+
+from flask import current_app
+
+from backend.loggers import api_logger, app_logger, database_logger, security_logger
 
 
 class MonitoringService:
@@ -17,7 +19,7 @@ class MonitoringService:
     # Centralized Logging Methods
     @staticmethod
     def log_info(
-        message: str, service_name: str = None, extra_data: Dict[str, Any] = None
+        message: str, service_name: str = None, extra_data: dict[str, Any] = None
     ):
         """Log informational messages with service context."""
         formatted_message = MonitoringService._format_message(
@@ -27,7 +29,7 @@ class MonitoringService:
 
     @staticmethod
     def log_warning(
-        message: str, service_name: str = None, extra_data: Dict[str, Any] = None
+        message: str, service_name: str = None, extra_data: dict[str, Any] = None
     ):
         """Log warning messages with service context."""
         formatted_message = MonitoringService._format_message(
@@ -39,7 +41,7 @@ class MonitoringService:
     def log_error(
         message: str,
         service_name: str = None,
-        extra_data: Dict[str, Any] = None,
+        extra_data: dict[str, Any] = None,
         exc_info: bool = False,
     ):
         """Log error messages with service context."""
@@ -52,7 +54,7 @@ class MonitoringService:
     def log_critical(
         message: str,
         service_name: str = None,
-        extra_data: Dict[str, Any] = None,
+        extra_data: dict[str, Any] = None,
         exc_info: bool = False,
     ):
         """Log critical messages with service context."""
@@ -63,7 +65,7 @@ class MonitoringService:
 
     @staticmethod
     def log_debug(
-        message: str, service_name: str = None, extra_data: Dict[str, Any] = None
+        message: str, service_name: str = None, extra_data: dict[str, Any] = None
     ):
         """Log debug messages with service context."""
         formatted_message = MonitoringService._format_message(
@@ -76,7 +78,7 @@ class MonitoringService:
     def log_security_event(
         message: str,
         service_name: str = None,
-        extra_data: Dict[str, Any] = None,
+        extra_data: dict[str, Any] = None,
         level: str = "INFO",
     ):
         """Log security-related events."""
@@ -96,7 +98,7 @@ class MonitoringService:
     def log_database_operation(
         message: str,
         service_name: str = None,
-        extra_data: Dict[str, Any] = None,
+        extra_data: dict[str, Any] = None,
         level: str = "INFO",
     ):
         """Log database operations."""
@@ -116,7 +118,7 @@ class MonitoringService:
     def log_api_request(
         message: str,
         service_name: str = None,
-        extra_data: Dict[str, Any] = None,
+        extra_data: dict[str, Any] = None,
         level: str = "INFO",
     ):
         """Log API requests and responses."""
@@ -134,7 +136,7 @@ class MonitoringService:
 
     @staticmethod
     def _format_message(
-        message: str, service_name: str = None, extra_data: Dict[str, Any] = None
+        message: str, service_name: str = None, extra_data: dict[str, Any] = None
     ) -> str:
         """Format log message with service context and extra data."""
         formatted_parts = []
@@ -155,8 +157,8 @@ class MonitoringService:
         operation: str,
         service_name: str,
         success: bool = True,
-        duration_ms: Optional[float] = None,
-        extra_data: Dict[str, Any] = None,
+        duration_ms: float | None = None,
+        extra_data: dict[str, Any] = None,
     ):
         """Log service operations with standardized format."""
         status = "SUCCESS" if success else "FAILED"
@@ -232,7 +234,7 @@ class MonitoringService:
             return []
 
         try:
-            with open(log_file_path, "r", encoding="utf-8") as f:
+            with open(log_file_path, encoding="utf-8") as f:
                 lines = f.readlines()
 
             error_logs = []

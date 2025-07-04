@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, request
-from backend.utils.decorators import admin_required
+
 from backend.models import AdminAuditLog
 from backend.schemas import AdminAuditLogSchema
+from backend.utils.decorators import admin_required
 
 admin_audit_log_routes = Blueprint(
     "admin_audit_log_routes", __name__, url_prefix="/api/admin/audit-log"

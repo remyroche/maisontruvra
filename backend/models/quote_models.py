@@ -1,6 +1,7 @@
-from backend.models.base import BaseModel
-from backend.extensions import db
 from datetime import datetime, timedelta
+
+from backend.extensions import db
+from backend.models.base import BaseModel
 
 
 class Quote(BaseModel):

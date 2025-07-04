@@ -1,15 +1,16 @@
+from flask import Blueprint, current_app, g, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from marshmallow import ValidationError
-from backend.services.product_service import ProductService
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.services.exceptions import NotFoundException, ValidationException
-from flask_jwt_extended import jwt_required, get_jwt_identity
+
 from backend.extensions import cache, db
-from backend.services.review_service import ReviewService
-from backend.schemas import ProductSearchSchema, ReviewSchema, ProductSchema
-from flask import Blueprint, request, jsonify, current_app, g
-from backend.services.inventory_service import InventoryService
 from backend.models.product_models import Product, Review
+from backend.schemas import ProductSchema, ProductSearchSchema, ReviewSchema
+from backend.services.exceptions import NotFoundException, ValidationException
+from backend.services.inventory_service import InventoryService
+from backend.services.product_service import ProductService
+from backend.services.review_service import ReviewService
 from backend.utils.decorators import api_resource_handler
+from backend.utils.input_sanitizer import InputSanitizer
 
 products_bp = Blueprint("products", __name__, url_prefix="/api/products")
 product_schema = ProductSchema()

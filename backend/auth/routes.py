@@ -1,33 +1,32 @@
 import logging
+
+from flask import Blueprint, current_app, g, jsonify, request
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
-    jwt_required,
     get_jwt_identity,
+    jwt_required,
 )
+from flask_login import current_user, login_required, login_user, logout_user
 from marshmallow import ValidationError
-from ..services.exceptions import (
-    UnauthorizedException,
-    NotFoundException,
-)
-from flask import current_app, g
+
 from backend.schemas import (
-    User,
-    UserSchema,
-    UserRegistrationSchema,
     MfaVerificationSchema,
     PasswordResetConfirmSchema,
+    ResetPasswordSchema,
+    User,
+    UserRegistrationSchema,
+    UserSchema,
 )
-from backend.utils.decorators import api_resource_handler
-
-
-from flask import Blueprint, request, jsonify
 from backend.services.auth_service import AuthService
 from backend.services.exceptions import InvalidCredentialsError
-from flask_login import login_user, logout_user, login_required, current_user
-from backend.schemas import ResetPasswordSchema
+from backend.utils.decorators import api_resource_handler
 from backend.utils.rate_limiter import limiter
 
+from ..services.exceptions import (
+    NotFoundException,
+    UnauthorizedException,
+)
 
 auth_service = AuthService()
 user_schema = UserSchema()

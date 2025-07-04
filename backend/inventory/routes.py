@@ -1,15 +1,16 @@
-from flask import Blueprint, jsonify, request, current_user, g
-from backend.services.inventory_service import InventoryService  # Assumed service
-from backend.utils.decorators import (
-    permissions_required,
-    admin_required,
-    api_resource_handler,
-)
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.services import product_service
+from flask import Blueprint, current_user, g, jsonify, request
+
 from backend.models.inventory_models import StockNotification
 from backend.schemas import StockNotificationSchema
-from backend.utils.decorators import login_required
+from backend.services import product_service
+from backend.services.inventory_service import InventoryService  # Assumed service
+from backend.utils.decorators import (
+    admin_required,
+    api_resource_handler,
+    login_required,
+    permissions_required,
+)
+from backend.utils.input_sanitizer import InputSanitizer
 
 inventory_bp = Blueprint("inventory_bp", __name__, url_prefix="/api/inventory")
 

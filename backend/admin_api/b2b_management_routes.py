@@ -1,28 +1,29 @@
-from flask import Blueprint, request, jsonify, g
-from backend.services.b2b_service import B2BService
-from backend.services.exceptions import NotFoundException, ServiceError
-from backend.utils.decorators import (
-    roles_required,
-    api_resource_handler,
-    admin_required
-)
-from backend.models.enums import B2BStatus
-from backend.models.b2b_models import B2BPartnershipRequest, B2BTier
-from backend.models.user_models import User
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.services.audit_log_service import AuditLogService
+from flask import Blueprint, g, jsonify, request
+
 from backend.extensions import limiter
+from backend.models.b2b_models import B2BPartnershipRequest, B2BTier
+from backend.models.enums import B2BStatus
+from backend.models.user_models import User
 from backend.schemas import (
     B2BAccountStatusUpdateSchema,
     B2BTierCreateSchema,
-    B2BTierUpdateSchema,
     B2BTierSchema,
+    B2BTierUpdateSchema,
     B2BUserAssignTierSchema,
     QuoteUpdateSchema,
 )
+from backend.services.audit_log_service import AuditLogService
+from backend.services.b2b_service import B2BService
+from backend.services.exceptions import NotFoundException
 from backend.services.quote_service import QuoteService
+from backend.utils.decorators import (
+    admin_required,
+    api_resource_handler,
+    roles_required,
+)
+from backend.utils.input_sanitizer import InputSanitizer
 
-quote_service = QuoteService(logger=current_app.logger) 
+quote_service = QuoteService(logger=current_app.logger)
 b2b_management_bp = Blueprint(
     "b2b_management_api", __name__, url_prefix="/admin/api/b2b"
 )

@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify
+
 from backend.services.passport_service import PassportService
 from backend.utils.input_sanitizer import InputSanitizer
 

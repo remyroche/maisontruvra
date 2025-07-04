@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
+
 from sqlalchemy import func
+
 from backend.database import db
 from backend.models.order_models import Order
 from backend.services.loyalty_service import LoyaltyService

@@ -4,11 +4,12 @@ It uses the @api_resource_handler for secure and consistent handling of single
 order operations and provides a separate endpoint for paginated listing.
 """
 
-from flask import Blueprint, request, g, jsonify
+from flask import Blueprint, g, jsonify, request
+
 from ..models import Order
 from ..schemas import OrderSchema, OrderUpdateSchema
-from ..utils.decorators import api_resource_handler, roles_required
 from ..services.order_service import OrderService
+from ..utils.decorators import api_resource_handler, roles_required
 
 # --- Blueprint Setup ---
 bp = Blueprint("order_management", __name__, url_prefix="/api/admin/orders")

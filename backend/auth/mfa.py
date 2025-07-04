@@ -2,16 +2,19 @@
 # This Flask blueprint handles the setup and verification process for MFA.
 # -----------------------------------------------------------------------------
 
+import io
+
 import pyotp
 import qrcode
-import io
-from backend.database import db
-from flask import Blueprint, jsonify, request, Response
+from flask import Blueprint, Response, jsonify, request
 from flask_jwt_extended import get_jwt_identity
+
+from backend.database import db
 from backend.extensions import cache  # Import the cache instance
-from backend.utils.decorators import permission_required
-from backend.services.monitoring_service import MonitoringService
 from backend.services.email_service import EmailService
+from backend.services.monitoring_service import MonitoringService
+from backend.utils.decorators import permission_required
+
 # Assume 'db' is a database connection manager and 'encryption_service' is configured
 
 mfa_bp = Blueprint("mfa", __name__)

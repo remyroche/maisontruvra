@@ -1,11 +1,12 @@
 # backend/services/wishlist_service.py
 
-from ..models import Wishlist, WishlistItem, Product, User, db
-from ..services.monitoring_service import MonitoringService
-from ..services.audit_log_service import AuditLogService
-from ..services.exceptions import NotFoundException, ValidationException, ServiceError
-from ..utils.input_sanitizer import InputSanitizer
 from sqlalchemy.exc import IntegrityError
+
+from ..models import Product, User, Wishlist, WishlistItem, db
+from ..services.audit_log_service import AuditLogService
+from ..services.exceptions import NotFoundException, ServiceError, ValidationException
+from ..services.monitoring_service import MonitoringService
+from ..utils.input_sanitizer import InputSanitizer
 
 
 class WishlistService:

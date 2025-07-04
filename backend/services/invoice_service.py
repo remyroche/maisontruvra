@@ -1,13 +1,13 @@
 # backend/services/invoice_service.py
 
+import logging
+
 from .. import db
-from ..models import Order, Invoice
+from ..models import Invoice, Order
 from .exceptions import NotFoundException, ServiceException
 
 # FIX: Import the PDFService class, not a function
 from .pdf_service import PDFService
-
-import logging
 
 logger = logging.getLogger(__name__)
 

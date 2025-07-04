@@ -2,11 +2,12 @@
 This module defines the API endpoints for collection management in the admin panel.
 """
 
-from flask import Blueprint, request, g, jsonify
+from flask import Blueprint, g, jsonify, request
+
 from ..models import Collection
 from ..schemas import CollectionSchema
-from ..utils.decorators import api_resource_handler, roles_required
 from ..services.product_service import ProductService
+from ..utils.decorators import api_resource_handler, roles_required
 
 bp = Blueprint("collection_management", __name__, url_prefix="/api/admin/collections")
 

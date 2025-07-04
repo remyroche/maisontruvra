@@ -3,14 +3,14 @@ Point of Sale (POS) Service for handling in-store transactions.
 """
 
 import logging
+
 from backend.database import db
 
-from ..models import db, Order, OrderItem, Product, User
+from ..models import Order, OrderItem, Product, User, db
+from .exceptions import InsufficientStockException
 from .inventory_service import InventoryService
 from .order_service import OrderService
 from .pdf_service import PDFService
-from .exceptions import InsufficientStockException
-
 
 logger = logging.getLogger(__name__)
 

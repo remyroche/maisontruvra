@@ -1,7 +1,9 @@
-from backend.database import db
-from datetime import datetime
 import uuid
+from datetime import datetime
+
 from sqlalchemy.dialects.postgresql import UUID
+
+from backend.database import db
 
 
 class AdminAuditLog(db.Model):

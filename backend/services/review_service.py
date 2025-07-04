@@ -1,8 +1,9 @@
 from backend.database import db
-from ..models import Review, Product, User
-from ..services.monitoring_service import MonitoringService
+
+from ..models import Product, Review, User
 from ..services.audit_log_service import AuditLogService
-from ..services.exceptions import NotFoundException, ValidationException, ServiceError
+from ..services.exceptions import NotFoundException, ServiceError, ValidationException
+from ..services.monitoring_service import MonitoringService
 from ..utils.input_sanitizer import InputSanitizer
 
 

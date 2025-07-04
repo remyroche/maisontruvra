@@ -4,11 +4,12 @@ It uses the @api_resource_handler for secure and consistent handling of individu
 review operations and provides a separate endpoint for paginated listing.
 """
 
-from flask import Blueprint, request, g, jsonify
+from flask import Blueprint, g, jsonify, request
+
 from ..models import Review
 from ..schemas import ReviewSchema, ReviewUpdateSchema
-from ..utils.decorators import api_resource_handler, roles_required
 from ..services.review_service import ReviewService
+from ..utils.decorators import api_resource_handler, roles_required
 
 # --- Blueprint Setup ---
 bp = Blueprint("review_management", __name__, url_prefix="/api/admin/reviews")

@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+
 from backend.services.recycling_bin_service import RecyclingBinService
 from backend.utils.decorators import admin_required
 

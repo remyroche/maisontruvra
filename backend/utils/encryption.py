@@ -1,10 +1,10 @@
-from typing import Optional, Any
-from cryptography.fernet import Fernet
-from flask import current_app
-# backend/utils/encryption.py
+from typing import Any
 
+# backend/utils/encryption.py
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+from cryptography.fernet import Fernet
+from flask import current_app
 
 # Create a PasswordHasher instance with default parameters
 ph = PasswordHasher()
@@ -45,7 +45,7 @@ def get_cipher() -> Fernet:
     return Fernet(key.encode())
 
 
-def encrypt_data(data: Any) -> Optional[str]:
+def encrypt_data(data: Any) -> str | None:
     """
     Encrypts the given data.
 
@@ -61,7 +61,7 @@ def encrypt_data(data: Any) -> Optional[str]:
     return cipher.encrypt(str(data).encode()).decode()
 
 
-def decrypt_data(encrypted_data: Optional[str]) -> Optional[str]:
+def decrypt_data(encrypted_data: str | None) -> str | None:
     """
     Decrypts the given encrypted data.
 

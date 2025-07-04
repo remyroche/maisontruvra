@@ -1,10 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
+
 from backend.services.pos_service import PosService
-from backend.utils.input_sanitizer import InputSanitizer
 from backend.utils.decorators import (
-    roles_required,
     permissions_required,
+    roles_required,
 )
+from backend.utils.input_sanitizer import InputSanitizer
 
 pos_bp = Blueprint("pos_bp", __name__, url_prefix="/admin/pos")
 

@@ -1,31 +1,32 @@
-from ..models import Inventory, InventoryReservation
-from .. import db
-from .exceptions import ServiceError, NotFoundException
-from flask import current_app
-from datetime import datetime, timedelta
-from .monitoring_service import MonitoringService
-from ..extensions import cache
-from backend.models import Inventory, Product
-from backend.services.email_service import EmailService
-from backend.services.background_task_service import BackgroundTaskService
-from sqlalchemy.exc import SQLAlchemyError
-from ..models.passport_models import SerializedItem, ProductPassport
 import uuid
+from datetime import datetime, timedelta
 
-from ..models import Product, StockMovement
-from ..models.passport_models import PassportEntry
-from .exceptions import ServiceException
+from flask import current_app
+from sqlalchemy.exc import SQLAlchemyError
+
+from backend.models import Inventory, Product
+from backend.services.background_task_service import BackgroundTaskService
+from backend.services.email_service import EmailService
+
+from .. import db
+from ..extensions import cache
+from ..models import Inventory, InventoryReservation, Product, StockMovement
+from ..models.passport_models import PassportEntry, ProductPassport, SerializedItem
+from .exceptions import NotFoundException, ServiceError, ServiceException
+from .monitoring_service import MonitoringService
 
 # Updated reservation lifetime to 1 hour (60 minutes)
 RESERVATION_LIFETIME_MINUTES = 60
 
 import os
+
 import qrcode
 from flask import render_template, url_for
+
 from ..database import db
 from ..models.inventory_models import Item
 from ..models.product_models import Product
-from ..services.exceptions import NotFoundException, ValidationException, ServiceError
+from ..services.exceptions import NotFoundException, ServiceError, ValidationException
 
 
 class InventoryService:
@@ -266,7 +267,7 @@ class InventoryService:
             )
             db.session.add(reservation)
 
-        cache.delete("view//api/products/{}".format(product_id))
+        cache.delete(f"view//api/products/{product_id}")
         cache.delete("view//api/products")
 
         db.session.commit()
@@ -294,7 +295,7 @@ class InventoryService:
             if reservation.quantity <= 0:
                 db.session.delete(reservation)
 
-            cache.delete("view//api/products/{}".format(product_id))
+            cache.delete(f"view//api/products/{product_id}")
             cache.delete("view//api/products")
 
             db.session.commit()

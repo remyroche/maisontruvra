@@ -1,6 +1,8 @@
-from .base import BaseModel
 from datetime import datetime
+
 from backend.extensions import db
+
+from .base import BaseModel
 
 
 class Referral(db.Model):

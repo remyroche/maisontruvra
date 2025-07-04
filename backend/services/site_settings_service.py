@@ -3,12 +3,13 @@ Service layer for managing site-wide settings.
 """
 
 import logging
+
 from flask import current_app
 
-from ..extensions import db, cache
+from ..extensions import cache, db
 from ..models.utility_models import Setting
+from ..utils.cache_helpers import clear_site_settings_cache, get_site_settings_key
 from ..utils.decorators import roles_required
-from ..utils.cache_helpers import get_site_settings_key, clear_site_settings_cache
 
 logger = logging.getLogger(__name__)
 

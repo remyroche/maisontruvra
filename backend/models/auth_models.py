@@ -1,9 +1,11 @@
-from backend.database import db
-from .base import BaseModel
-from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy import (
     JSON,
 )
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from backend.database import db
+
+from .base import BaseModel
 
 # Association table for AdminUser and Role
 admin_user_roles = db.Table(

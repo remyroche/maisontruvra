@@ -1,13 +1,14 @@
 # backend/services/loyalty_service.py
 
+from sqlalchemy.exc import IntegrityError
+
 from .. import db
 from ..models import (
+    LoyaltyPointLog,
     LoyaltyTier,
     UserLoyalty,
-    LoyaltyPointLog,
 )
 from ..models.loyalty_account import LoyaltyAccount
-from sqlalchemy.exc import IntegrityError
 
 
 class LoyaltyService:

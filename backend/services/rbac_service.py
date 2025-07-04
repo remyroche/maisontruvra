@@ -1,4 +1,5 @@
 import logging
+
 from backend.database import db
 from backend.models.user_models import User, UserRole
 from backend.services.exceptions import (

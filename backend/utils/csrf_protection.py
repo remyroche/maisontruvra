@@ -1,7 +1,9 @@
-import secrets
 import hmac
+import secrets
 from functools import wraps
-from flask import session, request
+
+from flask import request, session
+
 from backend.services.exceptions import ValidationException
 
 

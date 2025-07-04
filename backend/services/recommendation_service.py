@@ -1,10 +1,11 @@
 # backend/services/recommendation_service.py
 
-from ..models import Product, User, Order, OrderItem, db
-from ..services.monitoring_service import MonitoringService
-from ..services.exceptions import NotFoundException, ServiceError
-from ..utils.input_sanitizer import InputSanitizer
 from sqlalchemy import func
+
+from ..models import Order, OrderItem, Product, User, db
+from ..services.exceptions import NotFoundException, ServiceError
+from ..services.monitoring_service import MonitoringService
+from ..utils.input_sanitizer import InputSanitizer
 
 
 class RecommendationService:

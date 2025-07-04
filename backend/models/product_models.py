@@ -1,8 +1,10 @@
 import uuid
-from sqlalchemy.dialects.postgresql import UUID
-from backend.extensions import db
-from .base import BaseModel, SoftDeleteMixin
 
+from sqlalchemy.dialects.postgresql import UUID
+
+from backend.extensions import db
+
+from .base import BaseModel, SoftDeleteMixin
 
 # Table d'association pour la relation Many-to-Many entre Product et LoyaltyTier
 product_tier_visibility = db.Table(

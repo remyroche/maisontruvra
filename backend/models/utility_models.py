@@ -1,7 +1,10 @@
-from backend.database import db
-from .base import BaseModel
-from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
+
+from sqlalchemy.dialects.postgresql import JSONB
+
+from backend.database import db
+
+from .base import BaseModel
 
 
 class StockNotification(db.Model):

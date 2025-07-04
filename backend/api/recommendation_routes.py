@@ -1,9 +1,10 @@
 # backend/api/recommendation_routes.py
 
 from flask import Blueprint, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..services.recommendation_service import RecommendationService
+from flask_jwt_extended import get_jwt_identity, jwt_required
+
 from ..services.exceptions import NotFoundException, ServiceError
+from ..services.recommendation_service import RecommendationService
 from ..utils.decorators import roles_required
 
 # Create a Blueprint for recommendation routes
