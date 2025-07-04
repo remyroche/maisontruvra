@@ -1,13 +1,14 @@
-from datetime import datetime
 import logging
+from datetime import datetime
 from decimal import Decimal
+
 from sqlalchemy.exc import SQLAlchemyError
+
 from backend.database import db
-from backend.models import Discount, Product, Tier, User, Cart
+from backend.models import Discount, Tier, User
 from backend.services.exceptions import (
     DiscountInvalidException,
     NotFoundException,
-    ServiceError,
 )
 
 logger = logging.getLogger(__name__)
