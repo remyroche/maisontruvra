@@ -354,7 +354,7 @@ class SecurityAuditor:
             logging.error(f"Could not decode Safety JSON output: {e}")
 
     def run_pip_audit(self):
-        """Runs pip-audit to check for backend dependency vulnerabilities."""
+        """Runs pip-audit to check for backend dependency vulnerabilities using a temporary file for the report."""
         if self.config.skip_dependency_check:
             logging.info("Skipping pip-audit as per configuration.")
             return
@@ -366,50 +366,68 @@ class SecurityAuditor:
             if not os.path.exists(req_file):
                 logging.warning(f"Could not find requirements.txt at '{self.backend_dir}' or '{self.project_root}'. Skipping pip-audit.")
                 return
-
-        command = [sys.executable, '-m', 'pip_audit', '-f', 'json', '-r', req_file]
-        
-        output, return_code = self._run_command(command)
-        
-        if output is None:
-            logging.error("pip-audit command could not be run or produced no parsable output.")
-            return
-
+    
+        # --- CHANGE START ---
+        # Use a temporary file for reliable JSON output.
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8', suffix=".json") as tmp_file:
+            report_filename = tmp_file.name
+    
         try:
-            report = json.loads(output)
+            # Command to write the JSON report directly to a file.
+            command = [
+                sys.executable, '-m', 'pip_audit',
+                '-r', req_file,
+                '-f', 'json',
+                '-o', report_filename
+            ]
             
+            self._run_command(command)
+            
+            # Read the report from the temporary file.
+            with open(report_filename, 'r', encoding='utf-8') as f:
+                try:
+                    report = json.load(f)
+                except json.JSONDecodeError:
+                    logging.error(f"pip-audit ran, but its output at {report_filename} was not valid JSON. Please inspect the file.")
+                    return
+    
             if 'vulnerabilities' in report and report['vulnerabilities']:
+                logging.info(f"pip-audit found {len(report['vulnerabilities'])} vulnerabilities.")
+                # Read requirements file to find line numbers.
+                with open(req_file, 'r', encoding='utf-8') as f_req:
+                    req_lines = f_req.readlines()
+    
                 for vuln_data in report['vulnerabilities']:
-                    package_name = vuln_data.get('affected_package', {}).get('name', 'N/A')
-                    package_version = vuln_data.get('affected_package', {}).get('version', 'N/A')
-                    
+                    package_name = vuln_data.get('name', 'N/A')
+                    package_version = vuln_data.get('version', 'N/A')
                     vuln_id = vuln_data.get('id', 'N/A')
                     description = vuln_data.get('details', 'No description provided.')
-                    fixed_versions = ', '.join(vuln_data.get('fixed_versions', ['N/A']))
-                    
+                    fixed_versions = ', '.join(vuln_data.get('fix_versions', ['N/A']))
+    
+                    # Find the line number for the vulnerable package.
+                    line_number = "N/A"
+                    for i, line in enumerate(req_lines):
+                        if package_name.lower() in line.lower():
+                            line_number = i + 1
+                            break
+    
                     self.add_finding(
-                        severity="HIGH",
+                        severity="HIGH", # All dependency issues are treated as high priority.
                         category="Dependency Vulnerability (pip-audit)",
                         title=f"Vulnerable package: {package_name}=={package_version}",
                         description=f"Vulnerability ID: {vuln_id}. Details: {description}",
                         file_path=req_file,
-                        line_number=1,
-                        recommendation=f"Upgrade to a fixed version: {fixed_versions}",
-                        cwe_id=vuln_id
+                        line_number=line_number,
+                        recommendation=f"Upgrade to a fixed version, e.g.,: {fixed_versions}",
                     )
-                logging.info(f"pip-audit found {len(report['vulnerabilities'])} vulnerabilities.")
             else:
                 logging.info("pip-audit completed with no vulnerabilities found.")
-
-            if return_code != 0 and (not report.get('vulnerabilities')):
-                logging.warning(f"pip-audit exited with non-zero code ({return_code}) but reported no vulnerabilities in its JSON output. Check stderr logs for details.")
-
-        except json.JSONDecodeError as e:
-            logging.error(f"Could not decode pip-audit JSON output. Error: {e}")
-            logging.error(f"Raw pip-audit output that failed to decode (first 500 chars):\n{output[:500]}...")
-        except KeyError as e:
-            logging.error(f"Missing expected key in pip-audit JSON output: {e}. Ensure pip-audit JSON format matches expectations.")
-            logging.error(f"Problematic JSON (full output, if short enough): {output}")
+    
+        finally:
+            # Clean up the temporary file.
+            if os.path.exists(report_filename):
+                os.remove(report_filename)
+                
 
     def run_npm_audit(self):
         """Runs npm audit to check for frontend dependency vulnerabilities."""
