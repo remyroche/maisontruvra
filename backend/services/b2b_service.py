@@ -1,23 +1,24 @@
 from decimal import Decimal
-from .. import db
-from ..models import User, Role, UserRole, Tier, Order, Company, B2BAccount
-from backend.services.email_service import EmailService
-from backend.services.user_service import UserService
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
-# from backend.extensions import db
-from backend.services.exceptions import ValidationException, NotFoundException, ServiceError
 from flask_login import current_user
-from backend.utils.encryption import hash_password
+
+from backend import db
+from backend.models import User, Role, UserRole, Tier, Order, Company, B2BAccount
 from backend.models.enums import RoleType
+from backend.services.email_service import EmailService
+from backend.services.user_service import UserService
 from backend.services.audit_log_service import AuditLogService
-from .exceptions import ServiceException, NotFoundException, DataConflictException
+from backend.services.exceptions import ValidationException, NotFoundException, ServiceError, DataConflictException, ServiceException
+from backend.utils.encryption import hash_password
+
 
 class B2BService:
     """
     Service layer for managing B2B accounts and related operations.
     """
-    def __init__(self):
+    def __init__(self, session=None):
+        self.session = session or db.session
         self.email_service = EmailService()
         self.user_service = UserService()
         self.audit_log_service = AuditLogService()
@@ -48,6 +49,8 @@ class B2BService:
             self.session.add(new_b2b_account)
             
             # 3. Create the User via the AuthService to handle hashing and roles
+            # We need to flush to get the b2b_account.id before creating the user
+            self.session.flush()
             user_data['b2b_account_id'] = new_b2b_account.id
             # Ensure the user is created with an 'admin' or 'b2b_admin' role
             new_user = auth_service.create_user(user_data, role_name='b2b_admin')
@@ -58,6 +61,7 @@ class B2BService:
         except Exception as e:
             self.session.rollback()
             # Log the error e
+            current_app.logger.error(f"Failed to create B2B account: {e}")
             raise ServiceException(f"Failed to create B2B account: {e}")
 
     def add_user_to_b2b_account(self, b2b_account_id, user_data, role_name='b2b_user'):
@@ -91,18 +95,22 @@ class B2BService:
         try:
             # Update status and activate user
             b2b_account.status = 'approved'
-            b2b_account.user.is_active = True
+            if b2b_account.user:
+                b2b_account.user.is_active = True
 
-            # Assign 'b2b' role
-            self.auth_service.add_role_to_user(b2b_account.user, 'b2b')
+                # Assign 'b2b' role
+                from backend.services.auth_service import AuthService
+                auth_service = AuthService(self.session)
+                auth_service.add_role_to_user(b2b_account.user, 'b2b')
             
             db.session.commit()
 
             # Send approval email
-            self.email_service.send_b2b_approved_email(b2b_account.user.email, b2b_account.user.first_name)
+            if b2b_account.user:
+                self.email_service.send_b2b_approved_email(b2b_account.user.email, b2b_account.user.first_name)
             
             self.audit_log_service.add_entry(
-                f"B2B account approved for '{b2b_account.company_name}'",
+                f"B2B account approved for '{b2b_account.company.name}'",
                 user_id=current_user.id, # The admin performing the action
                 target_type='b2b_account',
                 target_id=b2b_account.id,
@@ -124,23 +132,24 @@ class B2BService:
 
     def get_b2b_account_by_user_id(self, user_id):
         """Retrieves a B2B account by the associated user ID."""
-        b2b_account = B2BAccount.query.filter_by(user_id=user_id).first()
-        if not b2b_account:
-            raise NotFoundException("B2B account not found for this user.")
-        return b2b_account
+        user = User.query.get(user_id)
+        if not user or not user.b2b_account:
+             raise NotFoundException("B2B account not found for this user.")
+        return user.b2b_account
 
-    def update_b2b_account(self, user_id, data):
+    def update_b2b_account(self, b2b_account_id, data):
         """
-        Updates a B2B account and its associated user details.
+        Updates a B2B account and its associated company details.
         """
-        b2b_account = self.get_b2b_account_by_user_id(user_id)
+        b2b_account = B2BAccount.query.get(b2b_account_id)
+        if not b2b_account:
+            raise NotFoundException("B2B Account not found.")
         try:
             if 'company_name' in data and data['company_name'] is not None:
-                b2b_account.company_name = data['company_name']
+                b2b_account.company.name = data['company_name']
             if 'vat_number' in data and data['vat_number'] is not None:
                 b2b_account.vat_number = data['vat_number']
-            if 'user_details' in data and data['user_details'] is not None:
-                self.user_service.update_user(user_id, data['user_details'])
+            # User details should be updated via UserService
             db.session.commit()
             return b2b_account
         except Exception as e:
@@ -154,10 +163,11 @@ class B2BService:
         b2b_account = self.get_b2b_account_by_user_id(user_id)
         try:
             b2b_account.soft_delete()
-            b2b_account.user.soft_delete()
+            for user in b2b_account.users:
+                user.soft_delete()
             db.session.commit()
             self.audit_log_service.add_entry(
-                f"B2B User requested account deletion for '{b2b_account.company_name}'",
+                f"B2B User requested account deletion for '{b2b_account.company.name}'",
                 user_id=user_id,
                 target_type='b2b_account',
                 target_id=b2b_account.id,
@@ -180,11 +190,11 @@ class B2BService:
             )
             db.session.add(new_tier)
             db.session.commit()
-            self.logger.info(f"Created new B2B tier: {name}")
+            current_app.logger.info(f"Created new B2B tier: {name}")
             return new_tier
         except SQLAlchemyError as e:
             db.session.rollback()
-            self.logger.error(f"Error creating tier '{name}': {e}")
+            current_app.logger.error(f"Error creating tier '{name}': {e}")
             raise
 
     def get_all_tiers(self) -> list[Tier]:
@@ -195,14 +205,14 @@ class B2BService:
         """Manually assigns a pricing tier to a B2B user."""
         user = self.user_service.get_user_by_id(user_id)
         tier = db.session.query(Tier).get(tier_id)
-        if not user or not user.is_b2b:
+        if not user or not user.b2b_account:
             raise ValueError("User is not a B2B account.")
         if not tier:
             raise ValueError("Tier not found.")
         
         user.tier_id = tier_id
         db.session.commit()
-        self.logger.info(f"Assigned tier '{tier.name}' to user {user.email}.")
+        current_app.logger.info(f"Assigned tier '{tier.name}' to user {user.email}.")
         return user
 
     def update_user_tier_based_on_spend(self, user_id: int) -> User:
@@ -211,7 +221,7 @@ class B2BService:
         total spending. This should be run periodically or after each order.
         """
         user = self.user_service.get_user_by_id(user_id)
-        if not user or not user.is_b2b:
+        if not user or not user.b2b_account:
             return None
 
         total_spend = db.session.query(func.sum(Order.total_price)).filter(Order.user_id == user_id).scalar() or Decimal('0.00')
@@ -223,7 +233,7 @@ class B2BService:
             .first()
 
         if applicable_tier and user.tier_id != applicable_tier.id:
-            self.logger.info(f"User {user.email} (spend: {total_spend}) qualifies for new tier '{applicable_tier.name}'. Updating.")
+            current_app.logger.info(f"User {user.email} (spend: {total_spend}) qualifies for new tier '{applicable_tier.name}'. Updating.")
             user.tier_id = applicable_tier.id
             db.session.commit()
         
