@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session, current_app, g
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
-from flask_login import login_required, current_user
+from flask_login import current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from marshmallow import ValidationError
 
