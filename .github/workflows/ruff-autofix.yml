@@ -14,6 +14,11 @@ on:
 jobs:
   lint-fix-and-report:
     runs-on: ubuntu-latest
+    
+    # Add this permissions block to allow the action to commit changes
+    permissions:
+      contents: write
+
     steps:
       # Step 1: Check out the repository's code.
       - name: Checkout code
