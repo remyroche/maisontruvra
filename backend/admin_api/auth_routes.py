@@ -1,28 +1,26 @@
-from flask import Blueprint, request, jsonify, session, current_app
-from flask_jwt_extended import get_jwt_identity, jwt_required
-from flask_login import login_user, logout_user, current_user
 from datetime import datetime
 import logging
+
+from flask import Blueprint, jsonify, request, session, current_app
+from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_login import current_user, login_user, logout_user
 from marshmallow import ValidationError
-from backend.extensions import db
-from backend.services.mfa_service import MfaService
-from backend.services.user_service import UserService
+
+from backend.extensions import db, limiter
+from backend.services.audit_log_service import AuditLogService
 from backend.services.auth_service import AuthService
 from backend.services.exceptions import ServiceError
-from backend.utils.decorators import (
-    staff_required,
-)
+from backend.services.mfa_service import MfaService
+from backend.services.user_service import UserService
+from backend.utils.decorators import staff_required
 from backend.utils.input_sanitizer import InputSanitizer
-from backend.loggers import security_logger
-from backend.schemas import (
-    PasswordResetRequestSchema,
-)
-from backend.services.audit_log_service import AuditLogService
-from backend.extensions import limiter
+from backend.schemas import PasswordResetRequestSchema
 
 admin_auth_bp = Blueprint("admin_auth_bp", __name__)
-user_service = UserService()
-mfa_service = MfaService()
+logger = logging.getLogger(__name__)
+user_service = UserService(logger)
+mfa_service = MfaService(logger)
+auth_service = AuthService(logger)
 security_logger = logging.getLogger("security")
 
 
@@ -46,22 +44,28 @@ def forgot_password():
         # This will only succeed and send an email if the user is a valid admin
         AuthService.request_admin_password_reset(validated_data["email"])
         # Always return a success message to prevent user enumeration.
-        return jsonify(
-            {
-                "message": "If an admin account with that email exists, a password reset link has been sent."
-            }
-        ), 200
+        return (
+            jsonify(
+                {
+                    "message": "If an admin account with that email exists, a password reset link has been sent."
+                }
+            ),
+            200,
+        )
     except Exception as e:
         # Log the error, but don't expose details to the client
         current_app.logger.error(
             f"Admin password reset request failed: {e}", exc_info=True
         )
         # Still return a generic success message
-        return jsonify(
-            {
-                "message": "If an admin account with that email exists, a password reset link has been sent."
-            }
-        ), 200
+        return (
+            jsonify(
+                {
+                    "message": "If an admin account with that email exists, a password reset link has been sent."
+                }
+            ),
+            200,
+        )
 
 
 @admin_auth_bp.route("/reset-password", methods=["POST"])
@@ -77,7 +81,7 @@ def reset_password():
         return jsonify({"error": "Token and new password are required."}), 400
 
     # Verify the token using the specific admin salt
-    user = AuthService.verify_password_reset_token(
+    user = auth_service.verify_password_reset_token(
         token, salt="admin-password-reset-salt"
     )
 
@@ -85,10 +89,8 @@ def reset_password():
         return jsonify({"error": "Invalid or expired token."}), 401
 
     try:
-        # A new service method would be needed for this
-        # AuthService.reset_user_password(user, new_password)
-        user.set_password(new_password)  # Assuming User model has this method
-        db.session.commit()
+        # Use the auth service to reset the password
+        auth_service.reset_user_password(user, new_password)
         return jsonify({"message": "Password has been reset successfully."}), 200
     except ServiceError as e:
         return jsonify({"error": e.message}), e.status_code
@@ -103,7 +105,7 @@ def reauthenticate():
     data = request.get_json()
     password = data.get("password")
 
-    if not current_user.check_password(password):
+    if not auth_service.verify_password(current_user.password_hash, password):
         security_logger.warning(
             f"Re-authentication failed for user {current_user.id} due to invalid password."
         )
@@ -118,27 +120,29 @@ def reauthenticate():
 
 
 @admin_auth_bp.route("/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def login():
     data = InputSanitizer.recursive_sanitize(request.get_json())
     email = data.get("email")
     password = data.get("password")
 
-    user = user_service.authenticate_staff_or_admin(email, password)
-    if user:
+    try:
+        user = auth_service.authenticate_user(email, password, is_admin=True)
         if user.two_factor_enabled:
             session["2fa_user_id"] = user.id
-            return jsonify({"2fa_required": True}), 200
+            return jsonify({"2fa_required": True}), 202  # Use 202 Accepted
         else:
             login_user(user)
             return jsonify({"message": "Login successful"}), 200
-
-    security_logger.warning(
-        f"Failed privileged login attempt for email: {email} from IP: {request.remote_addr}"
-    )
-    return jsonify({"error": "Invalid credentials or insufficient privileges"}), 401
+    except ServiceError as e:
+        security_logger.warning(
+            f"Failed privileged login attempt for email: {email} from IP: {request.remote_addr}"
+        )
+        return jsonify({"error": e.message}), e.status_code
 
 
 @admin_auth_bp.route("/2fa/verify", methods=["POST"])
+@limiter.limit("5 per minute")
 def verify_2fa_login():
     data = InputSanitizer.recursive_sanitize(request.get_json())
     user_id = session.get("2fa_user_id")
@@ -147,13 +151,13 @@ def verify_2fa_login():
     if not user_id:
         return jsonify({"error": "2FA process not initiated"}), 400
 
-    if mfa_service.verify_2fa_login(user_id, token):
-        user = user_service.get_user_by_id(user_id)
+    try:
+        user = mfa_service.verify_and_complete_login(user_id, token)
         login_user(user)
         session.pop("2fa_user_id", None)
         return jsonify({"message": "2FA verification successful"}), 200
-
-    return jsonify({"error": "Invalid 2FA token"}), 401
+    except ServiceError as e:
+        return jsonify({"error": e.message}), e.status_code
 
 
 @admin_auth_bp.route("/logout", methods=["POST"])
@@ -165,7 +169,9 @@ def alogout():
 
 @admin_auth_bp.route("/check-auth", methods=["GET"])
 def check_auth_status():
-    if current_user.is_authenticated and current_user.is_staff():
+    if current_user.is_authenticated and (
+        current_user.has_role("Admin") or current_user.has_role("Staff")
+    ):
         return jsonify({"is_authenticated": True, "user": current_user.to_dict()})
     return jsonify({"is_authenticated": False})
 
@@ -181,21 +187,23 @@ def setup_mfa():
     """
     user_id = get_jwt_identity()
     try:
-        # The MfaService should handle the logic of generating a new secret,
-        # creating a QR code, and storing the secret temporarily.
-        secret, qr_code_data_uri = MfaService.setup_mfa(user_id)
-        return jsonify(
-            {
-                "status": "success",
-                "message": "MFA setup initiated. Scan the QR code with your authenticator app and verify the token.",
-                "data": {"secret": secret, "qr_code": qr_code_data_uri},
-            }
-        ), 200
+        secret, qr_code_data_uri = mfa_service.setup_mfa(user_id)
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "message": "MFA setup initiated. Scan the QR code with your authenticator app and verify the token.",
+                    "data": {"secret": secret, "qr_code": qr_code_data_uri},
+                }
+            ),
+            200,
+        )
     except Exception as e:
-        # Log the error e
-        return jsonify(
-            status="error", message=f"Failed to initiate MFA setup: {e}"
-        ), 500
+        logger.error(f"Failed to initiate MFA setup: {e}", exc_info=True)
+        return (
+            jsonify(status="error", message=f"Failed to initiate MFA setup: {e}"),
+            500,
+        )
 
 
 @admin_auth_bp.route("/auth/disable-mfa", methods=["POST"])
@@ -206,13 +214,13 @@ def disable_mfa():
     Disables MFA for the current user after password verification.
     """
     data = request.get_json()
-    password = data.get("password")  # Password is not sanitized to allow all characters
+    password = data.get("password")
 
     if not password:
         return jsonify({"error": "Password is required to disable MFA."}), 400
 
-    if AuthService.verify_password(current_user, password):
-        MfaService.disable_mfa(current_user)
+    if auth_service.verify_password(current_user.password_hash, password):
+        mfa_service.disable_mfa(current_user.id)
         AuditLogService.log_action(
             user_id=current_user.id,
             action="mfa_disabled",
@@ -234,27 +242,38 @@ def verify_mfa():
     user_id = get_jwt_identity()
     data = request.get_json()
     if not data or "token" not in data:
-        return jsonify(
-            status="error", message="Invalid or missing JSON body with 'token'"
-        ), 400
+        return (
+            jsonify(
+                status="error", message="Invalid or missing JSON body with 'token'"
+            ),
+            400,
+        )
 
     token = InputSanitizer.sanitize_input(data["token"])
 
     try:
-        # The MfaService should verify the token against the temporarily stored secret
-        # and, if valid, permanently enable MFA for the user.
-        if MfaService.verify_and_enable_mfa(user_id, token):
-            return jsonify(
-                status="success",
-                message="MFA has been successfully enabled for your account.",
-            ), 200
+        if mfa_service.verify_and_enable_mfa(user_id, token):
+            return (
+                jsonify(
+                    {
+                        "status": "success",
+                        "message": "MFA has been successfully enabled for your account.",
+                    }
+                ),
+                200,
+            )
         else:
             return jsonify(status="error", message="Invalid MFA token."), 400
     except ValueError as e:
         return jsonify(status="error", message=str(e)), 400
-    except Exception:
-        # Log the error e
-        return jsonify(
-            status="error",
-            message="An internal error occurred during MFA verification.",
-        ), 500
+    except Exception as e:
+        logger.error(f"MFA verification error: {e}", exc_info=True)
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "An internal error occurred during MFA verification.",
+                }
+            ),
+            500,
+        )
