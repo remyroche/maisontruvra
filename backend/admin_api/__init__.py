@@ -1,7 +1,35 @@
+# ruff: noqa: F401, E402
 from flask import Blueprint
 
-# This blueprint will serve the admin-specific API endpoints.
-admin_api_bp = Blueprint('admin_api_bp', __name__)
+admin_api_blueprint = Blueprint('admin_api', __name__, url_prefix='/api/admin')
 
 # Import routes to register them with the blueprint
-from . import (  # noqa: E402 user_management_routes, product_management_routes, order_routes, dashboard_routes, site_management_routes, auth_routes, audit_log_routes, b2b_management_routes, blog_routes, loyalty_routes, monitoring_routes, newsletter_routes, passport_routes, pos_routes, quote_routes, review_routes, session_routes
+# The noqa comments disable warnings for unused imports and imports not at the top,
+# which are necessary here for Flask's blueprint registration to work correctly.
+from . import (
+    user_management_routes,
+    product_management_routes,
+    order_routes,
+    dashboard_routes,
+    site_management_routes,
+    auth_routes,
+    audit_log_routes,
+    b2b_management_routes,
+    blog_management_routes,
+    loyalty_routes,
+    monitoring_routes,
+    newsletter_routes,
+    passport_routes,
+    pos_routes,
+    review_routes,
+    session_routes,
+    asset_routes,
+    category_management_routes,
+    collection_management_routes,
+    delivery_routes,
+    discount_management_routes,
+    inventory_management_routes,
+    invoice_routes,
+    recommendation_routes,
+    recycling_bin_routes
+)
