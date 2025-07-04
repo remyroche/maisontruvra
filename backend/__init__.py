@@ -2,6 +2,7 @@ from flask import Flask, request, session
 from flask_talisman import Talisman
 from datetime import datetime
 from .celery_worker import celery, init_celery 
+import celery
 
 # Import extension instances from the central extensions file
 from .extensions import (
@@ -17,7 +18,6 @@ from .extensions import (
     csrf,
     cache,
     cors,
-    password_hasher
 )
 
 from . import config
@@ -29,7 +29,6 @@ from .logger_and_error_handler import register_error_handlers
 from flask_login import user_logged_in, user_unauthorized
 from .utils.vite import vite_asset
 from .database import setup_database_security
-from backend.config import Config
 from backend.database import init_db_command
 from backend.utils.vite import Vite
 import logging
