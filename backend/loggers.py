@@ -1,8 +1,10 @@
 import logging
-from logging.handlers import RotatingFileHandler
 import uuid
-from flask import request, g, jsonify
+from logging.handlers import RotatingFileHandler
+
+from flask import g, jsonify, request
 from werkzeug.exceptions import HTTPException
+
 
 def setup_logging(app):
     """
@@ -14,15 +16,13 @@ def setup_logging(app):
 
     # Configure formatter
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - RequestID: %(request_id)s - %(message)s [in %(pathname)s:%(lineno)d]'
+        "%(asctime)s - %(name)s - %(levelname)s - RequestID: %(request_id)s - %(message)s [in %(pathname)s:%(lineno)d]"
     )
 
     # File handler
-    file_handler = RotatingFileHandler(
-        'backend_app.log', maxBytes=10000, backupCount=3
-    )
+    file_handler = RotatingFileHandler("backend_app.log", maxBytes=10000, backupCount=3)
     file_handler.setFormatter(formatter)
-    
+
     # Console handler
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
@@ -39,16 +39,15 @@ def setup_logging(app):
         """
         # FIX: Added import for 'uuid'
         g.request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
-        
+
         # Add a filter to inject the request_id into all log records
         class RequestIdFilter(logging.Filter):
             def filter(self, record):
-                record.request_id = g.get('request_id', 'N/A')
+                record.request_id = g.get("request_id", "N/A")
                 return True
-        
+
         app.logger.addFilter(RequestIdFilter())
         app.logger.info(f"Request started: {request.method} {request.path}")
-
 
     @app.after_request
     def after_request_logging(response):
@@ -73,6 +72,6 @@ def setup_logging(app):
         # Handle non-HTTP exceptions
         logger = logging.getLogger("backend.unhandled")
         logger.error(f"Unhandled exception: {e}", exc_info=True)
-        
+
         # FIX: Added import for 'jsonify' from 'flask'
         return jsonify(error="An unexpected server error occurred."), 500
