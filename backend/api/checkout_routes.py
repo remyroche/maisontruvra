@@ -274,7 +274,7 @@ class CheckoutService:
                 notify_admin_of_new_order_task,
                 notify_user_of_loyalty_points_task,  # This now exists and can be imported
                 send_order_confirmation_email_task,
-                update_inventory_on_order_task
+                update_inventory_on_order_task,
             )
 
             # Dispatch tasks
