@@ -1,7 +1,5 @@
+import logging
 import os
-
-# Assuming RBACService is defined elsewhere and imported, or defined below for self-containment
-# from backend.services.rbac_service import RBACService
 import time
 import uuid
 from datetime import datetime
@@ -10,20 +8,16 @@ from functools import wraps
 from flask import Flask, current_app, g, jsonify, redirect, request, session
 from flask_compress import Compress
 from flask_cors import CORS
-
-# New imports for middleware functionality
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_login import current_user
 from prometheus_client import Counter, Histogram
-from werkzeug.exceptions import (
-    default_exceptions,
-)  # For payload size error handling
+from werkzeug.exceptions import default_exceptions
 
+from backend.loggers import app_logger as logger
 from backend.loggers import security_logger
 from backend.models.user_models import User
-
-# Import utilities
+from backend.services.rbac_service import rbac_service
 from backend.utils.input_sanitizer import InputSanitizer
 
 # Prometheus metrics
@@ -35,15 +29,11 @@ REQUEST_COUNT = Counter(
 )
 
 
-# Import centralized loggers
-from backend.loggers import app_logger as logger
-
 # --- Global Flask Extensions Initialization ---
-# These are initialized globally and then `init_app` is called within setup_middleware
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["10 per minute", "200 per day"],  # Global default rate limits
-    storage_uri="memory://",  # Use "redis://localhost:6379" or similar in production
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
 )
 compress = Compress()
 
@@ -53,65 +43,58 @@ compress = Compress()
 
 def check_staff_session(app: Flask):
     """
-    Registers a blueprint-specific `before_request` handler.
-    It checks session validity for authenticated STAFF users on admin routes.
-
-    Args:
-        app: The Flask application instance
+    Registers a blueprint-specific `before_request` handler to check session validity.
     """
 
     @app.before_request
     def check_staff_session_handler():
-        # Only apply to admin routes
         if not request.path.startswith("/api/admin/"):
             return
 
-        # Check if user is authenticated and is staff
-        if current_user.is_authenticated and current_user.is_staff:
+        if current_user.is_authenticated and (
+            rbac_service.user_is_admin(current_user.id)
+            or rbac_service.user_is_staff(current_user.id)
+        ):
             now = datetime.utcnow()
             timeout_reason = None
 
-            # --- Check for maximum session lifetime (re-authentication) ---
             login_time_str = session.get("login_time")
             if login_time_str:
                 login_time = datetime.fromisoformat(login_time_str)
                 if now - login_time > current_app.config["SESSION_MAX_LIFETIME"]:
                     timeout_reason = "Session has expired for security reasons."
             else:
-                # This is a fallback, login time should be set at login
                 session["login_time"] = now.isoformat()
 
-            # --- Check for inactivity timeout ---
             last_activity_str = session.get("last_activity_time")
             if last_activity_str:
                 last_activity = datetime.fromisoformat(last_activity_str)
                 timeout_duration = (
                     current_app.config["ADMIN_INACTIVITY_TIMEOUT"]
-                    if current_user.is_admin
+                    if rbac_service.user_is_admin(current_user.id)
                     else current_app.config["STAFF_INACTIVITY_TIMEOUT"]
                 )
                 if now - last_activity > timeout_duration:
                     timeout_reason = "Session timed out due to inactivity."
 
             if timeout_reason:
-                return jsonify(
-                    {
-                        "error": "Authentication Required",
-                        "message": timeout_reason,
-                        "reason": "reauth_required",
-                    }
-                ), 401
+                return (
+                    jsonify(
+                        {
+                            "error": "Authentication Required",
+                            "message": timeout_reason,
+                            "reason": "reauth_required",
+                        }
+                    ),
+                    401,
+                )
 
-            # Update last activity time if all checks pass
             session["last_activity_time"] = now.isoformat()
 
 
 def mfa_check_middleware(app: Flask):
     """
     Registers a 'before_request' hook to enforce Multi-Factor Authentication (MFA).
-
-    Args:
-        app: The Flask application instance
     """
 
     @app.before_request
@@ -141,46 +124,12 @@ def mfa_check_middleware(app: Flask):
                         else None,
                     },
                 )
-                return jsonify(
-                    {"error": "MFA verification required.", "mfa_required": True}
-                ), 403
-
-
-class RBACService:
-    """
-    Role-Based Access Control service to check user permissions.
-    """
-
-    @staticmethod
-    def user_is_staff(user_id):
-        """
-        Checks if a user has staff privileges by querying the database.
-
-        This method provides a centralized way to determine if a user belongs
-        to the staff, based on the `is_staff` attribute in the User model.
-
-        Args:
-            user_id: The ID of the user to check.
-
-        Returns:
-            bool: True if the user exists and has the 'is_staff' flag set to True,
-                  otherwise False.
-        """
-        if not user_id:
-            return False
-
-        try:
-            user = User.query.get(user_id)
-            if user and user.is_staff:
-                return True
-            else:
-                return False
-        except Exception as e:
-            logger.error(
-                f"Error during RBAC staff status check for user_id {user_id}: {e}",
-                extra={"request_id": getattr(g, "request_id", "unknown")},
-            )
-            return False
+                return (
+                    jsonify(
+                        {"error": "MFA verification required.", "mfa_required": True}
+                    ),
+                    403,
+                )
 
 
 # --- Main Middleware Setup Function ---
@@ -189,100 +138,42 @@ class RBACService:
 def setup_middleware(app: Flask) -> None:
     """
     Setup global middleware for the Flask application.
-
-    Args:
-        app: The Flask application instance
-
-    This function integrates:
-    1. Global Request ID Generation & Initial Logging
-    2. Suspicious Request Path Logging
-    3. HTTPS Redirection
-    4. Global CORS Policy
-    5. Global Rate Limiting
-    6. Conditional Request Payload Size Limit
-    8. MFA Check Middleware
-    9. Global Security Headers
-    10. Global Response Finished Logging
-    11. Centralized Error Handling
-    12. Response Compression
     """
 
     @app.before_request
     def before_request():
-        """
-        Executed before each request.
-
-        This function records the start time of the request and assigns a unique
-        request ID. This ID is essential for tracing a request's entire
-        lifecycle through logs and various services.
-        """
-        # Store the start time in Flask's global 'g' object to calculate latency later
         g.start_time = time.time()
-        # Generate a unique ID for each request to correlate logs
         g.request_id = str(uuid.uuid4())
 
     @app.after_request
     def after_request(response):
-        """
-        Executed after each request.
-
-        This function calculates the request latency, and increments Prometheus
-        metrics for request count and latency. It also adds the unique request ID
-        to the response headers for easier client-side debugging.
-        """
-        # Ensure start_time was set to avoid errors
         if hasattr(g, "start_time"):
-            # Calculate latency
             latency = time.time() - g.start_time
-            # Observe latency in Prometheus histogram
             REQUEST_LATENCY.labels(request.method, request.path).observe(latency)
 
-        # Increment request count in Prometheus counter
-        REQUEST_COUNT.labels(request.method, request.path, response.status_code).inc()
+        REQUEST_COUNT.labels(
+            request.method, request.path, response.status_code
+        ).inc()
 
-        # Add the unique request ID to the response header
-        # This is useful for clients to report issues with a specific request
         if hasattr(g, "request_id"):
             response.headers["X-Request-ID"] = g.request_id
 
         return response
 
-    # 1. Initialize Flask Extensions
     limiter.init_app(app)
     compress.init_app(app)
 
-    # Define allowed origins dynamically for better security and flexibility
-    allowed_origins = [
-        "http://localhost:5173",  # Vite dev server
-        "http://127.0.0.1:5173",  # Vite dev server
-    ]
-
-    # Add production frontend URL from environment variable
-    prod_frontend_url = os.getenv("FRONTEND_URL")
-    if prod_frontend_url:
-        allowed_origins.append(prod_frontend_url)
-    elif not app.debug:
-        # Log a warning if the production URL is not set when not in debug mode
-        logger.warning(
-            "FRONTEND_URL environment variable not set. CORS will not allow production frontend."
-        )
-
+    allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(
+        ","
+    )
     CORS(
         app,
-        resources={
-            r"/api/*": {
-                "origins": allowed_origins,
-                "methods": ["GET", "HEAD", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
-                "allow_headers": ["Content-Type", "Authorization", "X-CSRF-TOKEN"],
-                "supports_credentials": True,  # Important for JWT in HttpOnly cookies or sessions
-            }
-        },
+        resources={r"/api/*": {"origins": allowed_origins}},
+        supports_credentials=True,
     )
 
-    # 2. Global Request ID Generation & Initial Logging (before request)
     @app.before_request
     def log_request_started():
-        g.request_id = str(uuid.uuid4())
         logger.info(
             {
                 "event": "request_started",
@@ -290,11 +181,9 @@ def setup_middleware(app: Flask) -> None:
                 "method": request.method,
                 "path": request.path,
                 "ip": request.remote_addr,
-                "user_agent": request.headers.get("User-Agent", "Unknown"),
             }
         )
 
-    # 3. Suspicious Request Path Logging (before request)
     @app.before_request
     def check_suspicious_request_path():
         if any(
@@ -303,90 +192,47 @@ def setup_middleware(app: Flask) -> None:
             security_logger.warning(
                 f"Suspicious request path: {request.path} from {request.remote_addr}",
                 extra={
-                    "request_id": getattr(g, "request_id", "unknown"),
+                    "request_id": g.request_id,
                     "ip": request.remote_addr,
                 },
             )
 
-    # 4. HTTPS Redirection Middleware (before request)
     @app.before_request
     def redirect_to_https():
-        # Only redirect if not already HTTPS
-        if not request.is_secure:
-            # Check X-Forwarded-Proto for requests behind a proxy/load balancer
-            # Assumes TLS termination at the load balancer
-            if request.headers.get("X-Forwarded-Proto") == "http":
-                url = request.url.replace("http://", "https://", 1)
-                security_logger.info(
-                    f"Redirecting HTTP to HTTPS: {request.url} -> {url}",
-                    extra={"request_id": getattr(g, "request_id", "unknown")},
-                )
-                return redirect(url, code=301)
-            # If not behind a proxy and not secure (e.g., local dev)
-            elif not app.debug:  # Only redirect if not in debug mode
-                url = request.url.replace("http://", "https://", 1)
-                security_logger.warning(
-                    f"Forcing HTTPS redirect directly (not behind proxy): {request.url} -> {url}",
-                    extra={"request_id": getattr(g, "request_id", "unknown")},
-                )
-                return redirect(url, code=301)
+        if request.headers.get("X-Forwarded-Proto") == "http":
+            url = request.url.replace("http://", "https://", 1)
+            return redirect(url, code=301)
 
-    # 5. Conditional Request Payload Size Limit (before request)
-    # This must run after basic authentication if current_user is used to determine role
-    # If using JWT for role, user_id from get_jwt_identity() could be used earlier.
-    # Given `current_user` in mfa_check_middleware, we assume Flask-Login is set up
-    # and `current_user` is populated early enough for this.
     @app.before_request
     def check_payload_size_limit():
         MAX_SIZE_USER = 1 * 1024 * 1024  # 1 MB
         MAX_SIZE_STAFF = 25 * 1024 * 1024  # 25 MB
 
-        # Skip GET/HEAD requests as they don't have bodies
         if request.method not in ["POST", "PUT", "PATCH"]:
             return
 
         content_length = request.content_length
         if content_length is None:
-            # Cannot determine content length, might be a chunked transfer
-            security_logger.warning(
-                "Request without Content-Length header. Cannot apply size limit.",
-                extra={"request_id": getattr(g, "request_id", "unknown")},
-            )
-            return  # Let the request proceed, it might be handled by web server or app logic
+            return
 
-        limit_exceeded = False
-        limit_type = "user"
-        effective_limit = MAX_SIZE_USER
-
-        if current_user.is_authenticated and RBACService.user_is_staff(current_user.id):
-            effective_limit = MAX_SIZE_STAFF
-            limit_type = "staff"
-        else:
-            effective_limit = MAX_SIZE_USER
-            limit_type = "user"
+        effective_limit = (
+            MAX_SIZE_STAFF
+            if current_user.is_authenticated
+            and rbac_service.user_is_staff(current_user.id)
+            else MAX_SIZE_USER
+        )
 
         if content_length > effective_limit:
-            limit_exceeded = True
-
-        if limit_exceeded:
-            security_logger.warning(
-                f"Payload size limit exceeded for {limit_type} user. "
-                f"User: {current_user.id if current_user.is_authenticated else 'unauthenticated'}. "
-                f"Size: {content_length} bytes, Limit: {effective_limit} bytes. "
-                f"Endpoint: {request.path}, IP: {request.remote_addr}",
-                extra={
-                    "request_id": getattr(g, "request_id", "unknown"),
-                    "user_id": current_user.id
-                    if current_user.is_authenticated
-                    else None,
-                },
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Request payload too large. Max {effective_limit // (1024 * 1024)}MB allowed.",
+                    }
+                ),
+                413,
             )
-            return jsonify(
-                status="error",
-                message=f"Request payload too large. Max {effective_limit / (1024 * 1024):.0f}MB allowed for your role.",
-            ), 413  # 413 Payload Too Large
 
-    # 8. Global Security Headers (after request)
     @app.after_request
     def add_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -396,99 +242,45 @@ def setup_middleware(app: Flask) -> None:
             "max-age=31536000; includeSubDomains"
         )
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-
-        # Default CSP (can be overridden by more specific middleware for admin panel)
-        # Note: 'unsafe-inline' for scripts/styles should be avoided in production if possible.
-        # This mirrors your original CSP.
-        default_csp = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
-        response.headers["Content-Security-Policy"] = default_csp
-
         return response
 
-    # 9. Global Response Finished Logging (after request)
     @app.after_request
     def log_request_finished(response):
         logger.info(
             {
                 "event": "request_finished",
-                "request_id": getattr(g, "request_id", "unknown"),
+                "request_id": g.request_id,
                 "status_code": response.status_code,
-                "content_length": response.content_length,
             }
         )
         return response
 
-    # 10. Centralized Error Handling (global handlers)
-    # These should be defined AFTER other middleware if you want
-    # other middleware errors to fall into these handlers.
-    for code in default_exceptions.keys():
+    for code in default_exceptions:
 
         @app.errorhandler(code)
         def handle_http_exception(e):
-            request_id = getattr(g, "request_id", "unknown")
-            security_logger.error(
-                f"HTTP Error {e.code}: {e.description} for {request.path}",
-                exc_info=True,
-                extra={"request_id": request_id, "ip": request.remote_addr},
-            )
-            response = jsonify(
-                {
-                    "status": "error",
-                    "message": getattr(e, "description", "An error occurred"),
-                    "code": e.code,
-                }
-            )
-            return response, e.code
+            logger.error(f"HTTP Error {e.code}: {e.description}", exc_info=True)
+            return jsonify(error=e.description), e.code
 
     @app.errorhandler(Exception)
     def handle_unhandled_exception(e):
-        request_id = getattr(g, "request_id", "unknown")
-        security_logger.critical(
-            f"Unhandled exception: {e} for {request.path}",
-            exc_info=True,
-            extra={"request_id": request_id, "ip": request.remote_addr},
-        )
-        response = jsonify(
-            {
-                "status": "error",
-                "message": "An unexpected internal server error occurred.",
-                "code": 500,
-            }
-        )
-        return response, 500
-
-    # Note: `sanitize_request_data` (decorator for form/query args) is a route-level decorator,
-    # not global middleware. It remains to be applied individually to routes if needed.
+        logger.critical(f"Unhandled exception: {e}", exc_info=True)
+        return jsonify(error="An unexpected internal server error occurred."), 500
 
 
-# --- Original sanitize_request_data decorator (for individual route application) ---
 def sanitize_request_data(f):
-    """
-    Decorator to sanitize all incoming request data (JSON, form, and query args).
-    This is a proactive security measure against XSS and other injection attacks.
-    """
-
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # JSON body is now globally sanitized by `sanitize_json_request_data` middleware,
-        # and request._cached_json is overwritten.
-
-        # This part handles form data if not globally handled:
         if request.form:
-            sanitized_form = {
+            g.sanitized_form = {
                 key: InputSanitizer.sanitize_string(value)
                 for key, value in request.form.items()
             }
-            g.sanitized_form = sanitized_form  # Store in g for access
-
-        # This part handles query arguments:
         if request.args:
-            sanitized_args = {
+            g.sanitized_args = {
                 key: InputSanitizer.sanitize_string(value)
                 for key, value in request.args.items()
             }
-            g.sanitized_args = sanitized_args  # Store in g for access
-
         return f(*args, **kwargs)
 
     return decorated_function
