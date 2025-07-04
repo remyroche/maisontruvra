@@ -372,7 +372,7 @@ class AuthService:
                 "AuthService",
                 level="ERROR",
             )
-            raise ServiceError("Could not update password.")
+            raise ServiceError("Could not update password.") from e
 
     @staticmethod
     def verify_password_reset_token(token, salt="password-reset-salt"):
@@ -587,4 +587,4 @@ class AuthService:
                 "AuthService",
                 exc_info=True,
             )
-            raise ServiceError("Failed to generate authentication tokens")
+            raise ServiceError("Failed to generate authentication tokens") from e
