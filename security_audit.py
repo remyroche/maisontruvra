@@ -105,11 +105,15 @@ class SecurityAuditor:
         """Helper to find all files with given extensions in a directory, excluding specified subdirectories."""
         if exclude_dirs is None:
             exclude_dirs = []
+    
+        all_exclude_dirs = exclude_dirs + ['website/node_modules']
+        exclude_paths = {os.path.join(self.project_root, d) for d in all_exclude_dirs}
         
         matches = []
         for root, dirs, filenames in os.walk(directory):
-            # Modify dirs in-place to skip excluded directories
-            dirs[:] = [d for d in dirs if os.path.join(root, d) not in [os.path.join(self.project_root, ed) for ed in exclude_dirs]]
+            # Modify dirs in-place to skip the excluded directories.
+            # This now checks against the pre-built set for better performance.
+            dirs[:] = [d for d in dirs if os.path.join(root, d) not in exclude_paths]
             
             for filename in filenames:
                 if any(filename.endswith(ext) for ext in extensions):
