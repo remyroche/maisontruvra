@@ -165,23 +165,6 @@ class UserNotFoundException(NotFoundException):
         super().__init__(resource_name="user", resource_id=user_id)
 
 
-class AuthenticationException(ServiceException):
-    """
-    Raised for authentication failures (e.g., invalid credentials, bad token). (HTTP 401)
-    """
-
-    status_code = 401
-    message = "Authentication failed."
-
-
-class AuthorizationException(ServiceException):
-    """
-    Raised when an authenticated user is not permitted to perform an action. (HTTP 403)
-    """
-
-    status_code = 403
-    message = "You are not authorized to perform this action."
-
     # --- Authentication and Authorization Errors ---
 
 
@@ -218,12 +201,12 @@ class InvalidCredentialsError(AuthenticationException):
 
     message = "Invalid email or password."
 
-
-class AuthorizationException(ServiceException):
-    """
-    Raised when an authenticated user is not permitted to perform a specific action. (HTTP 403 Forbidden)
-    Use this when the user is logged in, but lacks the necessary permissions.
-    """
-
-    status_code = 403
-    message = "You are not authorized to perform this action."
+class PermissionError(ServiceException):
+    """Raised when an authenticated user is not permitted to perform an action. (HTTP 403 Forbidden)"""
+    def __init__(self, message="You do not have permission to perform this action"):
+        super().__init__(message, 403)
+        
+class AuthorizationException(PermissionError):
+    """Raised when an authenticated user is not permitted to perform a specific action."""
+    def __init__(self, message="You are not authorized to perform this action"):
+        super().__init__(message)
