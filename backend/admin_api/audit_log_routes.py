@@ -1,53 +1,43 @@
 from flask import Blueprint, jsonify, request
-from backend.utils.decorators import (
-    roles_required,
-)
-from backend.utils.input_sanitizer import InputSanitizer
-from backend.models.admin_audit_models import AdminAuditLog
+from backend.services.audit_log_service import AuditLogService
+from backend.utils.decorators import admin_required
+from backend.models import AdminAuditLog
+from backend.schemas import AdminAuditLogSchema
 
-audit_log_bp = Blueprint(
+admin_audit_log_routes = Blueprint(
     "admin_audit_log_routes", __name__, url_prefix="/api/admin/audit-log"
 )
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload # noqa: E402
 
 
-@audit_log_bp.route("/", methods=["GET"])
-@roles_required("Admin", "Dev", "Manager")
+@admin_audit_log_routes.route("/", methods=["GET"])
+@admin_required
 def get_audit_logs():
     """
-    Retrieves a paginated and filterable list of audit log entries.
-    This is a read-only endpoint for security and compliance review.
-    C[R]UD - Read (List)
+    Retrieves a paginated list of audit logs.
+    Admins can filter by user_id or action.
     """
-    # Pagination parameters
     page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 50, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    user_id = request.args.get("user_id", type=int)
+    action = request.args.get("action", type=str)
 
-    # Filtering parameters (all sanitized)
-    user_id_filter = InputSanitizer.sanitize_input(
-        request.args.get("user_id", type=int)
-    )
-    action_filter = InputSanitizer.sanitize_input(request.args.get("action", type=str))
-
-    # Build the query
-    query = AdminAuditLog.query.options(joinedload(AdminAuditLog.user)).order_by(
+    logs_query = AdminAuditLog.query.options(joinedload(AdminAuditLog.user)).order_by(
         AdminAuditLog.timestamp.desc()
     )
 
-    if user_id_filter:
-        query = query.filter(AdminAuditLog.user_id == user_id_filter)
+    if user_id:
+        logs_query = logs_query.filter_by(user_id=user_id)
+    if action:
+        logs_query = logs_query.filter_by(action=action)
 
-    if action_filter:
-        query = query.filter(AdminAuditLog.action.ilike(f"%{action_filter}%"))
-
-    logs_page = query.paginate(page=page, per_page=per_page, error_out=False)
-
-    # Format data for frontend compatibility
+    logs = logs_query.paginate(page=page, per_page=per_page, error_out=False)
+    
     return jsonify(
         {
-            "logs": [log.to_dict() for log in logs_page.items],
-            "total": logs_page.total,
-            "page": logs_page.page,
-            "pages": logs_page.pages,
+            "logs": AdminAuditLogSchema(many=True).dump(logs.items),
+            "total": logs.total,
+            "pages": logs.pages,
+            "current_page": logs.page,
         }
     )
