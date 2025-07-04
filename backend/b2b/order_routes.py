@@ -1,19 +1,18 @@
-from flask import Blueprint, g, jsonify, request
-from sqlalchemy.orm import joinedload
+import logging
 
-from backend.extensions import db
+from flask import Blueprint, g, jsonify
+from flask_jwt_extended import get_jwt_identity, jwt_required
+
 from backend.models.order_models import Order
-from backend.schemas import OrderSchema, OrderStatusUpdateSchema
-from backend.services.exceptions import NotFoundException, ValidationException
-from backend.services.order_service import OrderService
-from backend.utils.decorators import (
-    api_resource_handler,
-    permissions_required,
-    roles_required,
-)
-from backend.utils.input_sanitizer import InputSanitizer
+from backend.schemas import B2BOrderCreationSchema, OrderSchema
+from backend.services.b2b_service import B2BService
+from backend.services.exceptions import ValidationException
+from backend.utils.decorators import api_resource_handler
 
-order_routes = Blueprint("admin_order_routes", __name__, url_prefix="/api/admin/orders")
+# --- Blueprint and Service Initialization ---
+b2b_order_bp = Blueprint("b2b_order_bp", __name__, url_prefix="/api/b2b/orders")
+logger = logging.getLogger(__name__)
+b2b_service = B2BService(logger)
 
 
 @b2b_order_bp.route("/", methods=["POST"])
