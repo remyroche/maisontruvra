@@ -253,7 +253,140 @@ class SecurityAuditor:
         except Exception as e:
             logger.error(f"An unexpected error occurred while processing CodeQL results: {e}")
     
-        
+
+
+
+def run_sonarqube_scan(project_base_dir, project_key, organization=None, sonar_url="http://localhost:9000", token=None):
+    """
+    Runs a SonarQube scan on the specified project directory.
+
+    Args:
+        project_base_dir (str): The base directory of the project to scan.
+        project_key (str): The SonarQube project key.
+        organization (str, optional): The SonarQube organization key (if using SonarCloud).
+        sonar_url (str): The URL of your SonarQube server.
+        token (str, optional): Your SonarQube authentication token.
+
+    Returns:
+        bool: True if the scan completes successfully, False otherwise.
+    """
+    logger.info(f"Starting SonarQube scan for project {project_key} in {project_base_dir}...")
+
+    # Sonar Scanner command construction
+    command = ["sonar-scanner"]
+
+    # Add mandatory properties
+    command.append(f"-Dsonar.projectKey={project_key}")
+    command.append(f"-Dsonar.sources={project_base_dir}")
+    command.append(f"-Dsonar.host.url={sonar_url}")
+
+    # Add optional properties
+    if organization:
+        command.append(f"-Dsonar.organization={organization}")
+    if token:
+        command.append(f"-Dsonar.token={token}")
+
+    logger.info(f"Executing SonarQube command: {' '.join(command)}")
+
+    try:
+        # SonarQube scanner often prints to stderr for progress, so capture_output might hide useful info
+        # It's better to let it print to console and just check the return code.
+        process = subprocess.run(command, check=True, text=True, shell=False)
+        logger.info("SonarQube scan completed successfully.")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"SonarQube scan failed. Error:\n{e.stderr}\nOutput:\n{e.stdout}")
+        logger.error("Please ensure SonarQube server is running and 'sonar-scanner' is in your PATH.")
+        return False
+    except FileNotFoundError:
+        logger.error("SonarQube Scanner CLI ('sonar-scanner') not found. Please ensure it is installed and in your system's PATH.")
+        return False
+
+
+    def run_semgrep_scan(target_path, output_json_path, config_path="auto"):
+        """
+        Runs a Semgrep scan on the specified path with a given configuration.
+    
+        Args:
+            target_path (str): The file or directory to scan.
+            output_json_path (str): The path to save the JSON results.
+            config_path (str): The Semgrep configuration (e.g., 'p/python', 'p/vuejs', or a local path to rules).
+    
+        Returns:
+            bool: True if the scan completes successfully, False otherwise.
+        """
+        logger.info(f"Starting Semgrep scan for {target_path} with config '{config_path}'...")
+    
+        command = [
+            "semgrep",
+            f"--config={config_path}",
+            f"--output={output_json_path}",
+            "--json",
+            target_path
+        ]
+    
+        try:
+            # Semgrep exits with 0 even if findings are present, only non-zero on error.
+            process = subprocess.run(command, check=False, capture_output=True, text=True, shell=False)
+    
+            if process.returncode != 0:
+                logger.error(f"Semgrep scan failed with exit code {process.returncode}. Stderr:\n{process.stderr}")
+                return False
+    
+            logger.info(f"Semgrep scan completed. Results saved to {output_json_path}")
+            # Log stdout/stderr for debugging even on success, as warnings might be there
+            if process.stdout:
+                logger.debug(f"Semgrep stdout:\n{process.stdout}")
+            if process.stderr:
+                logger.debug(f"Semgrep stderr:\n{process.stderr}")
+    
+            return True
+        except FileNotFoundError:
+            logger.error("Semgrep CLI not found. Please ensure 'semgrep' is installed and in your system's PATH.")
+            return False
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during Semgrep scan: {e}")
+            return False
+    
+    def process_semgrep_results(json_file_path):
+        """
+        Processes Semgrep JSON results and logs relevant findings.
+    
+        Args:
+            json_file_path (str): The path to the Semgrep JSON results file.
+        """
+        if not os.path.exists(json_file_path):
+            logger.warning(f"Semgrep JSON file not found: {json_file_path}")
+            return
+    
+        logger.info(f"Processing Semgrep results from {json_file_path}...")
+        try:
+            with open(json_file_path, 'r') as f:
+                semgrep_data = json.load(f)
+    
+            if "results" in semgrep_data:
+                if not semgrep_data["results"]:
+                    logger.info("No findings reported by Semgrep for this run.")
+                for result in semgrep_data["results"]:
+                    check_id = result.get("check_id", "N/A")
+                    message = result.get("extra", {}).get("message", "No message provided.")
+                    path = result.get("path", "N/A")
+                    start_line = result.get("start", {}).get("line", "N/A")
+                    severity = result.get("extra", {}).get("severity", "UNKNOWN")
+    
+                    location = f"{path}:{start_line}"
+    
+                    logger.info(f"Semgrep Finding ({severity}): ID={check_id}, Message='{message}', Location={location}")
+            else:
+                logger.info("No 'results' array found in Semgrep JSON data.")
+    
+        except json.JSONDecodeError:
+            logger.error(f"Error decoding JSON from Semgrep file: {json_file_path}. Is it a valid JSON file?")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred while processing Semgrep results: {e}")
+
+
+    
     def check_missing_permissions(self, file_path, tree):
         """
         Vérifie les routes Flask pour les permissions manquantes en utilisant l'AST.
@@ -912,25 +1045,84 @@ if __name__ == "__main__":
 
     config = SimpleConfig()
 
-    project_root_for_codeql = "./backend"
+    project_root_backend = "./backend"
+    project_root_frontend = "./website" # Assuming Vue.js frontend is in a 'website' directory
+
+    # --- CodeQL Configuration ---
     codeql_sarif_output_file = "codeql_audit_results.sarif"
     codeql_database_dir = "codeql_db_for_flask"
 
+    # --- SonarQube Configuration ---
+    # IMPORTANT: Replace with your actual SonarQube/SonarCloud details
+    # SonarQube requires a running SonarQube server or SonarCloud account.
+    SONAR_PROJECT_KEY = "YourProjectKey" # e.g., "maison-truvra-backend"
+    SONAR_ORGANIZATION = None # e.g., "your-sonarcloud-org" if using SonarCloud
+    SONAR_HOST_URL = "http://localhost:9000" # Your SonarQube server URL
+    SONAR_TOKEN = os.getenv("SONAR_TOKEN") # It's recommended to use environment variables for tokens
+
+    # --- Semgrep Configuration ---
+    semgrep_python_output = "semgrep_python_results.json"
+    semgrep_vuejs_output = "semgrep_vuejs_results.json"
+    # You can specify default rulesets ('auto', 'p/python', 'p/vuejs', 'p/ci', etc.)
+    # or paths to local Semgrep rule files.
+    SEMGREP_PYTHON_CONFIG = "p/python"
+    SEMGREP_VUEJS_CONFIG = "p/vuejs" # Or more specific configs like 'p/javascript', 'p/html'
+
     logger.info("Starting all security audits...")
 
-    # --- Run CodeQL Scan ---
-    logger.info("\n--- Initiating CodeQL Security Scan ---")
+    # --- Run CodeQL Scan (for Python backend) ---
+    logger.info("\n--- Initiating CodeQL Security Scan (Python Backend) ---")
     codeql_scan_successful = run_codeql_scan(
-        source_code_path=project_root_for_codeql,
+        source_code_path=project_root_backend,
         output_sarif_path=codeql_sarif_output_file,
         database_path=codeql_database_dir
     )
-
     if codeql_scan_successful:
         process_codeql_results(codeql_sarif_output_file)
     else:
         logger.error("CodeQL scan did not complete successfully. Check logs for details.")
-    logger.info("CodeQL Scan completed.")
+
+    # --- Run SonarQube Scan (for entire project) ---
+    logger.info("\n--- Initiating SonarQube Analysis ---")
+    # You typically run SonarQube Scanner from the root of your entire project
+    # for a full-stack analysis. Adjust project_base_dir as needed.
+    sonarqube_scan_successful = run_sonarqube_scan(
+        project_base_dir=".", # Scan the entire project directory
+        project_key=SONAR_PROJECT_KEY,
+        organization=SONAR_ORGANIZATION,
+        sonar_url=SONAR_HOST_URL,
+        token=SONAR_TOKEN
+    )
+    if sonarqube_scan_successful:
+        logger.info("SonarQube scan results are available on your SonarQube dashboard.")
+    else:
+        logger.error("SonarQube scan did not complete successfully. Check logs for details and server status.")
+
+
+    # --- Run Semgrep Scan (for Python Backend) ---
+    logger.info("\n--- Initiating Semgrep Security Scan (Python Backend) ---")
+    semgrep_python_successful = run_semgrep_scan(
+        target_path=project_root_backend,
+        output_json_path=semgrep_python_output,
+        config_path=SEMGREP_PYTHON_CONFIG
+    )
+    if semgrep_python_successful:
+        process_semgrep_results(semgrep_python_output)
+    else:
+        logger.error("Semgrep scan for Python backend did not complete successfully.")
+
+    # --- Run Semgrep Scan (for Vue.js Frontend) ---
+    logger.info("\n--- Initiating Semgrep Security Scan (Vue.js Frontend) ---")
+    semgrep_vuejs_successful = run_semgrep_scan(
+        target_path=project_root_frontend,
+        output_json_path=semgrep_vuejs_output,
+        config_path=SEMGREP_VUEJS_CONFIG # Use appropriate config for Vue.js/JS/TS
+    )
+    if semgrep_vuejs_successful:
+        process_semgrep_results(semgrep_vuejs_output)
+    else:
+        logger.error("Semgrep scan for Vue.js frontend did not complete successfully.")
+
     
     # Determine project paths based on this script's location
     project_root = os.path.dirname(os.path.abspath(__file__))
