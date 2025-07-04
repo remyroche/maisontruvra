@@ -67,7 +67,7 @@ def convert_to_invoice(quote_id):
         invoice_service.update_invoice_status(invoice.id, "pending_signature")
         return invoice
     except ValueError as e:
-        raise ValidationException(str(e))
+        raise ValidationException(str(e)) from e
 
 
 @admin_invoice_bp.route("/invoices/<int:invoice_id>/status", methods=["PUT"])
@@ -98,4 +98,4 @@ def update_invoice_status(invoice_id):
         updated_invoice = invoice_service.update_invoice_status(invoice_id, new_status)
         return updated_invoice or invoice
     except ValueError as e:
-        raise ValidationException(str(e))
+        raise ValidationException(str(e)) from e
