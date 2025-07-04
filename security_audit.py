@@ -428,7 +428,6 @@ class SecurityAuditor:
             if os.path.exists(report_filename):
                 os.remove(report_filename)
                 
-
     def run_npm_audit(self):
         """Runs npm audit to check for frontend dependency vulnerabilities."""
         if self.config.skip_dependency_check:
@@ -496,7 +495,6 @@ class SecurityAuditor:
         except KeyError as e:
             logging.error(f"Missing expected key in npm audit JSON output: {e}. Ensure npm audit JSON format matches expectations.")
             logging.error(f"Problematic JSON (full output, if short enough): {output_str}")
-
 
     def run_bandit_scan(self):
         """Runs Bandit static analysis on the backend directory, writing the report to a file for stable parsing."""
@@ -576,8 +574,7 @@ class SecurityAuditor:
             # Clean up the temporary file.
             if os.path.exists(report_filename):
                 os.remove(report_filename)
-        # --- CHANGE END ---
-
+                
     def run_pylint_scan(self):
         """Runs Pylint static analysis on the backend directory and parses the JSON output."""
         self._print_header("Backend Code Linting (Pylint)")
@@ -634,6 +631,53 @@ class SecurityAuditor:
             logging.error(f"An unexpected error occurred while parsing Pylint report from {pylint_output_file}: {e}")
         finally:
             os.remove(pylint_output_file)
+
+    def run_mypy_scan(self):
+        """Runs Mypy for static type checking and parses the output."""
+        self._print_header("Backend Static Type Checking (Mypy)")
+        if not os.path.isdir(self.backend_dir):
+            logging.warning(f"Backend directory '{self.backend_dir}' not found. Skipping Mypy scan.")
+            return
+
+        # Mypy command. --ignore-missing-imports is useful to avoid errors from libs without type stubs.
+        mypy_cmd = [
+            sys.executable, '-m', 'mypy',
+            self.backend_dir,
+            '--ignore-missing-imports'
+        ]
+
+        output, return_code = self._run_command(mypy_cmd)
+
+        if return_code == 0 or not output:
+            logging.info("Mypy scan completed with no type errors found.")
+            return
+
+        # Regex to parse Mypy's default output format.
+        # e.g., "path/to/file.py:123: error: Your error message here  [error-code]"
+        mypy_pattern = re.compile(r"([^:]+):(\d+): (error|note): (.+)")
+        
+        issues_found = 0
+        for line in output.strip().split('\n'):
+            match = mypy_pattern.match(line)
+            if match:
+                issues_found += 1
+                file_path, line_number, severity, description = match.groups()
+                self.add_finding(
+                    severity='HIGH',  # All Mypy errors are considered high severity for code correctness.
+                    category="Static Type Checking (Mypy)",
+                    title="Type Error",
+                    description=description.strip(),
+                    file_path=file_path.strip(),
+                    line_number=int(line_number),
+                    recommendation="Fix the type hint or the code that violates it to ensure type safety."
+                )
+        
+        if issues_found > 0:
+            logging.info(f"Mypy scan found {issues_found} type errors.")
+        else:
+            # This can happen if mypy exits with an error code but parsing fails.
+            logging.warning("Mypy exited with a non-zero status but no issues could be parsed from its output.")
+
 
     def run_best_practices_audit(self):
         """Runs various best practice checks from the best_practices_audit.py script."""
@@ -702,7 +746,10 @@ class SecurityAuditor:
 
         # Run static security analysis (Bandit)
         self.run_bandit_scan()
-
+    
+        # checks for type errors (Static Type Checking)
+        self.run_mypy_scan()
+        
         # Run Pylint scan for code quality and potential bugs
         self.run_pylint_scan()
 
@@ -726,13 +773,13 @@ class SecurityAuditor:
             logging.info(f"Found {len(self.findings)} potential issues:")
             for i, finding in enumerate(self.findings):
                 logging.info(f"  {i+1}. [{finding.get('severity', 'UNKNOWN')}] {finding.get('title', 'No Title')}")
-                logging.info(f"     Category: {finding.get('category', 'N/A')}")
-                logging.info(f"     File: {finding.get('file_path', 'N/A')}:{finding.get('line_number', 'N/A')}")
-                logging.info(f"     Description: {finding.get('description', 'N/A')}")
+                logging.info(f"      Category: {finding.get('category', 'N/A')}")
+                logging.info(f"      File: {finding.get('file_path', 'N/A')}:{finding.get('line_number', 'N/A')}")
+                logging.info(f"      Description: {finding.get('description', 'N/A')}")
                 if finding.get('recommendation'):
-                    logging.info(f"     Recommendation: {finding['recommendation']}")
+                    logging.info(f"      Recommendation: {finding['recommendation']}")
                 if finding.get('code_snippet'):
-                    logging.info(f"     Code Snippet:\n{finding['code_snippet']}")
+                    logging.info(f"      Code Snippet:\n{finding['code_snippet']}")
                 logging.info("-" * 20)
         else:
             logging.info("No issues found during the audit.")
