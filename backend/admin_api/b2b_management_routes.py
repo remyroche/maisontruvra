@@ -20,7 +20,7 @@ from backend.schemas import (
     B2BUserAssignTierSchema,
     QuoteUpdateSchema,
 )
-backend.services.quote_service import QuoteService
+from backend.services.quote_service import QuoteService
 
 quote_service = QuoteService(logger=current_app.logger) 
 b2b_management_bp = Blueprint(
