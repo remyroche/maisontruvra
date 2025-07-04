@@ -3,18 +3,18 @@ This module defines the API endpoints for user management in the admin panel.
 It leverages the @api_resource_handler to create clean, secure, and consistent CRUD endpoints,
 and includes separate endpoints for specialized user actions.
 """
+
 import logging
-from flask import Blueprint, g, jsonify, request
+
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
-from pydantic import ValidationError
 
 from backend.models.user_models import User
 from backend.schemas import (
-    UserSchema,
-    UserUpdateSchema,
     CustomDiscountSchema,
     RoleSchema,
     TierAssignmentSchema,
+    UserSchema,
 )
 from backend.services.auth_service import AuthService
 from backend.services.discount_service import DiscountService
