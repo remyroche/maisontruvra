@@ -1,7 +1,7 @@
 from flask import Flask, request, session
 from flask_talisman import Talisman
 from datetime import datetime
-from .celery_worker import celery, init_celery 
+from .celery_worker import init_celery 
 
 # Import extension instances from the central extensions file
 from .extensions import (
