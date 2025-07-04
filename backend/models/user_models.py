@@ -1,13 +1,14 @@
-import datetime
 
 from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum as SQLAlchemyEnum,
     ForeignKey,
     Integer,
     String,
+)
+from sqlalchemy import (
+    Enum as SQLAlchemyEnum,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
@@ -50,7 +51,9 @@ class User(BaseModel, SoftDeleteMixin):
     # B2B Specific Fields
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
     company = relationship("Company", back_populates="users")
-    b2b_status = Column(String(50), default="none") # Legacy, consider moving to B2BAccount model
+    b2b_status = Column(
+        String(50), default="none"
+    )  # Legacy, consider moving to B2BAccount model
 
     # Preferences
     notification_frequency = Column(
@@ -65,20 +68,30 @@ class User(BaseModel, SoftDeleteMixin):
     magic_link_expires_at = Column(DateTime, nullable=True)
 
     # Relationships
-    addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")
+    addresses = relationship(
+        "Address", back_populates="user", cascade="all, delete-orphan"
+    )
     orders = relationship("Order", backref="user", lazy=True)
     roles = relationship("Role", secondary="user_roles", back_populates="users")
     loyalty_account = relationship("UserLoyalty", back_populates="user", uselist=False)
-    cart = relationship("Cart", back_populates="user", uselist=False, cascade="all, delete-orphan")
-    wishlist = relationship("Wishlist", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    cart = relationship(
+        "Cart", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    wishlist = relationship(
+        "Wishlist", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
     reviews = relationship("Review", back_populates="user")
     b2b_profile = relationship("B2BAccount", back_populates="user", uselist=False)
     passport = relationship("ProductPassport", back_populates="owner", uselist=False)
-    
+
     # Referral Program Fields
     referral_code = Column(String(20), unique=True, nullable=True)
-    referred_by_id = Column("referred_by", Integer, ForeignKey("users.id"), nullable=True)
-    referrals_made = relationship("Referral", foreign_keys="Referral.referrer_id", back_populates="referrer")
+    referred_by_id = Column(
+        "referred_by", Integer, ForeignKey("users.id"), nullable=True
+    )
+    referrals_made = relationship(
+        "Referral", foreign_keys="Referral.referrer_id", back_populates="referrer"
+    )
 
     # --- Hybrid Properties for Encrypted Fields ---
     @hybrid_property
@@ -120,12 +133,15 @@ class User(BaseModel, SoftDeleteMixin):
 
     @property
     def is_staff(self):
-        return any(role.name in [RoleType.ADMIN, RoleType.STAFF, RoleType.MANAGER] for role in self.roles)
+        return any(
+            role.name in [RoleType.ADMIN, RoleType.STAFF, RoleType.MANAGER]
+            for role in self.roles
+        )
 
     @property
     def is_admin(self):
         return any(role.name == RoleType.ADMIN for role in self.roles)
-        
+
     @property
     def is_b2b(self):
         return self.user_type == UserType.B2B
@@ -153,22 +169,32 @@ class User(BaseModel, SoftDeleteMixin):
 
     def to_user_dict(self):
         return {
-            "id": self.id, "email": self.email, "first_name": self.first_name,
-            "last_name": self.last_name, "phone_number": self.phone_number,
-            "is_b2b": self.is_b2b, "is_2fa_enabled": self.is_2fa_enabled,
-            "b2b_profile": self.b2b_profile.to_dict() if self.is_b2b and self.b2b_profile else None
+            "id": self.id,
+            "email": self.email,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "phone_number": self.phone_number,
+            "is_b2b": self.is_b2b,
+            "is_2fa_enabled": self.is_2fa_enabled,
+            "b2b_profile": self.b2b_profile.to_dict()
+            if self.is_b2b and self.b2b_profile
+            else None,
         }
 
     def to_admin_dict(self):
         data = self.to_user_dict()
-        data.update({
-            "is_email_verified": self.email_verified_at is not None,
-            "is_admin": self.is_admin,
-            "created_at": self.created_at.isoformat(),
-            "loyalty_info": self.loyalty_account.to_dict() if self.loyalty_account else None,
-            "orders": [order.to_admin_dict() for order in self.orders],
-            "addresses": [address.to_dict() for address in self.addresses],
-        })
+        data.update(
+            {
+                "is_email_verified": self.email_verified_at is not None,
+                "is_admin": self.is_admin,
+                "created_at": self.created_at.isoformat(),
+                "loyalty_info": self.loyalty_account.to_dict()
+                if self.loyalty_account
+                else None,
+                "orders": [order.to_admin_dict() for order in self.orders],
+                "addresses": [address.to_dict() for address in self.addresses],
+            }
+        )
         return data
 
     def __repr__(self):
@@ -205,8 +231,12 @@ class Address(BaseModel, SoftDeleteMixin):
 
     def to_dict(self):
         return {
-            "id": self.id, "address_line_1": self.address_line_1,
-            "address_line_2": self.address_line_2, "city": self.city,
-            "state": self.state, "postal_code": self.postal_code,
-            "country": self.country, "is_deleted": self.is_deleted,
+            "id": self.id,
+            "address_line_1": self.address_line_1,
+            "address_line_2": self.address_line_2,
+            "city": self.city,
+            "state": self.state,
+            "postal_code": self.postal_code,
+            "country": self.country,
+            "is_deleted": self.is_deleted,
         }
