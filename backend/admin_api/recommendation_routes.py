@@ -177,8 +177,21 @@ def export_recommendations():
 
         elif format_type == "csv":
             # For CSV export, we'll flatten the data structure
-            import csv
+            import defusedcsv as csv
             import io
+            import re
+
+            def sanitize_csv_field(field):
+                """Sanitize CSV field to prevent formula injection."""
+                if field is None:
+                    return ""
+                field_str = str(field)
+                # Remove or escape potentially dangerous characters that could be interpreted as formulas
+                if field_str.startswith(("=", "+", "-", "@", "\t", "\r")):
+                    field_str = "'" + field_str
+                # Remove control characters
+                field_str = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", field_str)
+                return field_str
 
             output = io.StringIO()
             writer = csv.writer(output)
@@ -205,18 +218,20 @@ def export_recommendations():
                 product_categories = []
 
                 for rec in user_rec["recommendations"]:
-                    product_ids.append(str(rec.get("id", "")))
-                    product_names.append(rec.get("name", ""))
-                    product_categories.append(rec.get("category", ""))
+                    product_ids.append(sanitize_csv_field(rec.get("id", "")))
+                    product_names.append(sanitize_csv_field(rec.get("name", "")))
+                    product_categories.append(
+                        sanitize_csv_field(rec.get("category", ""))
+                    )
 
                 writer.writerow(
                     [
-                        user_rec["user_id"],
-                        user_rec["user_email"],
-                        user_rec["user_name"],
-                        user_rec["registration_date"],
-                        user_rec["last_login"],
-                        user_rec["recommendation_count"],
+                        sanitize_csv_field(user_rec["user_id"]),
+                        sanitize_csv_field(user_rec["user_email"]),
+                        sanitize_csv_field(user_rec["user_name"]),
+                        sanitize_csv_field(user_rec["registration_date"]),
+                        sanitize_csv_field(user_rec["last_login"]),
+                        sanitize_csv_field(user_rec["recommendation_count"]),
                         "; ".join(product_ids),
                         "; ".join(product_names),
                         "; ".join(product_categories),

@@ -55,21 +55,18 @@ function check_command {
     fi
 }
 
+function check_command_optional {
+    if ! command -v "$1" &> /dev/null; then
+        echo -e "${COLOR_YELLOW}⚠ WARNING: '$1' command not found. Audits using this tool will be skipped by the Python script.${COLOR_NC}" >&2
+        return 1 # Indicate failure, but don't exit the script
+    fi
+}
+
 # --- Main Script ---
 mkdir -p "$LOG_DIR"
 
 # Redirect all output to both console and log file
 exec > >(tee -a "${AUDIT_LOG_FILE}") 2>&1
-
-# Exit immediately if a command exits with a non-zero status.
-set -e
-
-
-echo "--- Starting the Python linter script... ---"
-# Execute the Python script
-python3 run_linter.py
-echo "--- Python linter script finished. ---"
-
 
 # Use simple echoes for the very initial banner to avoid variable issues
 echo "=========================================="
@@ -77,18 +74,29 @@ echo "   Starting Maison Truvra Code Audits     "
 echo "=========================================="
 echo "Full log will be saved to: ${AUDIT_LOG_FILE}"
 echo "--------------------------------------------------"
-# --- IMPORTANT CHANGE END ---
 
+# --- Prerequisite Tool Checks ---
+print_step "Checking for externally managed tools"
+check_command_optional codeql || true      # Must be installed manually. Used by security_audit.py
+check_command_optional sonar-scanner || true # Must be installed manually. Used by security_audit.py
+print_success "Checks for externally managed tools complete."
 
 # --- Installation/Mise à jour des outils d'audit Python ---
 print_step "Installation/Mise à jour des outils d'audit Python"
-pip install --upgrade pip bandit safety pip-audit pylint black isort codeql sonar-scanner semgrep 
+pip install --upgrade pip bandit pip-audit ruff semgrep mypy defusedcsv
 if [ $? -ne 0 ]; then
     print_error "Échec de l'installation des outils d'audit Python."
 fi
 print_success "Outils d'audit Python prêts."
 
+# --- Frontend Dependency Vulnerability Fix ---
+print_step "Fixing known frontend dependency vulnerabilities..."
+npm audit fix --prefix "$FRONTEND_DIR"
+print_success "npm audit fix complete."
 
+print_step "Running Python Linter (Ruff)..."
+python3 run_linter.py
+print_success "Python linter script finished."
 # --- 2. Custom Backend Security Audit (via security_audit.py which should handle pip-audit and bandit) ---
 # Assuming security_audit.py internally runs pip-audit and bandit.
 # Make sure security_audit.py exits with 0 if it successfully *runs* the audits,
@@ -97,29 +105,20 @@ print_step "Running Custom Backend Security Audit (Pip-Audit, Bandit etc.)..."
 python3 security_audit.py
 SECURITY_AUDIT_EXIT_CODE=$?
 if [ ${SECURITY_AUDIT_EXIT_CODE} -ne 0 ]; then
-    # If security_audit.py exits non-zero, it means it detected issues or failed critically.
-    # Adjust this message based on how security_audit.py sets its exit code.
-    print_error "Custom security_audit.py script completed with issues or critical failure (Exit Code: ${SECURITY_AUDIT_EXIT_CODE}). Review its logs for details."
+    # security_audit.py exits with 1 if findings are present. This is not a script failure.
+    # We log it as a warning and continue, allowing the full script to complete.
+    echo -e "${COLOR_YELLOW}⚠ security_audit.py reported findings (Exit Code: ${SECURITY_AUDIT_EXIT_CODE}). See logs above for details.${COLOR_NC}"
 fi
-print_success "Custom Backend Security Audit Complete."
+print_success "Custom security audit script finished."
 
-# --- 4. Code Formatting Checks (Black & isort) ---
-print_step "Checking code formatting with Black and isort..."
-check_command black
-check_command isort
+# --- 4. Code Formatting Checks (Handled by Ruff) ---
+# The run_linter.py script handles all formatting and linting via Ruff,
+# which replaces the need for separate black and isort checks here.
+print_step "Code formatting and import sorting checks were handled by 'run_linter.py'."
 
-echo -e "${COLOR_YELLOW}Checking Black formatting...${NC}"
-black --check "$BACKEND_DIR" || print_error "Black formatting check failed. Run 'black ${BACKEND_DIR}' to fix."
-print_success "Black formatting check passed."
-
-echo -e "${COLOR_YELLOW}Checking isort formatting...${NC}"
-isort --check-only "$BACKEND_DIR" || print_error "isort import order check failed. Run 'isort ${BACKEND_DIR}' to fix."
-print_success "isort import order check passed."
-
-
-echo -e "${YELLOW}==========================================${NC}"
-echo -e "${YELLOW}   All Audits Complete                    ${NC}"
-echo -e "${YELLOW}==========================================${NC}"
+echo -e "${COLOR_YELLOW}==========================================${COLOR_NC}"
+echo -e "${COLOR_YELLOW}   All Audits Complete                    ${COLOR_NC}"
+echo -e "${COLOR_YELLOW}==========================================${COLOR_NC}"
 
 # Exit with 0 if all steps completed without critical errors
 exit 0

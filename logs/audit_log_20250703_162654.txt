@@ -1,1 +1,0 @@
-./run_audits.sh: line 69: YELLOW: unbound variable

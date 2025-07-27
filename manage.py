@@ -1,4 +1,3 @@
-
 import os
 import click
 from flask.cli import with_appcontext
@@ -12,10 +11,11 @@ from backend.models.user_models import User, UserRole
 # Create a minimal app instance for the CLI to work
 # Use environment variable FLASK_CONFIG to determine which config to use
 # Valid values are 'dev', 'test', 'prod', or 'default'
-flask_env = os.getenv('FLASK_CONFIG') or 'default'
+flask_env = os.getenv("FLASK_CONFIG") or "default"
 app = create_app(flask_env)
 
 migrate = Migrate(app, db)
+
 
 @app.cli.command("create-admin")
 @click.argument("email")
@@ -32,27 +32,28 @@ def create_admin(email, password):
 
     # Create the new user
     new_admin = User(
-        email=email, # Assuming email is a direct attribute
-        role=UserRole.ADMIN.value, # Use .value for enum string
+        email=email,  # Assuming email is a direct attribute
+        role=UserRole.ADMIN.value,  # Use .value for enum string
         is_active=True,
-        email_verified=True, # Admins are trusted by default (assuming this field exists)
-        two_factor_secret=totp_secret # Corrected attribute name
+        email_verified=True,  # Admins are trusted by default (assuming this field exists)
+        two_factor_secret=totp_secret,  # Corrected attribute name
     )
     new_admin.set_password(password)
-    
+
     db.session.add(new_admin)
     db.session.commit()
-    
+
     print(f"✅ Successfully created admin user with email: {email}")
 
     # Generate the provisioning URI for the authenticator app
     totp_uri = pyotp.totp.TOTP(totp_secret).provisioning_uri(
-        name=email,
-        issuer_name="Maison Trüvra Admin"
+        name=email, issuer_name="Maison Trüvra Admin"
     )
 
-    print("\nScan the QR code below with your authenticator app (e.g., Google Authenticator).")
-    
+    print(
+        "\nScan the QR code below with your authenticator app (e.g., Google Authenticator)."
+    )
+
     # Create and print the QR code to the terminal
     qr = qrcode.QRCode(
         version=1,
@@ -64,9 +65,11 @@ def create_admin(email, password):
     qr.make(fit=True)
     qr.print_tty()
 
-    print(f"\nIf you cannot scan the QR code, manually enter this secret key into your app:")
+    print(
+        f"\nIf you cannot scan the QR code, manually enter this secret key into your app:"
+    )
     print(f"🔑 Secret Key: {totp_secret}\n")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.cli()

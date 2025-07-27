@@ -5,9 +5,49 @@
 # ==============================================================================
 import json
 import os
+import re
+from urllib.parse import quote
+import html
 
 from flask import current_app, url_for
-from markupsafe import Markup
+from markupsafe import Markup, escape
+
+
+def _validate_and_escape_url(url: str) -> str:
+    """
+    Validate and escape a URL to prevent XSS attacks.
+
+    Args:
+        url: The URL to validate and escape
+
+    Returns:
+        Escaped URL string
+
+    Raises:
+        ValueError: If URL contains suspicious patterns
+    """
+    # Basic validation - reject URLs with suspicious patterns
+    if not url or not isinstance(url, str):
+        raise ValueError("Invalid URL")
+
+    # Check for common XSS patterns
+    suspicious_patterns = [
+        r"javascript:",
+        r"data:",
+        r"vbscript:",
+        r"on\w+\s*=",
+        r"<script",
+        r"</script",
+        r"<iframe",
+        r"</iframe",
+    ]
+
+    for pattern in suspicious_patterns:
+        if re.search(pattern, url, re.IGNORECASE):
+            raise ValueError(f"Suspicious pattern detected in URL: {url}")
+
+    # Escape the URL to prevent XSS
+    return escape(url)
 
 
 def vite_asset(path: str) -> Markup:
@@ -32,10 +72,21 @@ def vite_asset(path: str) -> Markup:
         dev_server_base = current_app.config.get(
             "VITE_DEV_SERVER", "http://localhost:5173"
         )
-        return Markup(
-            f'<script type="module" src="{dev_server_base}/@vite/client"></script>\n'
-            f'<script type="module" src="{dev_server_base}/{path}"></script>'
-        )
+
+        # Validate and escape URLs to prevent XSS
+        try:
+            safe_dev_server_base = _validate_and_escape_url(dev_server_base)
+            safe_path = _validate_and_escape_url(path)
+
+            esc_server_base = html.escape(safe_dev_server_base)
+            esc_path = html.escape(safe_path)
+            return Markup(
+                f'<script type="module" src="{esc_server_base}/@vite/client"></script>\n'
+                f'<script type="module" src="{esc_server_base}/{esc_path}"></script>'
+            )
+        except ValueError as e:
+            current_app.logger.error(f"Invalid Vite asset URL: {e}")
+            return Markup("<!-- Invalid Vite asset URL -->")
 
     # In production, read from the manifest file
     if not os.path.exists(manifest_path):
@@ -53,12 +104,22 @@ def vite_asset(path: str) -> Markup:
     # Generate <script> tag for the main JS file
     if "file" in asset_data:
         asset_url = url_for("static", filename=os.path.join("dist", asset_data["file"]))
-        html += f'<script type="module" src="{asset_url}"></script>\n'
+        try:
+            safe_asset_url = _validate_and_escape_url(asset_url)
+            html += f'<script type="module" src="{safe_asset_url}"></script>\n'
+        except ValueError as e:
+            current_app.logger.error(f"Invalid asset URL: {e}")
+            html += "<!-- Invalid asset URL -->\n"
 
     # Generate <link> tags for any associated CSS files
     if "css" in asset_data:
         for css_file in asset_data["css"]:
             css_url = url_for("static", filename=os.path.join("dist", css_file))
-            html += f'<link rel="stylesheet" href="{css_url}">\n'
+            try:
+                safe_css_url = _validate_and_escape_url(css_url)
+                html += f'<link rel="stylesheet" href="{safe_css_url}">\n'
+            except ValueError as e:
+                current_app.logger.error(f"Invalid CSS URL: {e}")
+                html += "<!-- Invalid CSS URL -->\n"
 
     return Markup(html)

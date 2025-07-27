@@ -414,8 +414,8 @@ class UnifiedAuthService:
                 db.session.commit()
                 return True
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Token verification failed silently: {e}", exc_info=True)
 
         return False
 

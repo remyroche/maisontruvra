@@ -1,0 +1,298 @@
+2025-07-27 12:56:38,890 - INFO - All Python logging output will also be written to: logs/security_audit_log_20250727_125638.txt
+2025-07-27 12:56:38,890 - INFO - Security audit script is being run directly.
+2025-07-27 12:56:38,890 - INFO - 
+--- STARTING COMPREHENSIVE SECURITY AUDIT ---
+2025-07-27 12:56:38,890 - INFO - 
+--- Backend Dependency Scan (pip-audit) ---
+2025-07-27 12:57:10,952 - WARNING - Command '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m pip_audit -r /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/requirements.txt -f json -o /var/folders/dr/hz7y0z9j0x39z7519pbshgqh0000gn/T/tmpb_c38358.json' produced stderr:
+Found 26 known vulnerabilities in 11 packages
+2025-07-27 12:57:10,953 - INFO - pip-audit completed with no vulnerabilities found.
+2025-07-27 12:57:10,953 - INFO - 
+--- Frontend Dependency Scan (npm audit) ---
+2025-07-27 12:57:12,492 - INFO - NEW FINDING: Vulnerable package: @intlify/core-base in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/package.json:1 (Severity: MODERATE)
+2025-07-27 12:57:12,492 - INFO - NEW FINDING: Vulnerable package: esbuild in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/package.json:1 (Severity: MODERATE)
+2025-07-27 12:57:12,492 - INFO - NEW FINDING: Vulnerable package: form-data in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/package.json:1 (Severity: CRITICAL)
+2025-07-27 12:57:12,492 - INFO - NEW FINDING: Vulnerable package: vue-i18n in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/package.json:1 (Severity: MODERATE)
+2025-07-27 12:57:12,492 - INFO - npm audit found 4 vulnerabilities.
+2025-07-27 12:57:12,492 - INFO - 
+--- Backend Dependency Scan (Safety) ---
+2025-07-27 12:57:12,492 - INFO - This scan may take a moment as it might need to fetch the latest vulnerability database...
+2025-07-27 13:02:12,506 - ERROR - Command '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m safety scan --file=/Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/requirements.txt --json' timed out after 300 seconds. This can happen due to network issues or if the tool is unresponsive.
+2025-07-27 13:02:12,507 - ERROR - Partial STDOUT from timed-out command:
+b'\nPlease login or register Safety CLI (free forever) to scan and secure your projects with Safety\n\n(R)egister for a free account in 30 seconds, or (L)ogin with an existing account to continue (R/L): '
+2025-07-27 13:02:12,507 - INFO - NEW FINDING: Safety Scan Failed in N/A:0 (Severity: CRITICAL)
+2025-07-27 13:02:12,507 - INFO - 
+--- Backend Security Scan (Bandit) ---
+2025-07-27 13:02:13,751 - WARNING - Command '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m bandit -r /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend -f json -o /var/folders/dr/hz7y0z9j0x39z7519pbshgqh0000gn/T/tmpq4w0llng.json -x tests' produced stderr:
+[main]	INFO	profile include tests: None
+[main]	INFO	profile exclude tests: None
+[main]	INFO	cli include tests: None
+[main]	INFO	cli exclude tests: None
+[json]	INFO	JSON output written to file: /var/folders/dr/hz7y0z9j0x39z7519pbshgqh0000gn/T/tmpq4w0llng.json
+2025-07-27 13:02:13,751 - INFO - Bandit scan found 3 issues.
+2025-07-27 13:02:13,751 - INFO - NEW FINDING: Try, Except, Pass detected. in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/unified_auth_service.py:417 (Severity: LOW)
+2025-07-27 13:02:13,752 - INFO - NEW FINDING: Potential XSS with ``markupsafe.Markup`` detected. Do not use ``Markup`` on untrusted data. in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/utils/vite.py:80 (Severity: MEDIUM)
+2025-07-27 13:02:13,752 - INFO - NEW FINDING: Potential XSS with ``markupsafe.Markup`` detected. Do not use ``Markup`` on untrusted data. in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/utils/vite.py:122 (Severity: MEDIUM)
+2025-07-27 13:02:13,752 - INFO - 
+--- CodeQL Security Scan (Python Backend) ---
+2025-07-27 13:02:13,752 - INFO - Starting CodeQL scan for /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend...
+2025-07-27 13:02:13,752 - INFO - Creating CodeQL database at codeql_db_for_flask for language Python...
+2025-07-27 13:02:13,754 - ERROR - Command not found: 'codeql'. Please ensure it's in your PATH.
+2025-07-27 13:02:13,754 - ERROR - Failed to create CodeQL database (exit code 1).
+2025-07-27 13:02:13,754 - INFO - 
+--- SonarQube Analysis ---
+2025-07-27 13:02:13,754 - WARNING - SONAR_TOKEN environment variable not set. SonarQube scan might fail if authentication is required.
+2025-07-27 13:02:13,754 - INFO - Executing SonarQube command: sonar-scanner -Dsonar.projectKey=maison-truvra-project -Dsonar.sources=/Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc -Dsonar.host.url=http://localhost:9000
+2025-07-27 13:02:13,755 - ERROR - Command not found: 'sonar-scanner'. Please ensure it's in your PATH.
+2025-07-27 13:02:13,755 - ERROR - SonarQube scan failed with exit code 1. Please ensure SonarQube server is running, project key is correct, and 'sonar-scanner' is in your PATH.
+2025-07-27 13:02:13,755 - INFO - NEW FINDING: SonarQube Scan Failed in N/A:0 (Severity: CRITICAL)
+2025-07-27 13:02:13,755 - INFO - 
+--- Semgrep Security Scan for backend ---
+2025-07-27 13:02:20,142 - WARNING - Command 'semgrep --config=p/python --output=semgrep_python_results.json --json /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend' produced stderr:
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/opentelemetry/instrumentation/dependencies.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import (
+               
+               
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 310 files tracked by git with 151 Code rules:
+  Scanning 152 files with 151 python rules.
+                
+                
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+✅ Scan completed successfully.
+ • Findings: 7 (7 blocking)
+ • Rules run: 151
+ • Targets scanned: 152
+ • Parsed lines: ~100.0%
+ • Scan was limited to files tracked by git
+ • For a detailed list of skipped files and lines, run semgrep with the --verbose flag
+Ran 151 rules on 152 files: 7 findings.
+2025-07-27 13:02:20,142 - INFO - Semgrep scan completed. Results saved to semgrep_python_results.json
+2025-07-27 13:02:20,142 - INFO - Processing Semgrep results from semgrep_python_results.json...
+2025-07-27 13:02:20,143 - INFO - NEW FINDING: Semgrep: python.flask.security.injection.csv-writer-injection.csv-writer-injection in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/admin_api/recommendation_routes.py:227 (Severity: CRITICAL)
+2025-07-27 13:02:20,143 - INFO - NEW FINDING: Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/auth_service.py:72 (Severity: HIGH)
+2025-07-27 13:02:20,143 - INFO - NEW FINDING: Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/auth_service.py:147 (Severity: HIGH)
+2025-07-27 13:02:20,143 - INFO - NEW FINDING: Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/email_service.py:60 (Severity: HIGH)
+2025-07-27 13:02:20,143 - INFO - NEW FINDING: Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/email_service.py:83 (Severity: HIGH)
+2025-07-27 13:02:20,143 - INFO - NEW FINDING: Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/inventory_service.py:191 (Severity: HIGH)
+2025-07-27 13:02:20,143 - INFO - NEW FINDING: Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/unified_auth_service.py:381 (Severity: HIGH)
+2025-07-27 13:02:20,143 - INFO - 
+--- Semgrep Security Scan for website ---
+2025-07-27 13:02:23,599 - WARNING - Command 'semgrep --config=p/vuejs --output=semgrep_vuejs_results.json --json /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website' produced stderr:
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/opentelemetry/instrumentation/dependencies.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import (
+2025-07-27 13:02:23,599 - ERROR - Semgrep scan for /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website failed with exit code 7.
+2025-07-27 13:02:23,599 - INFO - NEW FINDING: Semgrep Scan Failed for website in N/A:0 (Severity: CRITICAL)
+2025-07-27 13:02:23,599 - INFO - 
+--- Backend Static Type Checking (Mypy) ---
+2025-07-27 13:02:23,599 - INFO - Running Mypy and saving text report to logs/mypy_report_20250727_130223.txt...
+2025-07-27 13:02:26,028 - WARNING - Mypy scan completed and found type issues. See the full report at: logs/mypy_report_20250727_130223.txt
+2025-07-27 13:02:26,028 - INFO - NEW FINDING: Mypy identified type checking issues in See Report File:0 (Severity: NOTE)
+2025-07-27 13:02:26,028 - INFO - 
+--- Backend Code Linting (Pylint) ---
+2025-07-27 13:02:26,028 - INFO - Running Pylint and saving text report to logs/pylint_report_20250727_130226.txt...
+2025-07-27 13:02:47,102 - WARNING - Pylint scan completed and found issues. See the full report at: logs/pylint_report_20250727_130226.txt
+2025-07-27 13:02:47,102 - INFO - NEW FINDING: Pylint identified code quality issues in See Report File:0 (Severity: NOTE)
+2025-07-27 13:02:47,102 - INFO - 
+--- Backend Code Integrity (Syntax & Circular Imports) ---
+2025-07-27 13:02:47,166 - INFO - Syntax check passed for all backend files.
+2025-07-27 13:02:47,283 - INFO - NEW FINDING: Circular Import Detected (Cycle 1) in backend/tasks.py:1 (Severity: HIGH)
+2025-07-27 13:02:47,284 - INFO - NEW FINDING: Circular Import Detected (Cycle 2) in backend/services/auth_service.py:1 (Severity: HIGH)
+2025-07-27 13:02:47,284 - INFO - 
+--- Best Practices Audit ---
+2025-07-27 13:02:47,339 - INFO - NEW FINDING: Insecure HTTP URL in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/security_audit.py:1311 (Severity: HIGH)
+2025-07-27 13:02:47,353 - INFO - NEW FINDING: Potential Hardcoded Secret in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/src/components/auth/RegisterForm.vue:8 (Severity: HIGH)
+2025-07-27 13:02:47,353 - INFO - NEW FINDING: Potential Hardcoded Secret in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/src/components/auth/UnifiedRegisterForm.vue:108 (Severity: HIGH)
+2025-07-27 13:02:47,381 - INFO - NEW FINDING: Insecure HTTP URL in /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/middleware.py:199 (Severity: HIGH)
+2025-07-27 13:02:47,401 - INFO - Best practices audit checks completed.
+2025-07-27 13:02:47,401 - INFO - 
+--- AUDIT SUMMARY ---
+2025-07-27 13:02:47,401 - INFO - Found 25 potential issues:
+2025-07-27 13:02:47,401 - INFO -   1. [CRITICAL] Vulnerable package: form-data
+2025-07-27 13:02:47,401 - INFO -       Category: Dependency Vulnerability (npm)
+2025-07-27 13:02:47,401 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/package.json:1
+2025-07-27 13:02:47,401 - INFO -       Description: form-data uses unsafe random function in form-data for choosing boundary. https://github.com/advisories/GHSA-fjxv-7rqg-78g4
+2025-07-27 13:02:47,401 - INFO -       Recommendation: Affected versions: >=4.0.0 <4.0.4. Fix: npm audit fix
+2025-07-27 13:02:47,401 - INFO - --------------------
+2025-07-27 13:02:47,401 - INFO -   2. [CRITICAL] Safety Scan Failed
+2025-07-27 13:02:47,401 - INFO -       Category: Tool Execution Failure
+2025-07-27 13:02:47,401 - INFO -       File: N/A:0
+2025-07-27 13:02:47,401 - INFO -       Description: Safety command could not be run or produced no output. Check if 'safety' is installed.
+2025-07-27 13:02:47,401 - INFO -       Recommendation: Ensure 'safety' is installed (`pip install safety`) and in your PATH.
+2025-07-27 13:02:47,401 - INFO - --------------------
+2025-07-27 13:02:47,401 - INFO -   3. [CRITICAL] SonarQube Scan Failed
+2025-07-27 13:02:47,401 - INFO -       Category: Tool Execution Failure
+2025-07-27 13:02:47,401 - INFO -       File: N/A:0
+2025-07-27 13:02:47,401 - INFO -       Description: SonarQube scan failed with exit code 1. Check the detailed logs for reasons (e.g., server connectivity, invalid token, scanner not found).
+2025-07-27 13:02:47,401 - INFO -       Recommendation: Investigate SonarQube server status, network connectivity, and scanner configuration.
+2025-07-27 13:02:47,401 - INFO - --------------------
+2025-07-27 13:02:47,401 - INFO -   4. [CRITICAL] Semgrep: python.flask.security.injection.csv-writer-injection.csv-writer-injection
+2025-07-27 13:02:47,401 - INFO -       Category: Static Analysis (Semgrep)
+2025-07-27 13:02:47,401 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/admin_api/recommendation_routes.py:227
+2025-07-27 13:02:47,401 - INFO -       Description: Detected user input into a generated CSV file using the built-in `csv` module. If user data is used to generate the data in this file, it is possible that an attacker could inject a formula when the CSV is imported into a spreadsheet application that runs an attacker script, which could steal data from the importing user or, at worst, install malware on the user's computer. `defusedcsv` is a drop-in replacement with the same API that will attempt to mitigate formula injection attempts. You can use `defusedcsv` instead of `csv` to safely generate CSVs.
+2025-07-27 13:02:47,401 - INFO -       Recommendation: Review Semgrep rule documentation for 'python.flask.security.injection.csv-writer-injection.csv-writer-injection'.
+2025-07-27 13:02:47,401 - INFO - --------------------
+2025-07-27 13:02:47,401 - INFO -   5. [CRITICAL] Semgrep Scan Failed for website
+2025-07-27 13:02:47,401 - INFO -       Category: Tool Execution Failure
+2025-07-27 13:02:47,401 - INFO -       File: N/A:0
+2025-07-27 13:02:47,401 - INFO -       Description: Semgrep exited with non-zero code 7. This might indicate a configuration issue or a critical error during scan.
+2025-07-27 13:02:47,401 - INFO -       Recommendation: Review Semgrep configuration and logs for errors.
+2025-07-27 13:02:47,401 - INFO - --------------------
+2025-07-27 13:02:47,401 - INFO -   6. [HIGH] Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true
+2025-07-27 13:02:47,401 - INFO -       Category: Static Analysis (Semgrep)
+2025-07-27 13:02:47,402 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/auth_service.py:72
+2025-07-27 13:02:47,402 - INFO -       Description: Function `flask.url_for` with `_external=True` argument will generate URLs using the `Host` header of the HTTP request, which may lead to security risks such as Host header injection
+2025-07-27 13:02:47,402 - INFO -       Recommendation: Review Semgrep rule documentation for 'python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true'.
+2025-07-27 13:02:47,402 - INFO - --------------------
+2025-07-27 13:02:47,402 - INFO -   7. [HIGH] Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true
+2025-07-27 13:02:47,402 - INFO -       Category: Static Analysis (Semgrep)
+2025-07-27 13:02:47,402 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/auth_service.py:147
+2025-07-27 13:02:47,402 - INFO -       Description: Function `flask.url_for` with `_external=True` argument will generate URLs using the `Host` header of the HTTP request, which may lead to security risks such as Host header injection
+2025-07-27 13:02:47,402 - INFO -       Recommendation: Review Semgrep rule documentation for 'python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true'.
+2025-07-27 13:02:47,402 - INFO - --------------------
+2025-07-27 13:02:47,402 - INFO -   8. [HIGH] Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true
+2025-07-27 13:02:47,402 - INFO -       Category: Static Analysis (Semgrep)
+2025-07-27 13:02:47,402 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/email_service.py:60
+2025-07-27 13:02:47,402 - INFO -       Description: Function `flask.url_for` with `_external=True` argument will generate URLs using the `Host` header of the HTTP request, which may lead to security risks such as Host header injection
+2025-07-27 13:02:47,402 - INFO -       Recommendation: Review Semgrep rule documentation for 'python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true'.
+2025-07-27 13:02:47,402 - INFO - --------------------
+2025-07-27 13:02:47,402 - INFO -   9. [HIGH] Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true
+2025-07-27 13:02:47,402 - INFO -       Category: Static Analysis (Semgrep)
+2025-07-27 13:02:47,402 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/email_service.py:83
+2025-07-27 13:02:47,402 - INFO -       Description: Function `flask.url_for` with `_external=True` argument will generate URLs using the `Host` header of the HTTP request, which may lead to security risks such as Host header injection
+2025-07-27 13:02:47,402 - INFO -       Recommendation: Review Semgrep rule documentation for 'python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true'.
+2025-07-27 13:02:47,402 - INFO - --------------------
+2025-07-27 13:02:47,402 - INFO -   10. [HIGH] Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true
+2025-07-27 13:02:47,402 - INFO -       Category: Static Analysis (Semgrep)
+2025-07-27 13:02:47,402 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/inventory_service.py:191
+2025-07-27 13:02:47,402 - INFO -       Description: Function `flask.url_for` with `_external=True` argument will generate URLs using the `Host` header of the HTTP request, which may lead to security risks such as Host header injection
+2025-07-27 13:02:47,402 - INFO -       Recommendation: Review Semgrep rule documentation for 'python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true'.
+2025-07-27 13:02:47,402 - INFO - --------------------
+2025-07-27 13:02:47,402 - INFO -   11. [HIGH] Semgrep: python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true
+2025-07-27 13:02:47,402 - INFO -       Category: Static Analysis (Semgrep)
+2025-07-27 13:02:47,402 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/unified_auth_service.py:381
+2025-07-27 13:02:47,402 - INFO -       Description: Function `flask.url_for` with `_external=True` argument will generate URLs using the `Host` header of the HTTP request, which may lead to security risks such as Host header injection
+2025-07-27 13:02:47,402 - INFO -       Recommendation: Review Semgrep rule documentation for 'python.flask.security.audit.flask-url-for-external-true.flask-url-for-external-true'.
+2025-07-27 13:02:47,402 - INFO - --------------------
+2025-07-27 13:02:47,402 - INFO -   12. [HIGH] Circular Import Detected (Cycle 1)
+2025-07-27 13:02:47,402 - INFO -       Category: Code Integrity
+2025-07-27 13:02:47,402 - INFO -       File: backend/tasks.py:1
+2025-07-27 13:02:47,402 - INFO -       Description: A circular import dependency was found. This can lead to runtime errors and difficult-to-maintain code.
+2025-07-27 13:02:47,402 - INFO -       Recommendation: Refactor the code to break the import cycle. This often involves moving models, creating service locators, or using local imports within functions.
+2025-07-27 13:02:47,402 - INFO -       Code Snippet:
+backend.tasks ->
+    backend.tasks
+2025-07-27 13:02:47,403 - INFO - --------------------
+2025-07-27 13:02:47,403 - INFO -   13. [HIGH] Circular Import Detected (Cycle 2)
+2025-07-27 13:02:47,403 - INFO -       Category: Code Integrity
+2025-07-27 13:02:47,403 - INFO -       File: backend/services/auth_service.py:1
+2025-07-27 13:02:47,403 - INFO -       Description: A circular import dependency was found. This can lead to runtime errors and difficult-to-maintain code.
+2025-07-27 13:02:47,403 - INFO -       Recommendation: Refactor the code to break the import cycle. This often involves moving models, creating service locators, or using local imports within functions.
+2025-07-27 13:02:47,403 - INFO -       Code Snippet:
+backend.services.auth_service ->
+    backend.services.auth_service
+2025-07-27 13:02:47,403 - INFO - --------------------
+2025-07-27 13:02:47,403 - INFO -   14. [HIGH] Insecure HTTP URL
+2025-07-27 13:02:47,403 - INFO -       Category: HTTPS
+2025-07-27 13:02:47,403 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/security_audit.py:1311
+2025-07-27 13:02:47,403 - INFO -       Description: Insecure HTTP URL found: http://
+2025-07-27 13:02:47,403 - INFO -       Recommendation: Use HTTPS for all external connections. If this is an internal/local connection, ensure it's truly isolated.
+2025-07-27 13:02:47,403 - INFO - --------------------
+2025-07-27 13:02:47,403 - INFO -   15. [HIGH] Potential Hardcoded Secret
+2025-07-27 13:02:47,403 - INFO -       Category: Security
+2025-07-27 13:02:47,403 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/src/components/auth/RegisterForm.vue:8
+2025-07-27 13:02:47,403 - INFO -       Description: Line contains a keyword that might indicate a hardcoded secret. Review manually.
+2025-07-27 13:02:47,403 - INFO -       Recommendation: Store secrets in environment variables or a secure vault, not in code. Use a dedicated secrets scanning tool for more robust detection.
+2025-07-27 13:02:47,403 - INFO -       Code Snippet:
+<UserDetailsForm v-model="form" :include-password="true" />
+2025-07-27 13:02:47,403 - INFO - --------------------
+2025-07-27 13:02:47,403 - INFO -   16. [HIGH] Potential Hardcoded Secret
+2025-07-27 13:02:47,403 - INFO -       Category: Security
+2025-07-27 13:02:47,403 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/src/components/auth/UnifiedRegisterForm.vue:108
+2025-07-27 13:02:47,403 - INFO -       Description: Line contains a keyword that might indicate a hardcoded secret. Review manually.
+2025-07-27 13:02:47,403 - INFO -       Recommendation: Store secrets in environment variables or a secure vault, not in code. Use a dedicated secrets scanning tool for more robust detection.
+2025-07-27 13:02:47,403 - INFO -       Code Snippet:
+<PasswordValidator :password="watchedPassword" class="mt-2" />
+2025-07-27 13:02:47,403 - INFO - --------------------
+2025-07-27 13:02:47,403 - INFO -   17. [HIGH] Insecure HTTP URL
+2025-07-27 13:02:47,403 - INFO -       Category: HTTPS
+2025-07-27 13:02:47,403 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/middleware.py:199
+2025-07-27 13:02:47,403 - INFO -       Description: Insecure HTTP URL found: http://
+2025-07-27 13:02:47,403 - INFO -       Recommendation: Use HTTPS for all external connections. If this is an internal/local connection, ensure it's truly isolated.
+2025-07-27 13:02:47,403 - INFO - --------------------
+2025-07-27 13:02:47,403 - INFO -   18. [MEDIUM] Potential XSS with ``markupsafe.Markup`` detected. Do not use ``Markup`` on untrusted data.
+2025-07-27 13:02:47,403 - INFO -       Category: Static Analysis (Bandit)
+2025-07-27 13:02:47,403 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/utils/vite.py:80
+2025-07-27 13:02:47,403 - INFO -       Description: Bandit Test: markupsafe_markup_xss (B704)
+Confidence: HIGH
+This was flagged by Bandit, a static analysis tool for finding common security issues.
+2025-07-27 13:02:47,403 - INFO -       Recommendation: Review the issue and guidance at: https://bandit.readthedocs.io/en/1.8.6/plugins/b704_markupsafe_markup_xss.html
+2025-07-27 13:02:47,403 - INFO -       Code Snippet:
+  80: 79 
+  81: 80             return Markup(
+  82: 81                 f'<script type="module" src="{safe_dev_server_base}/@vite/client"></script>\n'
+  83: 82                 f'<script type="module" src="{safe_dev_server_base}/{safe_path}"></script>'
+  84: 83             )
+  85: 84         except ValueError as e:
+  86: 
+2025-07-27 13:02:47,403 - INFO - --------------------
+2025-07-27 13:02:47,403 - INFO -   19. [MEDIUM] Potential XSS with ``markupsafe.Markup`` detected. Do not use ``Markup`` on untrusted data.
+2025-07-27 13:02:47,403 - INFO -       Category: Static Analysis (Bandit)
+2025-07-27 13:02:47,403 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/utils/vite.py:122
+2025-07-27 13:02:47,403 - INFO -       Description: Bandit Test: markupsafe_markup_xss (B704)
+Confidence: HIGH
+This was flagged by Bandit, a static analysis tool for finding common security issues.
+2025-07-27 13:02:47,403 - INFO -       Recommendation: Review the issue and guidance at: https://bandit.readthedocs.io/en/1.8.6/plugins/b704_markupsafe_markup_xss.html
+2025-07-27 13:02:47,403 - INFO -       Code Snippet:
+ 122: 121 
+ 123: 122     return Markup(html)
+ 124: 
+2025-07-27 13:02:47,403 - INFO - --------------------
+2025-07-27 13:02:47,403 - INFO -   20. [LOW] Try, Except, Pass detected.
+2025-07-27 13:02:47,403 - INFO -       Category: Static Analysis (Bandit)
+2025-07-27 13:02:47,404 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/backend/services/unified_auth_service.py:417
+2025-07-27 13:02:47,404 - INFO -       Description: Bandit Test: try_except_pass (B110)
+Confidence: HIGH
+This was flagged by Bandit, a static analysis tool for finding common security issues.
+2025-07-27 13:02:47,404 - INFO -       Recommendation: Review the issue and guidance at: https://bandit.readthedocs.io/en/1.8.6/plugins/b110_try_except_pass.html
+2025-07-27 13:02:47,404 - INFO -       Code Snippet:
+ 417: 416 
+ 418: 417         except Exception:
+ 419: 418             pass
+ 420: 419 
+ 421: 
+2025-07-27 13:02:47,404 - INFO - --------------------
+2025-07-27 13:02:47,404 - INFO -   21. [NOTE] Mypy identified type checking issues
+2025-07-27 13:02:47,404 - INFO -       Category: Static Type Checking (Mypy)
+2025-07-27 13:02:47,404 - INFO -       File: See Report File:0
+2025-07-27 13:02:47,404 - INFO -       Description: Mypy scan completed with exit code 1, indicating that type errors were found.
+2025-07-27 13:02:47,404 - INFO -       Recommendation: Review the detailed Mypy report located at: logs/mypy_report_20250727_130223.txt
+2025-07-27 13:02:47,404 - INFO - --------------------
+2025-07-27 13:02:47,404 - INFO -   22. [NOTE] Pylint identified code quality issues
+2025-07-27 13:02:47,404 - INFO -       Category: Code Quality (Pylint)
+2025-07-27 13:02:47,404 - INFO -       File: See Report File:0
+2025-07-27 13:02:47,404 - INFO -       Description: Pylint scan completed with exit code 30, indicating that code quality, convention, or warning issues were found.
+2025-07-27 13:02:47,404 - INFO -       Recommendation: Review the detailed Pylint report located at: logs/pylint_report_20250727_130226.txt
+2025-07-27 13:02:47,404 - INFO - --------------------
+2025-07-27 13:02:47,404 - INFO -   23. [MODERATE] Vulnerable package: @intlify/core-base
+2025-07-27 13:02:47,404 - INFO -       Category: Dependency Vulnerability (npm)
+2025-07-27 13:02:47,404 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/package.json:1
+2025-07-27 13:02:47,404 - INFO -       Description: vue-i18n's escapeParameterHtml does not prevent DOM-based XSS through its tag attributes. https://github.com/advisories/GHSA-x8qp-wqqm-57ph
+2025-07-27 13:02:47,404 - INFO -       Recommendation: Affected versions: >=9.0.0 <9.14.5. Fix: npm audit fix
+2025-07-27 13:02:47,404 - INFO - --------------------
+2025-07-27 13:02:47,404 - INFO -   24. [MODERATE] Vulnerable package: esbuild
+2025-07-27 13:02:47,404 - INFO -       Category: Dependency Vulnerability (npm)
+2025-07-27 13:02:47,404 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/package.json:1
+2025-07-27 13:02:47,404 - INFO -       Description: esbuild enables any website to send any requests to the development server and read the response. https://github.com/advisories/GHSA-67mh-4wv8-2f99
+2025-07-27 13:02:47,404 - INFO -       Recommendation: Affected versions: <=0.24.2. Fix: npm audit fix
+2025-07-27 13:02:47,404 - INFO - --------------------
+2025-07-27 13:02:47,404 - INFO -   25. [MODERATE] Vulnerable package: vue-i18n
+2025-07-27 13:02:47,404 - INFO -       Category: Dependency Vulnerability (npm)
+2025-07-27 13:02:47,404 - INFO -       File: /Users/remyroche/Documents/2025-06-22 - Maison Truvra Work Doc/website/package.json:1
+2025-07-27 13:02:47,404 - INFO -       Description: vue-i18n's escapeParameterHtml does not prevent DOM-based XSS through its tag attributes. https://github.com/advisories/GHSA-x8qp-wqqm-57ph
+2025-07-27 13:02:47,404 - INFO -       Recommendation: Affected versions: >=9.0.0 <9.14.5. Fix: npm audit fix
+2025-07-27 13:02:47,404 - INFO - --------------------
