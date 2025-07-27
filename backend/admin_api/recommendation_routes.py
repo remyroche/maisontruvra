@@ -177,9 +177,10 @@ def export_recommendations():
 
         elif format_type == "csv":
             # For CSV export, we'll flatten the data structure
-            import defusedcsv as csv
             import io
             import re
+
+            import defusedcsv as csv
 
             def sanitize_csv_field(field):
                 """Sanitize CSV field to prevent formula injection."""

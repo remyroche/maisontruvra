@@ -3,11 +3,10 @@
 # Description: This helper reads the Vite manifest file to inject the correct
 #              versioned asset paths into the Jinja2 templates.
 # ==============================================================================
+import html
 import json
 import os
 import re
-from urllib.parse import quote
-import html
 
 from flask import current_app, url_for
 from markupsafe import Markup, escape
