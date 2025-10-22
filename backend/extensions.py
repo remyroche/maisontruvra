@@ -11,6 +11,7 @@ from flask_redis import FlaskRedis
 from flask_socketio import SocketIO
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
+from flask_marshmallow import Marshmallow
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -27,3 +28,4 @@ limiter = Limiter(
 )
 redis_client = FlaskRedis()
 socketio = SocketIO()
+ma = Marshmallow()

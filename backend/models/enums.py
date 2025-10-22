@@ -33,6 +33,15 @@ class OrderStatus(enum.Enum):
     REFUNDED = "refunded"
 
 
+class PaymentStatus(enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
+
+
 class UserStatus(enum.Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"

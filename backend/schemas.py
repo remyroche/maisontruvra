@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 from typing import Optional
 
-from marshmallow import Schema, ValidationError, fields, validate
+from marshmallow import Schema, ValidationError, fields, validate, post_load
 from pydantic import BaseModel, EmailStr, Field
 
 from .extensions import ma
@@ -617,7 +617,7 @@ class CheckoutOrderSchema(BaseSchema):
     payment_token = fields.Str(required=True)
     notes = fields.Str(allow_none=True)
 
-    @validate.post_load
+    @post_load
     def validate_user_or_guest_info(self, data, **kwargs):
         if data.get("user_id") is None:
             if not data.get("session_id"):

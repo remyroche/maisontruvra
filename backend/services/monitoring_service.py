@@ -40,8 +40,8 @@ class MonitoringService:
     @staticmethod
     def log_error(
         message: str,
-        service_name: str = None,
-        extra_data: dict[str, Any] = None,
+        service_name: str | None = None,
+        extra_data: dict[str, Any] | None = None,
         exc_info: bool = False,
     ):
         """Log error messages with service context."""
@@ -53,8 +53,8 @@ class MonitoringService:
     @staticmethod
     def log_critical(
         message: str,
-        service_name: str = None,
-        extra_data: dict[str, Any] = None,
+        service_name: str | None = None,
+        extra_data: dict[str, Any] | None = None,
         exc_info: bool = False,
     ):
         """Log critical messages with service context."""
@@ -65,7 +65,7 @@ class MonitoringService:
 
     @staticmethod
     def log_debug(
-        message: str, service_name: str = None, extra_data: dict[str, Any] = None
+        message: str, service_name: str | None = None, extra_data: dict[str, Any] | None = None
     ):
         """Log debug messages with service context."""
         formatted_message = MonitoringService._format_message(
@@ -77,8 +77,8 @@ class MonitoringService:
     @staticmethod
     def log_security_event(
         message: str,
-        service_name: str = None,
-        extra_data: dict[str, Any] = None,
+        service_name: str | None = None,
+        extra_data: dict[str, Any] | None = None,
         level: str = "INFO",
     ):
         """Log security-related events."""
@@ -97,8 +97,8 @@ class MonitoringService:
     @staticmethod
     def log_database_operation(
         message: str,
-        service_name: str = None,
-        extra_data: dict[str, Any] = None,
+        service_name: str | None = None,
+        extra_data: dict[str, Any] | None = None,
         level: str = "INFO",
     ):
         """Log database operations."""
@@ -117,8 +117,8 @@ class MonitoringService:
     @staticmethod
     def log_api_request(
         message: str,
-        service_name: str = None,
-        extra_data: dict[str, Any] = None,
+        service_name: str | None = None,
+        extra_data: dict[str, Any] | None = None,
         level: str = "INFO",
     ):
         """Log API requests and responses."""
@@ -136,7 +136,7 @@ class MonitoringService:
 
     @staticmethod
     def _format_message(
-        message: str, service_name: str = None, extra_data: dict[str, Any] = None
+        message: str, service_name: str | None = None, extra_data: dict[str, Any] | None = None
     ) -> str:
         """Format log message with service context and extra data."""
         formatted_parts = []
@@ -158,7 +158,7 @@ class MonitoringService:
         service_name: str,
         success: bool = True,
         duration_ms: float | None = None,
-        extra_data: dict[str, Any] = None,
+        extra_data: dict[str, Any] | None = None,
     ):
         """Log service operations with standardized format."""
         status = "SUCCESS" if success else "FAILED"
@@ -181,7 +181,7 @@ class MonitoringService:
 
     # Decorator for automatic service operation logging
     @staticmethod
-    def log_service_call(service_name: str, operation_name: str = None):
+    def log_service_call(service_name: str, operation_name: str | None = None):
         """Decorator to automatically log service method calls."""
 
         def decorator(func):
@@ -237,7 +237,7 @@ class MonitoringService:
             with open(log_file_path, encoding="utf-8") as f:
                 lines = f.readlines()
 
-            error_logs = []
+            error_logs: list[str] = []
             # Iterate backwards through the file to find the most recent errors
             for line in reversed(lines):
                 if len(error_logs) >= limit:

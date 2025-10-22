@@ -20,51 +20,51 @@ class Address(db.Model):
     is_default_billing = db.Column(db.Boolean, default=False)
 
     @hybrid_property
-    def address_line_1(self):
+    def address_line_1(self) -> str:
         return decrypt_data(self._address_line_1)
 
     @address_line_1.setter
-    def address_line_1(self, value):
+    def address_line_1(self, value: str) -> None:
         self._address_line_1 = encrypt_data(value)
 
     @hybrid_property
-    def address_line_2(self):
-        return decrypt_data(self._address_line_2)
+def address_line_2(self) -> str | None:
+        return decrypt_data(self._address_line_2) if self._address_line_2 else None
 
     @address_line_2.setter
-    def address_line_2(self, value):
-        self._address_line_2 = encrypt_data(value)
+def address_line_2(self, value: str | None) -> None:
+        self._address_line_2 = encrypt_data(value) if value else None
 
     @hybrid_property
-    def city(self):
+def city(self) -> str:
         return decrypt_data(self._city)
 
     @city.setter
-    def city(self, value):
+def city(self, value: str) -> None:
         self._city = encrypt_data(value)
 
     @hybrid_property
-    def state_province_region(self):
+def state_province_region(self) -> str:
         return decrypt_data(self._state_province_region)
 
     @state_province_region.setter
-    def state_province_region(self, value):
+def state_province_region(self, value: str) -> None:
         self._state_province_region = encrypt_data(value)
 
     @hybrid_property
-    def postal_code(self):
+def postal_code(self) -> str:
         return decrypt_data(self._postal_code)
 
     @postal_code.setter
-    def postal_code(self, value):
+def postal_code(self, value: str) -> None:
         self._postal_code = encrypt_data(value)
 
     @hybrid_property
-    def country(self):
+def country(self) -> str:
         return decrypt_data(self._country)
 
     @country.setter
-    def country(self, value):
+def country(self, value: str) -> None:
         self._country = encrypt_data(value)
 
     def to_dict(self):
