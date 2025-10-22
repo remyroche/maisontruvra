@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 
-import Celery
+from celery import Celery
 from flask import Flask, request, session
 from flask_login import user_logged_in, user_unauthorized
 from flask_talisman import Talisman
