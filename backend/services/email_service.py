@@ -57,9 +57,7 @@ class EmailService:
     @staticmethod
     def send_verification_email(user, token):
         """Sends the initial account verification email to a new B2C user."""
-        confirmation_link = url_for(
-            "unified_auth.verify_email", token=token, _external=True
-        )
+        confirmation_link = f"{current_app.config['BASE_URL']}{url_for('unified_auth.verify_email', token=token)}"
         EmailService.send_email(
             to=user.email,
             subject="Bienvenue à la Maison Truvrā",
@@ -80,9 +78,7 @@ class EmailService:
     @staticmethod
     def send_back_in_stock_email(user, product):
         """Notifies a user that a product they are interested in is back in stock."""
-        product_url = url_for(
-            "products.get_product", product_id=product.id, _external=True
-        )
+        product_url = f"{current_app.config['BASE_URL']}{url_for('products.get_product', product_id=product.id)}"
         EmailService.send_email(
             to=user.email,
             subject=f"Votre produit {product.name} est de retour",

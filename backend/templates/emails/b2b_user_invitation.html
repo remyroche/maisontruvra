@@ -13,7 +13,7 @@
         Your account has been created, and you can now log in to access exclusive products, pricing, and features available to your company.
     </p>
     <p>
-        <a href="{{ url_for('b2b_auth.login', _external=True) }}" style="display: inline-block; padding: 10px 20px; background-color: #333; color: #fff; text-decoration: none; border-radius: 5px;">
+        <a href="{{ config.BASE_URL }}{{ url_for('b2b_auth.login') }}" style="display: inline-block; padding: 10px 20px; background-color: #333; color: #fff; text-decoration: none; border-radius: 5px;">
             Log In to Your Professional Account
         </a>
     </p>

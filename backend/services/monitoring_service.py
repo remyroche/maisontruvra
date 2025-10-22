@@ -19,7 +19,7 @@ class MonitoringService:
     # Centralized Logging Methods
     @staticmethod
     def log_info(
-        message: str, service_name: str = None, extra_data: dict[str, Any] = None
+        message: str, service_name: str | None = None, extra_data: dict[str, Any] | None = None
     ):
         """Log informational messages with service context."""
         formatted_message = MonitoringService._format_message(
@@ -29,7 +29,7 @@ class MonitoringService:
 
     @staticmethod
     def log_warning(
-        message: str, service_name: str = None, extra_data: dict[str, Any] = None
+        message: str, service_name: str | None = None, extra_data: dict[str, Any] | None = None
     ):
         """Log warning messages with service context."""
         formatted_message = MonitoringService._format_message(

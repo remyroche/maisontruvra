@@ -378,9 +378,7 @@ class UnifiedAuthService:
 
     def _send_magic_link_email(self, user: User, token: str):
         """Send magic link email."""
-        magic_link_url = url_for(
-            "unified_auth.magic_link_login", token=token, _external=True
-        )
+        magic_link_url = f"{current_app.config['BASE_URL']}{url_for('unified_auth.magic_link_login', token=token)}"
 
         # Use EmailService.send_email method with correct parameters
         EmailService.send_email(

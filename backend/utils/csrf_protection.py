@@ -16,10 +16,12 @@ class CSRFProtection:
         return token
 
     @staticmethod
-    def validate_csrf_token(token: str = None):
+    def validate_csrf_token(token: str | None = None):
         """Validate CSRF token from request."""
         if not token:
             token = request.headers.get("X-CSRF-Token")
+            if token is None:
+                return False
 
         if not token:
             raise ValidationException("CSRF token missing")

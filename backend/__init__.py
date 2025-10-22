@@ -6,12 +6,9 @@ from flask import Flask, request, session
 from flask_login import user_logged_in, user_unauthorized
 from flask_talisman import Talisman
 
-from backend.database import init_db_command
-from backend.utils.vite import Vite
-
 from . import config, services
 from .celery_worker import init_celery
-from .database import setup_database_security
+from .database import init_db_command, setup_database_security
 
 # Import extension instances from the central extensions file
 from .extensions import (
@@ -28,7 +25,8 @@ from .extensions import (
     socketio,
 )
 from .logger_and_error_handler import register_error_handlers
-from .loggers import security_logger, setup_logging
+from .loggers import api_logger, database_logger, security_logger, setup_logging
+from .utils.vite import Vite
 from .middleware import check_staff_session, mfa_check_middleware, setup_middleware
 from .utils.input_sanitizer import init_app_middleware
 from .utils.vite import vite_asset

@@ -188,9 +188,7 @@ class InventoryService:
             self.session.add(new_item)
             self.session.flush()
 
-            passport_url = url_for(
-                "passport_bp.view_passport", item_uid=uid, _external=True
-            )
+            passport_url = f"{current_app.config['BASE_URL']}{url_for('passport_bp.view_passport', item_uid=uid)}"
             html_path, pdf_path, qr_path = self._generate_passport_assets(
                 new_item, passport_url
             )

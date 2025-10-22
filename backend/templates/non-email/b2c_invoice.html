@@ -25,7 +25,7 @@
     <div class="wrapper">
         <div class="header">
             <div>
-                <img src="{{ url_for('static', filename='assets/logo.png', _external=True) }}" alt="Maison Truvra Logo" style="width:100%; max-width:150px;">
+                <img src="{{ config.BASE_URL }}{{ url_for('static', filename='assets/logo.png') }}" alt="Maison Truvra Logo" style="width:100%; max-width:150px;">
             </div>
             <div class="company-details">
                 Maison Truvra<br>
