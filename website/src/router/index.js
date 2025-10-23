@@ -14,16 +14,16 @@ import RespondToQuoteView from '@/views/admin/RespondToQuoteView.vue';
 
 
 const routes = [
-  // --- Public Routes ---
-  { path: '/', name: 'Home', component: () => import('@/views/public/HomeView.vue') },
-  { path: '/shop', name: 'Shop', component: () => import('@/views/public/ShopView.vue') },
-  { path: '/product/:id', name: 'ProductDetail', component: () => import('@/views/public/ProductDetailView.vue'), props: true },
-  { path: '/le-journal', name: 'Journal', component: () => import('@/views/public/JournalView.vue') },
-  { path: '/le-journal/:slug', name: 'Article', component: () => import('@/views/public/ArticleView.vue'), props: true },
-  { path: '/checkout', name: 'Checkout', component: () => import('@/views/public/CheckoutView.vue') },
-  { path: '/order-confirmation/:id?', name: 'OrderConfirmation', component: () => import('@/views/public/OrderConfirmationView.vue'), props: true },
-  { path: '/cart', name: 'ShoppingCart', component: () => import('../views/public/ShoppingCartView.vue'),
-  },
+  // --- B2C Routes ---
+  { path: '/', name: 'Home', component: () => import('@/views/public/HomeView.vue'), meta: { section: 'b2c' } },
+  { path: '/b2c', name: 'B2CLanding', component: () => import('@/views/public/B2CLandingView.vue'), meta: { section: 'b2c' } },
+  { path: '/shop', name: 'Shop', component: () => import('@/views/public/ShopView.vue'), meta: { section: 'b2c' } },
+  { path: '/product/:id', name: 'ProductDetail', component: () => import('@/views/public/ProductDetailView.vue'), props: true, meta: { section: 'b2c' } },
+  { path: '/le-journal', name: 'Journal', component: () => import('@/views/public/JournalView.vue'), meta: { section: 'b2c' } },
+  { path: '/le-journal/:slug', name: 'Article', component: () => import('@/views/public/ArticleView.vue'), props: true, meta: { section: 'b2c' } },
+  { path: '/checkout', name: 'Checkout', component: () => import('@/views/public/CheckoutView.vue'), meta: { section: 'b2c' } },
+  { path: '/order-confirmation/:id?', name: 'OrderConfirmation', component: () => import('@/views/public/OrderConfirmationView.vue'), props: true, meta: { section: 'b2c' } },
+  { path: '/cart', name: 'ShoppingCart', component: () => import('../views/public/ShoppingCartView.vue'), meta: { section: 'b2c' } },
 
   // --- Informational Pages ---
   { path: '/notre-maison', name: 'NotreMaison', component: () => import('@/views/public/NotreMaisonView.vue') },
@@ -41,10 +41,11 @@ const routes = [
   },
 
     // B2B User Routes
-    { path: '/pro/dashboard', name: 'B2BDashboard', component: () => import('@/views/pro/B2BDashboardView.vue'), meta: { requiresAuth: true, requiresB2B: true } },
-    { path: '/pro/request-quote', name: 'B2BRequestQuote', component: RequestQuoteView, meta: { requiresAuth: true, requiresB2B: true } },
-    { path: '/pro/my-quotes', name: 'B2BMyQuotes', component: () => import('@/views/pro/MyQuotesView.vue'), meta: { requiresAuth: true, requiresB2B: true } },
-    { path: '/pro/orders', name: 'B2BOrders', component: () => import('@/views/pro/B2BOrdersView.vue'), meta: { requiresAuth: true, requiresB2B: true } },
+    { path: '/b2b', name: 'B2BLanding', component: () => import('@/views/pro/B2BLandingView.vue'), meta: { section: 'b2b' } },
+    { path: '/pro/dashboard', name: 'B2BDashboard', component: () => import('@/views/pro/B2BDashboardView.vue'), meta: { section: 'b2b', requiresAuth: true, requiresB2B: true } },
+    { path: '/pro/request-quote', name: 'B2BRequestQuote', component: RequestQuoteView, meta: { section: 'b2b', requiresAuth: true, requiresB2B: true } },
+    { path: '/pro/my-quotes', name: 'B2BMyQuotes', component: () => import('@/views/pro/MyQuotesView.vue'), meta: { section: 'b2b', requiresAuth: true, requiresB2B: true } },
+    { path: '/pro/orders', name: 'B2BOrders', component: () => import('@/views/pro/B2BOrdersView.vue'), meta: { section: 'b2b', requiresAuth: true, requiresB2B: true } },
     
   // --- Search ---
   { path: '/search', name: 'Search', component: () => import('@/views/public/SearchView.vue'), props: route => ({ query: route.query.q }) },
@@ -81,9 +82,11 @@ const routes = [
 
   // --- ADMIN SECTION ---
   // Admin Login
-  { path: '/admin/login', name: 'AdminLogin', component: () => import('@/views/admin/AdminLoginView.vue') },
+  { path: '/admin/login', name: 'AdminLogin', component: () => import('@/views/admin/AdminLoginView.vue'), meta: { section: 'admin' } },
+  // Admin Landing
+  { path: '/admin-landing', name: 'AdminLanding', component: () => import('@/views/admin/AdminLandingView.vue'), meta: { section: 'admin' } },
   // Core Admin
-  { path: '/admin', name: 'AdminDashboard', component: () => import('@/views/admin/AdminDashboardView.vue'), meta: { requiresAuth: true } },
+  { path: '/admin', name: 'AdminDashboard', component: () => import('@/views/admin/AdminDashboardView.vue'), meta: { section: 'admin', requiresAuth: true } },
   { path: '/admin/profile', name: 'AdminProfile', component: () => import('@/views/admin/AdminProfileView.vue'), meta: { requiresAuth: true } },
   { path: '/admin/setup-mfa', name: 'SetupMfa', component: () => import('@/views/admin/SetupMfaView.vue'), meta: { requiresAuth: true } },
   
@@ -143,6 +146,14 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const isAdminRoute = to.path.startsWith('/admin');
+  const isB2BRoute = to.path.startsWith('/pro');
+  const isB2CRoute = !isAdminRoute && !isB2BRoute;
+
+  // Handle section-specific routing
+  if (isB2CRoute && to.path === '/') {
+    // Redirect root to B2C landing
+    return next({ name: 'B2CLanding' });
+  }
 
   if (isAdminRoute) {
     const adminAuthStore = useAdminAuthStore();
@@ -162,14 +173,26 @@ router.beforeEach(async (to, from, next) => {
     if (requiredPermission && (!user || !user.permissions?.includes(requiredPermission))) {
       return next({ path: '/admin' }); // Redirect to admin dashboard
     }
-  } else {
-    // Handle public routes
+  } else if (isB2BRoute) {
+    // Handle B2B routes
     const userStore = useUserStore();
-    if (userStore.isAuthenticated === null) { // Use the correct property from the new store
+    if (userStore.isAuthenticated === null) {
       await userStore.checkAuthStatus();
     }
     if (to.meta.requiresAuth && !userStore.isAuthenticated) {
-      return next({ name: 'Home' }); // Or redirect to a public login page
+      return next({ name: 'B2BLanding' }); // Redirect to B2B landing
+    }
+    if (to.meta.requiresB2B && !userStore.isB2BUser) {
+      return next({ name: 'B2BLanding' }); // Redirect to B2B landing if not B2B user
+    }
+  } else {
+    // Handle public B2C routes
+    const userStore = useUserStore();
+    if (userStore.isAuthenticated === null) {
+      await userStore.checkAuthStatus();
+    }
+    if (to.meta.requiresAuth && !userStore.isAuthenticated) {
+      return next({ name: 'B2CLanding' }); // Redirect to B2C landing
     }
   }
 
