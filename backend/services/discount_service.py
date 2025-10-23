@@ -151,7 +151,9 @@ class DiscountService:
         ):
             raise DiscountInvalidException("Discount code has reached its usage limit.")
 
-        # TODO: Add logic to check for user-specific or product-specific discounts if needed.
+        # Check for user-specific, product-specific, or tier-specific discounts
+        if not self._is_discount_applicable(discount, cart):
+            raise DiscountInvalidException("Discount code is not applicable to this cart.")
 
         # Calculate the actual discount amount based on its type.
         discount_amount = 0
@@ -200,6 +202,42 @@ class DiscountService:
         db.session.commit()
         return {"success": True, "message": "Discount removed."}
 
+    def _is_discount_applicable(self, discount, cart):
+        """
+        Check if a discount is applicable to the current cart based on targeting rules.
+        """
+        # Check minimum spend requirement
+        if discount.minimum_spend and cart.total_cost < discount.minimum_spend:
+            return False
+            
+        # Check minimum quantity requirement
+        if discount.minimum_quantity:
+            total_quantity = sum(item.quantity for item in cart.items)
+            if total_quantity < discount.minimum_quantity:
+                return False
+        
+        # Check targeting rules
+        if discount.target_type == "user":
+            # User-specific discount
+            if not cart.user_id or discount.target_user_id != cart.user_id:
+                return False
+                
+        elif discount.target_type == "product":
+            # Product-specific discount
+            product_ids = [item.product_id for item in cart.items]
+            if discount.target_product_id not in product_ids:
+                return False
+                
+        elif discount.target_type == "tier":
+            # Tier-specific discount
+            if not cart.user_id:
+                return False
+            user = db.session.query(User).get(cart.user_id)
+            if not user or not user.tier or user.tier.id != discount.target_tier_id:
+                return False
+        
+        return True
+
     @staticmethod
     def get_tier(tier_id: int) -> Tier:
         return db.session.query(Tier).get(tier_id)
@@ -237,3 +275,27 @@ class DiscountService:
         user.tier_override = True  # Custom discount is a form of manual override
         db.session.commit()
         return user
+
+    def create_user_specific_discount(self, user_id, discount_data):
+        """Create a discount specifically for a user."""
+        discount_data.update({
+            'target_type': 'user',
+            'target_user_id': user_id
+        })
+        return self.create_discount(discount_data)
+
+    def create_product_specific_discount(self, product_id, discount_data):
+        """Create a discount specifically for a product."""
+        discount_data.update({
+            'target_type': 'product',
+            'target_product_id': product_id
+        })
+        return self.create_discount(discount_data)
+
+    def create_tier_specific_discount(self, tier_id, discount_data):
+        """Create a discount specifically for a user tier."""
+        discount_data.update({
+            'target_type': 'tier',
+            'target_tier_id': tier_id
+        })
+        return self.create_discount(discount_data)

@@ -43,12 +43,84 @@ class QuoteService:
 
             db.session.commit()
             self.logger.info(f"Quote request {quote.id} created for user {user_id}.")
-            # TODO: Notify admin of new quote request
+            
+            # Notify admin of new quote request
+            self._notify_admin_new_quote(quote)
+            
             return quote
         except SQLAlchemyError as e:
             db.session.rollback()
             self.logger.error(f"Error creating quote request for user {user_id}: {e}")
             raise
+
+    def _notify_admin_new_quote(self, quote):
+        """Send notification to admin about new quote request."""
+        try:
+            # Get admin users (you might want to add a method to get admin users)
+            from backend.models import User
+            admin_users = db.session.query(User).filter_by(role="Admin").all()
+            
+            if not admin_users:
+                self.logger.warning("No admin users found for quote notification")
+                return
+            
+            # Prepare email content
+            subject = f"New Quote Request #{quote.id}"
+            context = {
+                "quote": quote,
+                "quote_id": quote.id,
+                "user": quote.user,
+                "items": quote.items,
+                "created_at": quote.created_at
+            }
+            
+            # Send email to all admins
+            for admin in admin_users:
+                try:
+                    self.email_service.send_email(
+                        admin.email,
+                        subject,
+                        "admin_new_quote_notification",
+                        context
+                    )
+                except Exception as e:
+                    self.logger.error(f"Failed to send quote notification to admin {admin.email}: {e}")
+            
+            self.logger.info(f"Quote notification sent to {len(admin_users)} admin users")
+            
+        except Exception as e:
+            self.logger.error(f"Error sending quote notification: {e}")
+
+    def _notify_b2b_user_cart_items(self, quote):
+        """Send notification to B2B user about items added to cart."""
+        try:
+            user = quote.user
+            if not user or not user.email:
+                self.logger.warning(f"No email found for user {quote.user_id}")
+                return
+            
+            # Prepare email content
+            subject = f"Quote Items Added to Your Cart - Quote #{quote.id}"
+            context = {
+                "quote": quote,
+                "quote_id": quote.id,
+                "user": user,
+                "items": quote.items,
+                "responded_at": quote.responded_at
+            }
+            
+            # Send email to B2B user
+            self.email_service.send_email(
+                user.email,
+                subject,
+                "b2b_quote_items_added_to_cart",
+                context
+            )
+            
+            self.logger.info(f"B2B user notification sent for quote {quote.id}")
+            
+        except Exception as e:
+            self.logger.error(f"Error sending B2B user notification: {e}")
 
     def get_quote_by_id(self, quote_id):
         return (
@@ -143,8 +215,8 @@ class QuoteService:
             quote.responded_at = datetime.utcnow()
             db.session.commit()
 
-            # TODO: Notify B2B user that items have been added to their cart
-            # self.email_service.send_email(...)
+            # Notify B2B user that items have been added to their cart
+            self._notify_b2b_user_cart_items(quote)
 
             self.logger.info(
                 f"Admin responded to quote {quote_id} and added items directly to cart for user {user_id}."

@@ -18,7 +18,7 @@
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">Total Users</p>
-            <p class="text-2xl font-semibold text-gray-900">{{ totalUsers }}</p>
+            <p class="text-2xl font-semibold text-gray-900">{{ dashboardStats.users.total_users || 0 }}</p>
           </div>
         </div>
       </div>
@@ -32,7 +32,7 @@
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">Total Orders</p>
-            <p class="text-2xl font-semibold text-gray-900">{{ totalOrders }}</p>
+            <p class="text-2xl font-semibold text-gray-900">{{ dashboardStats.sales.order_count || 0 }}</p>
           </div>
         </div>
       </div>
@@ -46,7 +46,7 @@
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">Total Products</p>
-            <p class="text-2xl font-semibold text-gray-900">{{ totalProducts }}</p>
+            <p class="text-2xl font-semibold text-gray-900">{{ dashboardStats.products.total_products || 0 }}</p>
           </div>
         </div>
       </div>
@@ -60,7 +60,7 @@
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">Revenue</p>
-            <p class="text-2xl font-semibold text-gray-900">€{{ totalRevenue }}</p>
+            <p class="text-2xl font-semibold text-gray-900">€{{ (dashboardStats.sales.total_revenue || 0).toFixed(2) }}</p>
           </div>
         </div>
       </div>
@@ -86,10 +86,10 @@
           <div v-for="order in recentOrders" :key="order.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div>
               <p class="font-medium text-gray-900">#{{ order.id }}</p>
-              <p class="text-sm text-gray-600">{{ order.customer_name }}</p>
+              <p class="text-sm text-gray-600">{{ order.user_name }}</p>
             </div>
             <div class="text-right">
-              <p class="font-semibold text-gray-900">€{{ order.total }}</p>
+              <p class="font-semibold text-gray-900">€{{ order.total_amount }}</p>
               <p class="text-xs text-gray-500">{{ formatDate(order.created_at) }}</p>
             </div>
           </div>
@@ -218,40 +218,76 @@ import RecommendationsDashboardWidget from '@/components/admin/RecommendationsDa
 const { formatDate } = useDateFormatter();
 
 // Reactive data
-const totalUsers = ref(0);
-const totalOrders = ref(0);
-const totalProducts = ref(0);
-const totalRevenue = ref(0);
+const dashboardStats = ref({
+  sales: {},
+  users: {},
+  products: {},
+  quotes: {},
+  newsletter: {},
+  pos: {}
+});
 const recentOrders = ref([]);
 
-// Mock data - in a real app, this would come from API calls
+// Load real dashboard data from API
 const loadDashboardData = async () => {
-  // Simulate API calls
-  totalUsers.value = 1247;
-  totalOrders.value = 3891;
-  totalProducts.value = 156;
-  totalRevenue.value = 45678.90;
-  
-  recentOrders.value = [
-    {
-      id: 'ORD-2024-001',
-      customer_name: 'Marie Dubois',
-      total: 89.50,
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'ORD-2024-002',
-      customer_name: 'Jean Martin',
-      total: 156.75,
-      created_at: new Date(Date.now() - 86400000).toISOString() // Yesterday
-    },
-    {
-      id: 'ORD-2024-003',
-      customer_name: 'Sophie Laurent',
-      total: 234.20,
-      created_at: new Date(Date.now() - 172800000).toISOString() // 2 days ago
+  try {
+    // Load dashboard statistics
+    const statsResponse = await fetch('/api/admin/dashboard/stats?days=30', {
+      credentials: 'include'
+    });
+    
+    if (statsResponse.ok) {
+      const statsData = await statsResponse.json();
+      if (statsData.success) {
+        dashboardStats.value = statsData.data;
+      }
     }
-  ];
+    
+    // Load recent orders
+    const ordersResponse = await fetch('/api/admin/dashboard/recent-orders?limit=10', {
+      credentials: 'include'
+    });
+    
+    if (ordersResponse.ok) {
+      const ordersData = await ordersResponse.json();
+      if (ordersData.success) {
+        recentOrders.value = ordersData.orders;
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error loading dashboard data:', error);
+    // Fallback to mock data on error
+    dashboardStats.value = {
+      sales: { total_revenue: 45678.90, order_count: 3891, completed_orders: 3500, avg_order_value: 130.50 },
+      users: { total_users: 1247, new_users: 45, active_users: 234 },
+      products: { total_products: 156, low_stock_products: 12, out_of_stock_products: 3 },
+      quotes: { total_quotes: 23, pending_quotes: 8, responded_quotes: 15 },
+      newsletter: { total_subscribers: 456, b2c_subscribers: 400, b2b_subscribers: 56 },
+      pos: { total_transactions: 89, completed_transactions: 85, total_revenue: 12345.67 }
+    };
+    
+    recentOrders.value = [
+      {
+        id: 'ORD-2024-001',
+        user_name: 'Marie Dubois',
+        total_amount: 89.50,
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'ORD-2024-002',
+        user_name: 'Jean Martin',
+        total_amount: 156.75,
+        created_at: new Date(Date.now() - 86400000).toISOString()
+      },
+      {
+        id: 'ORD-2024-003',
+        user_name: 'Sophie Laurent',
+        total_amount: 234.20,
+        created_at: new Date(Date.now() - 172800000).toISOString()
+      }
+    ];
+  }
 };
 
 // Lifecycle

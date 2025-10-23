@@ -91,12 +91,106 @@ class NewsletterService:
     @staticmethod
     def get_all_subscribers(page=1, per_page=20):
         """Get all newsletter subscribers with pagination."""
-        # TODO: Implement newsletter subscriber model and logic
-        return {"subscribers": [], "total": 0, "pages": 0, "current_page": page}
+        try:
+            query = db.session.query(NewsletterSubscription).filter_by(is_active=True)
+            total = query.count()
+            
+            # Calculate pagination
+            offset = (page - 1) * per_page
+            subscribers = query.offset(offset).limit(per_page).all()
+            pages = (total + per_page - 1) // per_page
+            
+            return {
+                "subscribers": [sub.to_dict() for sub in subscribers],
+                "total": total,
+                "pages": pages,
+                "current_page": page,
+                "per_page": per_page
+            }
+        except SQLAlchemyError as e:
+            logger.error(f"Error fetching newsletter subscribers: {e}")
+            return {"subscribers": [], "total": 0, "pages": 0, "current_page": page}
 
     @staticmethod
-    def send_campaign(subject, content, subscriber_ids=None):
+    def send_campaign(subject, content, subscriber_ids=None, list_type=None):
         """Send a newsletter campaign."""
-        # TODO: Implement newsletter campaign sending logic
-        logger.info(f"Newsletter campaign '{subject}' sending requested")
-        return True
+        try:
+            # Build query for subscribers
+            query = db.session.query(NewsletterSubscription).filter_by(is_active=True)
+            
+            if list_type:
+                query = query.filter_by(list_type=list_type)
+            
+            if subscriber_ids:
+                query = query.filter(NewsletterSubscription.id.in_(subscriber_ids))
+            
+            subscribers = query.all()
+            
+            if not subscribers:
+                logger.warning("No subscribers found for campaign")
+                return False
+            
+            # Send emails to all subscribers
+            email_service = EmailService(logger)
+            success_count = 0
+            
+            for subscriber in subscribers:
+                try:
+                    email_service.send_email(
+                        subscriber.email,
+                        subject,
+                        "newsletter_campaign",
+                        {"content": content, "subscriber": subscriber.to_dict()}
+                    )
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to send email to {subscriber.email}: {e}")
+            
+            logger.info(f"Newsletter campaign '{subject}' sent to {success_count}/{len(subscribers)} subscribers")
+            return True
+            
+        except SQLAlchemyError as e:
+            logger.error(f"Error sending newsletter campaign: {e}")
+            return False
+
+    @staticmethod
+    def get_subscriber_by_id(subscriber_id):
+        """Get a specific subscriber by ID."""
+        return db.session.query(NewsletterSubscription).get(subscriber_id)
+
+    @staticmethod
+    def delete_subscriber_by_id(subscriber_id):
+        """Delete a subscriber by ID."""
+        try:
+            subscriber = db.session.query(NewsletterSubscription).get(subscriber_id)
+            if subscriber:
+                db.session.delete(subscriber)
+                db.session.commit()
+                logger.info(f"Subscriber {subscriber_id} deleted")
+                return True
+            return False
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            logger.error(f"Error deleting subscriber {subscriber_id}: {e}")
+            return False
+
+    @staticmethod
+    def get_subscriber_stats():
+        """Get newsletter subscription statistics."""
+        try:
+            total_subscribers = db.session.query(NewsletterSubscription).filter_by(is_active=True).count()
+            b2c_subscribers = db.session.query(NewsletterSubscription).filter_by(
+                is_active=True, list_type="b2c"
+            ).count()
+            b2b_subscribers = db.session.query(NewsletterSubscription).filter_by(
+                is_active=True, list_type="b2b"
+            ).count()
+            
+            return {
+                "total_subscribers": total_subscribers,
+                "b2c_subscribers": b2c_subscribers,
+                "b2b_subscribers": b2b_subscribers
+            }
+        except SQLAlchemyError as e:
+            logger.error(f"Error getting subscriber stats: {e}")
+            return {"total_subscribers": 0, "b2c_subscribers": 0, "b2b_subscribers": 0}
