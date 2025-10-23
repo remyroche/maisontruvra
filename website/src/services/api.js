@@ -5,6 +5,7 @@
 import axios from 'axios';
 import { useNotificationStore } from '../stores/notification';
 import router from '../router';
+import securityMonitor from '../utils/securityMonitor';
 
 
 // Create an Axios instance with a base URL.
@@ -30,6 +31,7 @@ apiClient.interceptors.request.use(async (config) => {
             config.headers['X-CSRF-TOKEN'] = data.csrf_token;
         } catch (error) {
             console.error('Could not fetch CSRF token', error);
+            securityMonitor.monitorCSRFViolation(config.url, 'Token fetch failed');
             const notificationStore = useNotificationStore();
             notificationStore.addNotification({ message: 'A security error occurred. Please refresh the page.', type: 'error' });
             return Promise.reject(new Error('CSRF token fetch failed.'));
@@ -60,6 +62,10 @@ apiClient.interceptors.response.use(
                     // Unauthorized: Redirect to login page
                     // This is a critical security action.
                     console.error('Unauthorized access. Redirecting to login.');
+                    securityMonitor.logEvent('unauthorized_access', { 
+                        url: window.location.href,
+                        status: 401 
+                    }, 'high');
                     // Avoid redirecting if we are already on a public auth page
                     if (!router.currentRoute.value.meta.public) {
                         router.push({ name: 'Login' });

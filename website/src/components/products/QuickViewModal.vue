@@ -21,7 +21,7 @@
           <div>
             <h2 class="text-3xl font-bold">{{ product.name }}</h2>
             <p class="text-2xl font-semibold my-4">€{{ product.price.toFixed(2) }}</p>
-            <div class="text-sm text-gray-600 space-y-2 mb-6" v-html="product.short_description"></div>
+            <div class="text-sm text-gray-600 space-y-2 mb-6" v-html="sanitizedDescription"></div>
             
             <div class="flex items-center space-x-4 mb-6">
               <label for="quantity-qv" class="font-semibold">Quantity:</label>
@@ -46,8 +46,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useApiData } from '@/composables/useApiData';
+import DOMPurify from 'dompurify';
 import { apiClient } from '@/services/api';
 import { useCartStore } from '@/stores/cart';
 import { useNotificationStore } from '@/stores/notification';
@@ -71,6 +72,12 @@ const { data: product, isLoading, error } = useApiData(
   },
   () => props.productId // Re-fetch when productId changes
 );
+
+// Sanitize HTML content to prevent XSS
+const sanitizedDescription = computed(() => {
+  if (!product.value?.short_description) return '';
+  return DOMPurify.sanitize(product.value.short_description);
+});
 
 const handleAddToCart = async () => {
   if (!product.value) return;

@@ -198,14 +198,28 @@ const userEmail = ref('');
 const magicLinkCooldown = ref(0);
 let cooldownInterval = null;
 
-// Validation schemas
+// Validation schemas with enhanced security
 const loginSchema = yup.object({
-  email: yup.string().required('Email is required').email('Invalid email format'),
-  password: yup.string().required('Password is required')
+  email: yup
+    .string()
+    .required('Email is required')
+    .email('Invalid email format')
+    .max(254, 'Email is too long')
+    .matches(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'Invalid email format'),
+  password: yup
+    .string()
+    .required('Password is required')
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password is too long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, 'Password must contain at least one lowercase letter, one uppercase letter, and one number')
 });
 
 const totpSchema = yup.object({
-  totp_code: yup.string().required('TOTP code is required').length(6, 'Code must be 6 digits')
+  totp_code: yup
+    .string()
+    .required('TOTP code is required')
+    .length(6, 'Code must be 6 digits')
+    .matches(/^\d{6}$/, 'Code must contain only numbers')
 });
 
 const handleLogin = async (values) => {
