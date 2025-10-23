@@ -41,7 +41,10 @@ const routes = [
   },
 
     // B2B User Routes
+    { path: '/pro/dashboard', name: 'B2BDashboard', component: () => import('@/views/pro/B2BDashboardView.vue'), meta: { requiresAuth: true, requiresB2B: true } },
     { path: '/pro/request-quote', name: 'B2BRequestQuote', component: RequestQuoteView, meta: { requiresAuth: true, requiresB2B: true } },
+    { path: '/pro/my-quotes', name: 'B2BMyQuotes', component: () => import('@/views/pro/MyQuotesView.vue'), meta: { requiresAuth: true, requiresB2B: true } },
+    { path: '/pro/orders', name: 'B2BOrders', component: () => import('@/views/pro/B2BOrdersView.vue'), meta: { requiresAuth: true, requiresB2B: true } },
     
   // --- Search ---
   { path: '/search', name: 'Search', component: () => import('@/views/public/SearchView.vue'), props: route => ({ query: route.query.q }) },
@@ -77,13 +80,10 @@ const routes = [
   },
 
   // --- ADMIN SECTION ---
+  // Admin Login
+  { path: '/admin/login', name: 'AdminLogin', component: () => import('@/views/admin/AdminLoginView.vue') },
   // Core Admin
-  { path: '/admin', name: 'AdminDashboard', component: () => import('@/views/admin/AdminDashboardView.vue'), meta: { requiresAuth: true },
-    children: [
-      { path: '', name: 'AdminDashboardHome', component: () => import('@/views/admin/DashboardHomeView.vue') },
-      { path: 'dashboard', redirect: '/admin' }
-    ]
-  },
+  { path: '/admin', name: 'AdminDashboard', component: () => import('@/views/admin/AdminDashboardView.vue'), meta: { requiresAuth: true } },
   { path: '/admin/profile', name: 'AdminProfile', component: () => import('@/views/admin/AdminProfileView.vue'), meta: { requiresAuth: true } },
   { path: '/admin/setup-mfa', name: 'SetupMfa', component: () => import('@/views/admin/SetupMfaView.vue'), meta: { requiresAuth: true } },
   
@@ -154,7 +154,7 @@ router.beforeEach(async (to, from, next) => {
     const { requiresAuth, requiredPermission, requiredRoles } = to.meta;
 
     if ((requiresAuth || requiredPermission || requiredRoles) && !isAuthenticated) {
-      return next({ path: '/admin/login' }); // Redirect to admin login
+      return next({ name: 'AdminLogin' }); // Redirect to admin login
     }
     if (requiredRoles && (!user || !requiredRoles.includes(user.role))) {
       return next({ path: '/admin' }); // Redirect to admin dashboard
