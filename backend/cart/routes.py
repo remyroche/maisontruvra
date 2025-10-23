@@ -24,50 +24,56 @@ cart_service = CartService(logger)
 @login_required
 def get_cart_contents():
     """
-    Gets the contents of the user's cart, with B2B pricing applied if applicable.
+    Gets the contents of the user's cart with performance monitoring, with B2B pricing applied if applicable.
     """
-    try:
-        cart_data = cart_service.get_cart(current_user.id)
-        if not cart_data or not cart_data.get("items_details"):
+    from ..utils.performance_monitor import monitor_query_performance
+    
+    @monitor_query_performance(threshold=0.15)  # Monitor endpoint performance
+    def _get_cart_contents():
+        try:
+            cart_data = cart_service.get_cart(current_user.id)
+            if not cart_data or not cart_data.get("items_details"):
+                return (
+                    jsonify(
+                        {
+                            "message": "Cart is empty",
+                            "items": [],
+                            "total": "0.00",
+                            "subtotal": "0.00",
+                            "discount_applied": "0.00",
+                            "tier_name": None,
+                        }
+                    ),
+                    200,
+                )
+
             return (
                 jsonify(
                     {
-                        "message": "Cart is empty",
-                        "items": [],
-                        "total": "0.00",
-                        "subtotal": "0.00",
-                        "discount_applied": "0.00",
-                        "tier_name": None,
+                        "items": [
+                            {
+                                "item_id": detail["item"].id,
+                                "product_id": detail["item"].product.id,
+                                "name": detail["item"].product.name,
+                                "quantity": detail["item"].quantity,
+                                "original_price": str(detail["original_price"]),
+                                "discounted_price": str(detail["discounted_price"]),
+                                "line_total": str(detail["line_total"]),
+                            }
+                            for detail in cart_data["items_details"]
+                        ],
+                        "subtotal": str(cart_data["subtotal"]),
+                        "discount_applied": str(cart_data["discount_applied"]),
+                        "total": str(cart_data["total"]),
+                        "tier_name": cart_data["tier_name"],
                     }
                 ),
                 200,
             )
-
-        return (
-            jsonify(
-                {
-                    "items": [
-                        {
-                            "item_id": detail["item"].id,
-                            "product_id": detail["item"].product.id,
-                            "name": detail["item"].product.name,
-                            "quantity": detail["item"].quantity,
-                            "original_price": str(detail["original_price"]),
-                            "discounted_price": str(detail["discounted_price"]),
-                            "line_total": str(detail["line_total"]),
-                        }
-                        for detail in cart_data["items_details"]
-                    ],
-                    "subtotal": str(cart_data["subtotal"]),
-                    "discount_applied": str(cart_data["discount_applied"]),
-                    "total": str(cart_data["total"]),
-                    "tier_name": cart_data["tier_name"],
-                }
-            ),
-            200,
-        )
-    except NotFoundException as e:
-        return jsonify({"message": str(e)}), 404
+        except NotFoundException as e:
+            return jsonify({"message": str(e)}), 404
+    
+    return _get_cart_contents()
 
 
 @cart_bp.route("/add", methods=["POST"])

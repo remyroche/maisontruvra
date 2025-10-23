@@ -32,19 +32,20 @@ class ProductService:
         self.logger = logger
 
     def get_all_products(self, user=None, filters=None, page=1, per_page=20):
-        """Retrieves all products from the database, with caching."""
+        """Retrieves all products from the database, with caching and optimization."""
+        from ..utils.query_optimizer import QueryOptimizer
+        from ..utils.performance_monitor import monitor_query_performance
+        
         cache_key = get_product_list_key()
         products = cache.get(cache_key)
         if products is None:
-            products = (
-                Product.query.options(joinedload(Product.category))
-                .order_by(Product.name)
-                .all()
-            )
+            # Use optimized query with comprehensive eager loading
+            query = QueryOptimizer.get_optimized_product_query()
+            products = query.order_by(Product.name).all()
             cache.set(cache_key, products, timeout=3600)  # Cache for 1 hour
 
-        # Start with base query
-        query = Product.query.options(joinedload(Product.category))
+        # Start with optimized base query
+        query = QueryOptimizer.get_optimized_product_query()
 
         # --- User-based Filtering (Visibility & Tier Restrictions) ---
         if user:
@@ -188,16 +189,25 @@ class ProductService:
 
     @staticmethod
     def search_products(query, limit=10):
-        """Searches for products by name or SKU for autocomplete."""
-        search_term = f"%{query.lower()}%"
-        return (
-            Product.query.filter(
-                (func.lower(Product.name).like(search_term))
-                | (func.lower(Product.sku).like(search_term))
+        """Searches for products by name or SKU for autocomplete with optimization."""
+        from ..utils.query_optimizer import QueryOptimizer
+        from ..utils.performance_monitor import monitor_query_performance
+        
+        @monitor_query_performance(threshold=0.05)  # Monitor queries > 50ms
+        def _search_products():
+            search_term = f"%{query.lower()}%"
+            # Use optimized query with eager loading for better performance
+            optimized_query = QueryOptimizer.get_optimized_product_query()
+            return (
+                optimized_query.filter(
+                    (func.lower(Product.name).like(search_term))
+                    | (func.lower(Product.sku).like(search_term))
+                )
+                .limit(limit)
+                .all()
             )
-            .limit(limit)
-            .all()
-        )
+        
+        return _search_products()
 
     @staticmethod
     def get_product_recommendations(product_id, limit=5):
@@ -205,28 +215,16 @@ class ProductService:
         Gets product recommendations based on co-purchase history.
         "Customers who bought this also bought..."
         """
-        # Find orders that contain the target product
-        subquery = (
-            db.session.query(OrderItem.order_id)
-            .filter(OrderItem.product_id == product_id)
-            .subquery()
-        )
-
-        # Find all other products purchased in those same orders
-        recommendations = (
-            db.session.query(
-                OrderItem.product_id,
-                func.count(OrderItem.product_id).label("purchase_count"),
-            )
-            .filter(
-                OrderItem.order_id.in_(subquery),
-                OrderItem.product_id != product_id,  # Exclude the original product
-            )
-            .group_by(OrderItem.product_id)
-            .order_by(func.count(OrderItem.product_id).desc())
-            .limit(limit)
-            .all()
-        )
+        from ..utils.query_optimizer import QueryOptimizer
+        from ..utils.performance_monitor import monitor_query_performance
+        
+        @monitor_query_performance(threshold=0.1)  # Monitor queries > 100ms
+        def _get_recommendations():
+            # Use optimized query for recommendations
+            recommendations = QueryOptimizer.optimize_product_recommendations_query(product_id)
+            return recommendations.limit(limit).all()
+        
+        recommendations = _get_recommendations()
 
         recommended_product_ids = [rec.product_id for rec in recommendations]
         if not recommended_product_ids:

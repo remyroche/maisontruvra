@@ -26,12 +26,21 @@ class UserService:
         self.monitoring_service = MonitoringService()
 
     def get_user_by_email(self, email):
-        """Retrieves a user by their email address."""
-        try:
-            return db.session.query(User).filter_by(email=email).first()
-        except SQLAlchemyError as e:
-            self.logger.error(f"Error retrieving user by email {email}: {e}")
-            raise
+        """Retrieves a user by their email address with optimization."""
+        from ..utils.query_optimizer import QueryOptimizer
+        from ..utils.performance_monitor import monitor_query_performance
+        
+        @monitor_query_performance(threshold=0.05)  # Monitor queries > 50ms
+        def _get_user():
+            try:
+                # Use optimized query with eager loading
+                query = QueryOptimizer.get_optimized_user_query()
+                return query.filter_by(email=email).first()
+            except SQLAlchemyError as e:
+                self.logger.error(f"Error retrieving user by email {email}: {e}")
+                raise
+        
+        return _get_user()
 
     def get_or_create_guest_user(self, email, first_name, last_name):
         """
@@ -67,22 +76,42 @@ class UserService:
             raise
 
     def get_user_addresses(self, user_id):
-        """Retrieves all addresses for a given user."""
-        try:
-            return db.session.query(Address).filter_by(user_id=user_id).all()
-        except SQLAlchemyError as e:
-            self.logger.error(f"Error retrieving addresses for user {user_id}: {e}")
-            raise
+        """Retrieves all addresses for a given user with optimization."""
+        from ..utils.performance_monitor import monitor_query_performance
+        
+        @monitor_query_performance(threshold=0.05)  # Monitor queries > 50ms
+        def _get_addresses():
+            try:
+                # Use optimized query with eager loading
+                query = QueryOptimizer.get_optimized_user_query()
+                user = query.filter_by(id=user_id).first()
+                if user:
+                    return user.addresses
+                return []
+            except SQLAlchemyError as e:
+                self.logger.error(f"Error retrieving addresses for user {user_id}: {e}")
+                raise
+        
+        return _get_addresses()
 
     def get_all_users(self, page=1, per_page=20):
-        """Retrieves all users with pagination for admin purposes."""
-        try:
-            return User.query.order_by(User.created_at.desc()).paginate(
-                page=page, per_page=per_page, error_out=False
-            )
-        except SQLAlchemyError as e:
-            self.logger.error(f"Error retrieving all users: {e}")
-            raise
+        """Retrieves all users with pagination for admin purposes with optimization."""
+        from ..utils.query_optimizer import QueryOptimizer
+        from ..utils.performance_monitor import monitor_query_performance
+        
+        @monitor_query_performance(threshold=0.1)  # Monitor queries > 100ms
+        def _get_all_users():
+            try:
+                # Use optimized query with eager loading
+                query = QueryOptimizer.get_optimized_user_query()
+                return query.order_by(User.created_at.desc()).paginate(
+                    page=page, per_page=per_page, error_out=False
+                )
+            except SQLAlchemyError as e:
+                self.logger.error(f"Error retrieving all users: {e}")
+                raise
+        
+        return _get_all_users()
 
     def get_user_profile(self, user_id):
         user = User.query.get_or_404(user_id)
@@ -294,11 +323,20 @@ class UserService:
             raise ValidationException(f"Failed to delete user: {str(e)}")
 
     def get_user_by_id(self, user_id):
-        """Retrieves a user by their ID."""
-        user = User.query.get(user_id)
-        if not user:
-            raise UserNotFoundException(f"User with ID {user_id} not found.")
-        return user
+        """Retrieves a user by their ID with optimization."""
+        from ..utils.query_optimizer import QueryOptimizer
+        from ..utils.performance_monitor import monitor_query_performance
+        
+        @monitor_query_performance(threshold=0.05)  # Monitor queries > 50ms
+        def _get_user():
+            # Use optimized query with eager loading
+            query = QueryOptimizer.get_optimized_user_query()
+            user = query.filter_by(id=user_id).first()
+            if not user:
+                raise UserNotFoundException(f"User with ID {user_id} not found.")
+            return user
+        
+        return _get_user()
 
     def update_user(self, user_id, data):
         """Updates a user's information."""

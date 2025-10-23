@@ -85,3 +85,14 @@ def clear_site_settings_cache():
 def clear_delivery_methods_cache():
     """Clears the delivery methods cache."""
     cache.delete(get_delivery_methods_key())
+
+
+def get_query_cache_key(query_string):
+    """Generate a cache key for a database query."""
+    import hashlib
+    return f"query:{hashlib.md5(query_string.encode()).hexdigest()}"
+
+
+def clear_all_caches():
+    """Clear all caches."""
+    cache.clear()
