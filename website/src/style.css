@@ -11,6 +11,18 @@
   --brand-gold: #D4AF37;
 }
 
+/* Responsive Design Enhancements */
+@media (max-width: 640px) {
+  .text-5xl { font-size: 2.5rem; }
+  .text-6xl { font-size: 3rem; }
+  .text-7xl { font-size: 3.5rem; }
+}
+
+@media (max-width: 768px) {
+  .py-20 { padding-top: 3rem; padding-bottom: 3rem; }
+  .py-16 { padding-top: 2rem; padding-bottom: 2rem; }
+}
+
 body {
   @apply font-sans text-brand-dark-brown;
   line-height: 1.6;
@@ -78,4 +90,69 @@ body {
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
+}
+
+/* Mobile Navigation Enhancements */
+@media (max-width: 1024px) {
+  .mobile-menu-enter-active,
+  .mobile-menu-leave-active {
+    transition: all 0.3s ease;
+  }
+  
+  .mobile-menu-enter-from,
+  .mobile-menu-leave-to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+/* Touch-friendly interactions */
+@media (hover: none) and (pointer: coarse) {
+  .hover\:scale-105:hover {
+    transform: none;
+  }
+  
+  .hover\:-translate-y-2:hover {
+    transform: none;
+  }
+  
+  /* Increase touch targets */
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Smooth scrolling for better UX */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus styles for accessibility */
+.focus\:ring-brand-burgundy:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(139, 21, 56, 0.1);
+}
+
+/* Loading states */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Section transitions */
+.section-enter-active,
+.section-leave-active {
+  transition: all 0.3s ease;
+}
+
+.section-enter-from,
+.section-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
 }
