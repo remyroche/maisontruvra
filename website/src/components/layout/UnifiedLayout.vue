@@ -1,23 +1,25 @@
 <template>
   <div class="min-h-screen" :class="sectionBackgroundClass">
     <!-- Unified Header with Enhanced Section Selector -->
-    <header class="sticky top-0 z-50" :class="headerClass">
+    <header class="sticky top-0 z-50 glass-morphism" :class="headerClass">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Top Navigation Bar -->
         <div class="flex items-center justify-between h-16">
           <!-- Logo with Section Indicator -->
           <div class="flex items-center space-x-4">
-            <router-link to="/" class="flex-shrink-0 flex items-center space-x-2">
-              <img class="h-8 w-auto" src="/logo.svg" alt="Maison Truvra" />
-              <div v-if="!isAdminLoginPage" class="hidden sm:block">
-                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">{{ sectionTitle }}</div>
-                <div class="text-sm font-semibold" :class="sectionTitleColor">{{ sectionSubtitle }}</div>
-              </div>
+            <router-link to="/" class="flex-shrink-0">
+              <LuxuryLogo 
+                :subtitle="!isAdminLoginPage ? sectionTitle : null"
+                :brand-name="!isAdminLoginPage ? sectionSubtitle : 'Maison Truvra'"
+                size="md"
+                variant="elevated"
+                decorative
+              />
             </router-link>
           </div>
 
           <!-- Enhanced Section Selector -->
-          <div v-if="!isAdminLoginPage" class="hidden lg:flex items-center space-x-1 bg-white/80 backdrop-blur-sm rounded-xl p-1 shadow-lg border border-white/20">
+          <div v-if="!isAdminLoginPage" class="hidden lg:flex items-center space-x-1 glass-morphism rounded-xl p-1 shadow-luxury-lg">
             <button
               @click="switchSection('b2c')"
               :class="[
@@ -313,6 +315,7 @@ import SearchOverlay from '@/components/search/SearchOverlay.vue';
 import Footer from '@/components/layout/Footer.vue';
 import UnifiedBreadcrumb from '@/components/layout/UnifiedBreadcrumb.vue';
 import SectionIndicator from '@/components/ui/SectionIndicator.vue';
+import LuxuryLogo from '@/components/ui/LuxuryLogo.vue';
 
 // Icons for admin navigation
 import {

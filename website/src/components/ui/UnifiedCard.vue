@@ -1,11 +1,11 @@
 <template>
   <div 
     :class="[
-      'rounded-2xl shadow-lg transition-all duration-300',
-      hoverEffect ? 'hover:shadow-xl hover:-translate-y-2' : '',
-      variant === 'elevated' ? 'bg-white shadow-xl' : 'bg-white shadow-lg',
-      variant === 'gradient' ? 'bg-gradient-to-br from-white to-brand-cream/30' : '',
-      variant === 'dark' ? 'bg-gray-800 text-white' : '',
+      'rounded-2xl transition-luxury',
+      hoverEffect ? 'hover-lift hover-glow' : '',
+      variant === 'elevated' ? 'bg-white shadow-luxury-lg border-luxury' : 'bg-white shadow-luxury border-luxury',
+      variant === 'gradient' ? 'bg-gradient-to-br from-white to-brand-cream/30 shadow-luxury border-luxury' : '',
+      variant === 'dark' ? 'bg-gray-800 text-white shadow-luxury-xl border border-gray-700' : '',
       size === 'sm' ? 'p-4' : size === 'lg' ? 'p-8' : 'p-6',
       className
     ]"

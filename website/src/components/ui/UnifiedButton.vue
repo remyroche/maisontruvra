@@ -6,11 +6,11 @@
     :type="type"
     :disabled="disabled"
     :class="[
-      'inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-300',
+      'inline-flex items-center justify-center font-semibold rounded-xl transition-luxury',
       sizeClasses,
       variantClasses,
       disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
-      hoverEffect ? 'transform hover:scale-105' : '',
+      hoverEffect ? 'hover-lift hover-glow' : '',
       className
     ]"
     @click="handleClick"
@@ -100,12 +100,12 @@ const sizeClasses = computed(() => {
 
 const variantClasses = computed(() => {
   const variants = {
-    primary: 'bg-brand-burgundy text-white hover:bg-brand-burgundy/90 shadow-lg hover:shadow-xl',
-    secondary: 'bg-brand-cream text-brand-burgundy hover:bg-brand-cream/80 border border-brand-burgundy/20',
-    outline: 'border-2 border-brand-burgundy text-brand-burgundy hover:bg-brand-burgundy hover:text-white',
-    ghost: 'text-brand-burgundy hover:bg-brand-burgundy/10',
-    danger: 'bg-red-500 text-white hover:bg-red-600 shadow-lg hover:shadow-xl',
-    success: 'bg-green-500 text-white hover:bg-green-600 shadow-lg hover:shadow-xl'
+    primary: 'bg-brand-burgundy text-white hover:bg-brand-burgundy/90 shadow-luxury hover:shadow-luxury-lg border-luxury',
+    secondary: 'bg-brand-cream text-brand-burgundy hover:bg-brand-cream/80 border-luxury-thick border-brand-burgundy/20 shadow-luxury',
+    outline: 'border-2 border-brand-burgundy text-brand-burgundy hover:bg-brand-burgundy hover:text-white shadow-luxury hover:shadow-luxury-lg',
+    ghost: 'text-brand-burgundy hover:bg-brand-burgundy/10 hover:shadow-luxury',
+    danger: 'bg-red-500 text-white hover:bg-red-600 shadow-luxury hover:shadow-luxury-lg border-luxury',
+    success: 'bg-green-500 text-white hover:bg-green-600 shadow-luxury hover:shadow-luxury-lg border-luxury'
   };
   return variants[props.variant];
 });
