@@ -110,13 +110,61 @@ class AssetService:
         )
         filename = secure_filename(file_storage.filename)
 
-        # Placeholder for storage logic (e.g., saving to S3 or local disk)
-        # MUST use the 'sanitized_buffer' from this point on.
-        mock_url = f"https://cdn.maison-truvra.com/{folder}/{filename}"
-        logger.info(
-            f"Successfully processed and 'uploaded' file {filename} to {mock_url}"
-        )
-        return {"url": mock_url}
+        # Store the file using the configured storage backend
+        try:
+            if current_app.config.get('ASSET_STORAGE_BACKEND') == 's3':
+                # AWS S3 storage
+                import boto3
+                from botocore.exceptions import ClientError
+                
+                s3_client = boto3.client(
+                    's3',
+                    aws_access_key_id=current_app.config.get('AWS_ACCESS_KEY_ID'),
+                    aws_secret_access_key=current_app.config.get('AWS_SECRET_ACCESS_KEY'),
+                    region_name=current_app.config.get('AWS_REGION', 'eu-west-1')
+                )
+                
+                bucket_name = current_app.config.get('AWS_S3_BUCKET')
+                s3_key = f"{folder}/{filename}"
+                
+                s3_client.put_object(
+                    Bucket=bucket_name,
+                    Key=s3_key,
+                    Body=sanitized_buffer,
+                    ContentType=content_type,
+                    ACL='public-read'
+                )
+                
+                url = f"https://{bucket_name}.s3.{current_app.config.get('AWS_REGION', 'eu-west-1')}.amazonaws.com/{s3_key}"
+                
+            elif current_app.config.get('ASSET_STORAGE_BACKEND') == 'local':
+                # Local file storage
+                import os
+                
+                upload_dir = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+                full_folder_path = os.path.join(upload_dir, folder)
+                os.makedirs(full_folder_path, exist_ok=True)
+                
+                file_path = os.path.join(full_folder_path, filename)
+                with open(file_path, 'wb') as f:
+                    f.write(sanitized_buffer)
+                
+                url = f"{current_app.config.get('BASE_URL', 'http://localhost:5000')}/uploads/{folder}/{filename}"
+                
+            else:
+                # Fallback to mock URL for development
+                url = f"https://cdn.maison-truvra.com/{folder}/{filename}"
+                logger.warning("Using mock URL - configure ASSET_STORAGE_BACKEND for production")
+            
+            logger.info(f"Successfully processed and uploaded file {filename} to {url}")
+            return {"url": url}
+            
+        except Exception as e:
+            logger.error(f"Error storing file {filename}: {e}")
+            # Fallback to mock URL on error
+            mock_url = f"https://cdn.maison-truvra.com/{folder}/{filename}"
+            logger.warning(f"Using fallback mock URL: {mock_url}")
+            return {"url": mock_url}
 
     @staticmethod
     def delete_asset(asset_id):

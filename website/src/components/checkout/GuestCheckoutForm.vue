@@ -13,9 +13,11 @@
 
       <h3 class="text-lg font-semibold pt-4">Payment Details</h3>
       <div class="p-4 border rounded-md bg-gray-50">
-        <!-- This would be replaced by a real payment element like Stripe Elements -->
-        <label for="payment-token" class="block text-sm font-medium text-gray-700">Mock Payment Token</label>
-        <input type="text" id="payment-token" v-model="form.payment_token" required placeholder="tok_mock_payment" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+        <!-- Stripe Elements integration -->
+        <div id="card-element" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-3">
+          <!-- Stripe Elements will create form elements here -->
+        </div>
+        <div id="card-errors" role="alert" class="text-red-600 text-sm mt-2"></div>
       </div>
     </div>
     
@@ -26,10 +28,16 @@
 </template>
 
 <script setup>
-import { reactive } from 'vue';
+import { reactive, onMounted } from 'vue';
+import { loadStripe } from '@stripe/stripe-js';
 import AddressForm from '@/components/forms/AddressForm.vue';
 
 const emit = defineEmits(['guest-checkout-submit']);
+
+// Stripe setup
+let stripe = null;
+let elements = null;
+let cardElement = null;
 
 const form = reactive({
   email: '',
@@ -41,10 +49,73 @@ const form = reactive({
     postal_code: '',
     country: 'France'
   },
-  payment_token: 'tok_mock_success' // Default mock token
+  payment_token: null // Will be set by Stripe Elements
 });
 
-const submitGuestCheckout = () => {
-  emit('guest-checkout-submit', form);
+// Initialize Stripe
+onMounted(async () => {
+  try {
+    stripe = await loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+    if (stripe) {
+      elements = stripe.elements();
+      cardElement = elements.create('card', {
+        style: {
+          base: {
+            fontSize: '16px',
+            color: '#424770',
+            '::placeholder': {
+              color: '#aab7c4',
+            },
+          },
+        },
+      });
+      cardElement.mount('#card-element');
+      
+      cardElement.on('change', ({error}) => {
+        const displayError = document.getElementById('card-errors');
+        if (error) {
+          displayError.textContent = error.message;
+        } else {
+          displayError.textContent = '';
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error loading Stripe:', error);
+  }
+});
+
+const submitGuestCheckout = async () => {
+  if (!stripe || !cardElement) {
+    console.error('Stripe not loaded');
+    return;
+  }
+
+  try {
+    const {error, paymentMethod} = await stripe.createPaymentMethod({
+      type: 'card',
+      card: cardElement,
+      billing_details: {
+        email: form.email,
+        name: `${form.shipping_address.first_name} ${form.shipping_address.last_name}`,
+        address: {
+          line1: form.shipping_address.address_line_1,
+          city: form.shipping_address.city,
+          postal_code: form.shipping_address.postal_code,
+          country: form.shipping_address.country,
+        },
+      },
+    });
+
+    if (error) {
+      console.error('Error creating payment method:', error);
+      return;
+    }
+
+    form.payment_token = paymentMethod.id;
+    emit('guest-checkout-submit', form);
+  } catch (error) {
+    console.error('Error processing payment:', error);
+  }
 };
 </script>

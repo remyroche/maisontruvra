@@ -6,11 +6,12 @@ import logging
 
 from backend.database import db
 
-from ..models import Order, OrderItem, Product, User, db
+from ..models import Order, OrderItem, Product, User, POSTransaction, db
 from .exceptions import InsufficientStockException
 from .inventory_service import InventoryService
 from .order_service import OrderService
 from .pdf_service import PDFService
+from .payment_service import PaymentService
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class POSService:
         self.inventory_service = InventoryService()
         self.order_service = OrderService()
         self.pdf_service = PDFService()
+        self.payment_service = PaymentService(logger)
 
     def process_pos_sale(self, sale_data):
         """
@@ -71,16 +73,23 @@ class POSService:
             items=order_items,
         )
 
-        # Step 3: Process the payment.
-        # THIS IS A MOCK. Replace with actual POS payment integration (e.g., Stripe Terminal).
-        payment_successful = self._process_pos_payment(
-            total_amount, sale_data.get("payment_details")
+        # Step 3: Process the payment using real payment service.
+        payment_result = self.payment_service.process_pos_payment(
+            amount=total_amount,
+            payment_method=sale_data.get("payment_method", "card"),
+            payment_details=sale_data.get("payment_details", {})
         )
+        
+        payment_successful = payment_result.get("success", False)
 
         if not payment_successful:
-            return {"success": False, "error": "Payment processing failed."}
+            return {
+                "success": False, 
+                "error": payment_result.get("error", "Payment processing failed.")
+            }
 
         new_order.payment_status = "PAID"
+        new_order.payment_reference = payment_result.get("payment_intent_id") or payment_result.get("reference")
         db.session.add(new_order)
         db.session.commit()
 
@@ -99,36 +108,112 @@ class POSService:
         return {"success": True, "order_id": new_order.id, "receipt_url": receipt_url}
 
     def _process_pos_payment(self, amount, payment_details):
-        """Mock POS payment processing. In a real app, this would interact with a payment terminal SDK."""
-        print(f"Processing POS payment of {amount} with details: {payment_details}")
-        return True  # Assume success for this mock.
+        """Process POS payment using the payment service."""
+        return self.payment_service.process_pos_payment(
+            amount=amount,
+            payment_method=payment_details.get("payment_method", "card"),
+            payment_details=payment_details
+        )
 
     @staticmethod
     def create_transaction(transaction_data):
         """Create a POS transaction."""
-        # TODO: Implement POS transaction logic
-        # This should handle:
-        # - Inventory checks
-        # - Payment processing
-        # - Order creation
-        # - Receipt generation
+        try:
+            # Generate unique transaction ID
+            import uuid
+            transaction_id = f"POS_{uuid.uuid4().hex[:8].upper()}"
+            
+            # Create POS transaction record
+            pos_transaction = POSTransaction(
+                transaction_id=transaction_id,
+                user_id=transaction_data.get("user_id"),
+                total_amount=transaction_data.get("total_amount", 0),
+                payment_method=transaction_data.get("payment_method", "cash"),
+                payment_reference=transaction_data.get("payment_reference"),
+                terminal_id=transaction_data.get("terminal_id"),
+                cashier_id=transaction_data.get("cashier_id"),
+                status="pending"
+            )
+            
+            db.session.add(pos_transaction)
+            db.session.flush()
+            
+            # Process the transaction
+            result = POSService._process_transaction(pos_transaction, transaction_data)
+            
+            if result["success"]:
+                pos_transaction.status = "completed"
+                pos_transaction.processed_at = datetime.utcnow()
+                pos_transaction.order_id = result.get("order_id")
+            else:
+                pos_transaction.status = "failed"
+            
+            db.session.commit()
+            
+            logger.info(f"POS transaction {transaction_id} created with status: {pos_transaction.status}")
+            return pos_transaction
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error creating POS transaction: {e}")
+            raise
 
-        logger.info(f"POS transaction requested: {transaction_data}")
-
-        # Placeholder implementation
-        class MockTransaction:
-            def __init__(self, data):
-                self.id = 1
-                self.data = data
-
-            def to_dict(self):
-                return {
-                    "id": self.id,
-                    "status": "completed",
-                    "message": "Transaction processed successfully",
-                }
-
-        return MockTransaction(transaction_data)
+    @staticmethod
+    def _process_transaction(pos_transaction, transaction_data):
+        """Process the actual transaction logic."""
+        try:
+            # Check inventory for all items
+            items = transaction_data.get("items", [])
+            for item in items:
+                product = Product.query.get(item["product_id"])
+                if not product or product.stock < item["quantity"]:
+                    return {
+                        "success": False,
+                        "error": f"Insufficient stock for product {product.name if product else 'unknown'}"
+                    }
+            
+            # Create order
+            order = Order(
+                user_id=transaction_data.get("user_id"),
+                total_amount=pos_transaction.total_amount,
+                order_status="COMPLETED",  # POS orders are completed immediately
+                shipping_address_id=transaction_data.get("shipping_address_id"),
+                billing_address_id=transaction_data.get("billing_address_id")
+            )
+            
+            db.session.add(order)
+            db.session.flush()
+            
+            # Create order items and update inventory
+            for item in items:
+                product = Product.query.get(item["product_id"])
+                
+                # Create order item
+                order_item = OrderItem(
+                    order_id=order.id,
+                    product_id=product.id,
+                    quantity=item["quantity"],
+                    price_at_purchase=product.price
+                )
+                db.session.add(order_item)
+                
+                # Update inventory
+                product.stock -= item["quantity"]
+            
+            db.session.commit()
+            
+            return {
+                "success": True,
+                "order_id": order.id
+            }
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error processing transaction: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
     def create_custom_cart_for_user(self, user_id, items_data):
         """
@@ -200,13 +285,88 @@ class POSService:
     @staticmethod
     def get_transaction(transaction_id):
         """Get a POS transaction by ID."""
-        # TODO: Implement transaction retrieval logic
-        logger.info(f"POS transaction {transaction_id} requested")
-        return None
+        try:
+            # Try to find by transaction_id first, then by UUID
+            transaction = db.session.query(POSTransaction).filter(
+                POSTransaction.transaction_id == transaction_id
+            ).first()
+            
+            if not transaction:
+                # Try as UUID
+                try:
+                    import uuid
+                    transaction_uuid = uuid.UUID(transaction_id)
+                    transaction = db.session.query(POSTransaction).filter(
+                        POSTransaction.id == transaction_uuid
+                    ).first()
+                except ValueError:
+                    pass
+            
+            if transaction:
+                logger.info(f"POS transaction {transaction_id} retrieved successfully")
+                return transaction
+            else:
+                logger.warning(f"POS transaction {transaction_id} not found")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error retrieving POS transaction {transaction_id}: {e}")
+            return None
 
     @staticmethod
-    def void_transaction(transaction_id):
+    def void_transaction(transaction_id, reason=None):
         """Void a POS transaction."""
-        # TODO: Implement transaction voiding logic
-        logger.info(f"POS transaction {transaction_id} void requested")
-        return True
+        try:
+            transaction = POSService.get_transaction(transaction_id)
+            
+            if not transaction:
+                return {
+                    "success": False,
+                    "error": "Transaction not found"
+                }
+            
+            if transaction.status == "voided":
+                return {
+                    "success": False,
+                    "error": "Transaction already voided"
+                }
+            
+            if transaction.status != "completed":
+                return {
+                    "success": False,
+                    "error": "Only completed transactions can be voided"
+                }
+            
+            # Update transaction status
+            transaction.status = "voided"
+            transaction.voided_at = datetime.utcnow()
+            transaction.void_reason = reason or "Voided by admin"
+            
+            # Restore inventory if order exists
+            if transaction.order_id:
+                order = Order.query.get(transaction.order_id)
+                if order:
+                    for item in order.items:
+                        product = Product.query.get(item.product_id)
+                        if product:
+                            product.stock += item.quantity
+                    
+                    # Mark order as cancelled
+                    order.order_status = "CANCELLED"
+            
+            db.session.commit()
+            
+            logger.info(f"POS transaction {transaction_id} voided successfully")
+            return {
+                "success": True,
+                "message": "Transaction voided successfully",
+                "transaction": transaction.to_dict()
+            }
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error voiding POS transaction {transaction_id}: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
