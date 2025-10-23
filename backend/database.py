@@ -1,4 +1,5 @@
 from flask import request
+from flask.cli import with_appcontext
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 
@@ -6,6 +7,13 @@ from backend.loggers import database_logger as db_logger
 
 db = SQLAlchemy()
 migrate = Migrate()
+
+
+@with_appcontext
+def init_db_command():
+    """Initialize the database."""
+    db.create_all()
+    print("Database initialized.")
 
 
 def setup_database_security(app):

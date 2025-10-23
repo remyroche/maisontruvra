@@ -62,7 +62,10 @@ def vite_asset(path: str) -> Markup:
     Returns:
         Markup object containing HTML tags for the asset
     """
-    manifest_path = os.path.join(current_app.static_folder, "dist", "manifest.json")
+    static_folder = current_app.static_folder
+    if static_folder is None:
+        raise RuntimeError("Static folder not configured")
+    manifest_path = os.path.join(static_folder, "dist", "manifest.json")
 
     # In development, Vite serves assets from its own server (HMR)
     if current_app.debug:
@@ -122,3 +125,15 @@ def vite_asset(path: str) -> Markup:
                 html += "<!-- Invalid CSS URL -->\n"
 
     return Markup(html)
+
+
+class Vite:
+    """Vite integration for Flask applications."""
+    
+    def __init__(self, app=None):
+        if app is not None:
+            self.init_app(app)
+    
+    def init_app(self, app):
+        """Initialize the Vite extension with the Flask app."""
+        app.jinja_env.globals['vite_asset'] = vite_asset

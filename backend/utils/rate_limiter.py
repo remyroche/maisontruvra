@@ -25,7 +25,7 @@ class RateLimiter:
         self.requests: dict[str, list[float]] = defaultdict(list)
         self.blocked_ips: set[str] = set()
 
-    def is_rate_limited(self, identifier: str, max_requests: int, window: int) -> bool:
+    def is_rate_limited(self, identifier: str | None, max_requests: int, window: int) -> bool:
         """
         Check if an identifier is rate limited.
 

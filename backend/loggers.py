@@ -75,3 +75,10 @@ def setup_logging(app):
 
         # FIX: Added import for 'jsonify' from 'flask'
         return jsonify(error="An unexpected server error occurred."), 500
+
+
+# Create specific loggers for different components
+app_logger = logging.getLogger("backend.app")
+database_logger = logging.getLogger("backend.database")
+security_logger = logging.getLogger("backend.security")
+api_logger = logging.getLogger("backend.api")

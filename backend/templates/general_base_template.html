@@ -39,8 +39,8 @@
                     <!-- Header -->
                     <tr>
                         <td class="header" align="center" style="padding: 40px 0;">
-                            <a href="{{ url_for('main.index', _external=True) }}">
-                                <img src="{{ logo_url or url_for('static', filename='images/logo_email.png', _external=True) }}" alt="Maison Truvrā" width="180" style="display: block;">
+                            <a href="{{ config.BASE_URL }}{{ url_for('main.index') }}">
+                                <img src="{{ logo_url or config.BASE_URL }}{{ url_for('static', filename='images/logo_email.png') }}" alt="Maison Truvrā" width="180" style="display: block;">
                             </a>
                         </td>
                     </tr>

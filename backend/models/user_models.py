@@ -94,35 +94,35 @@ class User(BaseModel, SoftDeleteMixin):
 
     # --- Hybrid Properties for Encrypted Fields ---
     @hybrid_property
-    def email(self):
+    def email(self) -> str:
         return decrypt_data(self._email)
 
     @email.setter
-    def email(self, value):
+    def email(self, value: str) -> None:
         self._email = encrypt_data(value)
 
     @hybrid_property
-    def first_name(self):
+    def first_name(self) -> str:
         return decrypt_data(self._first_name)
 
     @first_name.setter
-    def first_name(self, value):
+    def first_name(self, value: str) -> None:
         self._first_name = encrypt_data(value)
 
     @hybrid_property
-    def last_name(self):
+    def last_name(self) -> str:
         return decrypt_data(self._last_name)
 
     @last_name.setter
-    def last_name(self, value):
+    def last_name(self, value: str) -> None:
         self._last_name = encrypt_data(value)
 
     @hybrid_property
-    def phone_number(self):
+    def phone_number(self) -> str | None:
         return decrypt_data(self._phone_number) if self._phone_number else None
 
     @phone_number.setter
-    def phone_number(self, value):
+    def phone_number(self, value: str | None) -> None:
         self._phone_number = encrypt_data(value) if value else None
 
     # --- Other Properties ---
@@ -210,7 +210,7 @@ class Role(BaseModel, SoftDeleteMixin):
         return {"id": self.id, "name": self.name.value, "is_deleted": self.is_deleted}
 
 
-class UserRole(db.Model):
+class UserRole(BaseModel):
     __tablename__ = "user_roles"
     user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
     role_id = Column(Integer, ForeignKey("roles.id"), primary_key=True)

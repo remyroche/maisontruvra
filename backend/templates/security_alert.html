@@ -10,7 +10,7 @@
             <p style="margin: 0 0 10px 0;"><strong>Détails de la connexion :</strong></p>
             <p style="margin: 0 0 5px 0;"><strong>Date :</strong> {{ now.strftime('%d/%m/%Y à %H:%M') }}</p>
             <p style="margin: 0 0 30px 0;"><strong>Adresse IP (approximative) :</strong> {{ ip_address }}</p>
-            <p style="margin: 0 0 20px 0;">Si vous reconnaissez cette activité, vous pouvez ignorer cette alerte. Si ce n'est pas vous, nous vous recommandons vivement de <a href="{{ url_for('auth.request_password_reset', _external=True) }}" style="color: #B8860B; font-weight: bold;">réinitialiser votre mot de passe immédiatement</a> et de vérifier l'activité de votre compte.</p>
+            <p style="margin: 0 0 20px 0;">Si vous reconnaissez cette activité, vous pouvez ignorer cette alerte. Si ce n'est pas vous, nous vous recommandons vivement de <a href="{{ config.BASE_URL }}{{ url_for('auth.request_password_reset') }}" style="color: #B8860B; font-weight: bold;">réinitialiser votre mot de passe immédiatement</a> et de vérifier l'activité de votre compte.</p>
             <p style="margin: 0;">La protection de vos informations est notre plus grande priorité.</p>
             <p style="margin: 20px 0 0 0;">Cordialement,</p>
             <p style="margin: 10px 0 0 0; font-family: 'Playfair Display', serif; color: #4A2E2A;">L'équipe Sécurité de la Maison Truvrā</p>

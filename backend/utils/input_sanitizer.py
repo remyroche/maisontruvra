@@ -34,8 +34,8 @@ class InputSanitizer:
 
         # Configure allowed HTML tags and attributes.
         # For strict prevention in API inputs, it's often best to allow nothing.
-        allowed_tags = []  # No HTML tags allowed
-        allowed_attributes = {}  # No attributes allowed
+        allowed_tags: list[str] = []  # No HTML tags allowed
+        allowed_attributes: dict[str, list[str]] = {}  # No attributes allowed
 
         sanitized_text = bleach.clean(
             text,
@@ -87,11 +87,11 @@ class InputSanitizer:
                 "h2",
                 "h3",
             ]
-            allowed_attributes = {}
+            allowed_attributes: dict[str, list[str]] = {}
         else:
             # Default is to strip all HTML
-            allowed_tags = []
-            allowed_attributes = {}
+            allowed_tags: list[str] = []
+            allowed_attributes: dict[str, list[str]] = {}
 
         clean_html = bleach.clean(
             dirty_html, tags=allowed_tags, attributes=allowed_attributes, strip=True

@@ -16,7 +16,7 @@
             <table border="0" cellspacing="0" cellpadding="0">
                 <tr>
                     <td class="button" align="center" style="background-color: #4A2E2A; border-radius: 5px;">
-                        <a href="{{ url_for('b2b.login', _external=True) }}" target="_blank" style="font-size: 16px; font-family: 'Lato', Arial, sans-serif; font-weight: bold; color: #FFFFFF; text-decoration: none; border-radius: 5px; padding: 15px 25px; border: 1px solid #4A2E2A; display: inline-block;">Accéder au portail B2B</a>
+                        <a href="{{ config.BASE_URL }}{{ url_for('b2b.login') }}" target="_blank" style="font-size: 16px; font-family: 'Lato', Arial, sans-serif; font-weight: bold; color: #FFFFFF; text-decoration: none; border-radius: 5px; padding: 15px 25px; border: 1px solid #4A2E2A; display: inline-block;">Accéder au portail B2B</a>
                     </td>
                 </tr>
             </table>

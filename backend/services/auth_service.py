@@ -69,7 +69,7 @@ class AuthService:
 
             # Send verification email
             token = self.generate_verification_token(user.email)
-            verification_url = url_for("auth.verify_email", token=token, _external=True)
+            verification_url = f"{current_app.config['BASE_URL']}{url_for('auth.verify_email', token=token)}"
             subject = "Welcome to Maison Truvra! Please Verify Your Email"
             template = "welcome_and_verify"
             context = {"user": user, "verification_url": verification_url}
@@ -144,7 +144,7 @@ class AuthService:
         user = self.user_service.get_user_by_email(email)
         if user:
             token = self.generate_verification_token(email)
-            reset_url = url_for("auth.reset_password", token=token, _external=True)
+            reset_url = f"{current_app.config['BASE_URL']}{url_for('auth.reset_password', token=token)}"
             subject = "Password Reset Request"
             template = "password_reset_request"
             context = {"user": user, "reset_url": reset_url}

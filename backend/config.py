@@ -133,9 +133,9 @@ class ProductionConfig(Config):
 
     DEBUG = False
     TESTING = False
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
+    SQLALCHEMY_DATABASE_URI: str = os.environ.get(
         "DATABASE_URL"
-    )  # No default for production
+    ) or ""  # No default for production
     # Enforce secure cookies in production
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True

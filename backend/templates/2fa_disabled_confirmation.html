@@ -7,7 +7,7 @@
             <h1 style="font-family: 'Playfair Display', Georgia, serif; color: #4A2E2A; font-size: 28px; margin: 0 0 20px 0;">Sécurité de votre compte modifiée</h1>
             <p style="margin: 0 0 20px 0;">Cher(e) {{ user.first_name }},</p>
             <p style="margin: 0 0 30px 0;">Nous vous confirmons que l'authentification à deux facteurs (2FA) a été désactivée sur votre compte Maison Truvrā.</p>
-            <p style="margin: 0 0 20px 0;">Si vous n'êtes pas à l'origine de cette modification, veuillez <a href="{{ url_for('auth.request_password_reset', _external=True) }}" style="color: #B8860B; font-weight: bold;">réinitialiser votre mot de passe</a> et contacter notre service client immédiatement.</p>
+            <p style="margin: 0 0 20px 0;">Si vous n'êtes pas à l'origine de cette modification, veuillez <a href="{{ config.BASE_URL }}{{ url_for('auth.request_password_reset') }}" style="color: #B8860B; font-weight: bold;">réinitialiser votre mot de passe</a> et contacter notre service client immédiatement.</p>
             <p style="margin: 0;">Avec nos salutations distinguées,</p>
             <p style="margin: 10px 0 0 0; font-family: 'Playfair Display', serif; color: #4A2E2A;">L'équipe de la Maison Truvrā</p>
         </td>
