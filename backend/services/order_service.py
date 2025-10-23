@@ -165,34 +165,44 @@ class OrderService:
 
     def get_order_by_id(self, order_id: uuid.UUID, user_id: uuid.UUID = None):
         """
-        Retrieves a single order by its ID, ensuring it belongs to the user if user_id is provided.
+        Retrieves a single order by its ID with optimized query, ensuring it belongs to the user if user_id is provided.
         """
-        query = self.session.query(Order).options(
-            subqueryload(Order.items).joinedload(OrderItem.product),
-            joinedload(Order.shipping_address),
-        )
-        if user_id:
-            query = query.filter_by(id=order_id, user_id=user_id)
-        else:
-            query = query.filter_by(id=order_id)
+        from ..utils.query_optimizer import QueryOptimizer
+        from ..utils.performance_monitor import monitor_query_performance
+        
+        @monitor_query_performance(threshold=0.1)  # Monitor queries > 100ms
+        def _get_order():
+            # Use optimized query with comprehensive eager loading
+            query = QueryOptimizer.get_optimized_order_query()
+            if user_id:
+                query = query.filter_by(id=order_id, user_id=user_id)
+            else:
+                query = query.filter_by(id=order_id)
 
-        order = query.first()
-        if not order:
-            raise NotFoundException(resource_name="Order", resource_id=order_id)
-        return order
+            order = query.first()
+            if not order:
+                raise NotFoundException(resource_name="Order", resource_id=order_id)
+            return order
+        
+        return _get_order()
 
     def get_user_orders_paginated(
         self, user_id: uuid.UUID, page: int = 1, per_page: int = 10
     ):
         """
-        Gets a paginated list of orders for a specific user.
+        Gets a paginated list of orders for a specific user with optimization.
         """
-        query = (
-            self.session.query(Order)
-            .filter_by(user_id=user_id)
-            .order_by(Order.created_at.desc())
-        )
-        return query.paginate(page=page, per_page=per_page, error_out=False)
+        from ..utils.query_optimizer import QueryOptimizer
+        from ..utils.performance_monitor import monitor_query_performance
+        
+        @monitor_query_performance(threshold=0.15)  # Monitor queries > 150ms
+        def _get_user_orders():
+            # Use optimized query with eager loading
+            query = QueryOptimizer.get_optimized_order_query()
+            query = query.filter_by(user_id=user_id).order_by(Order.created_at.desc())
+            return query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        return _get_user_orders()
 
     def get_all_orders_paginated(
         self,

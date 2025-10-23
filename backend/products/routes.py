@@ -26,65 +26,83 @@ inventory_service = InventoryService(logger)
 @products_bp.route("/<uuid:product_id>/recommendations", methods=["GET"])
 def get_recommendations(product_id):
     """Gets co-purchased product recommendations for a given product."""
-    recommendations = product_service.get_product_recommendations(product_id)
-    return jsonify(ProductSchema(many=True).dump(recommendations))
+    from ..utils.performance_monitor import monitor_query_performance
+    
+    @monitor_query_performance(threshold=0.2)  # Monitor endpoint performance
+    def _get_recommendations():
+        recommendations = product_service.get_product_recommendations(product_id)
+        return ProductSchema(many=True).dump(recommendations)
+    
+    return jsonify(_get_recommendations())
 
 
 @products_bp.route("/search", methods=["GET"])
 def search_products():
-    """Endpoint for product search/autocomplete."""
-    query = InputSanitizer.sanitize_input(request.args.get("q", ""))
-    if len(query) < 2:
-        return jsonify([])
+    """Endpoint for product search/autocomplete with performance monitoring."""
+    from ..utils.performance_monitor import monitor_query_performance
+    
+    @monitor_query_performance(threshold=0.1)  # Monitor endpoint performance
+    def _search_products():
+        query = InputSanitizer.sanitize_input(request.args.get("q", ""))
+        if len(query) < 2:
+            return []
 
-    products = product_service.search_products(query)
-    return jsonify([{"id": str(p.id), "name": p.name, "sku": p.sku} for p in products])
+        products = product_service.search_products(query)
+        return [{"id": str(p.id), "name": p.name, "sku": p.sku} for p in products]
+    
+    return jsonify(_search_products())
 
 
 @products_bp.route("/", methods=["GET"])
 @cache.cached(timeout=300)  # Cache for 5 minutes
 def get_products():
     """Get a list of all available products with filtering and pagination."""
-    try:
-        validated_params = ProductSearchSchema().load(request.args)
-    except ValidationError as err:
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": "Invalid query parameters",
-                    "errors": err.messages,
-                }
-            ),
-            400,
-        )
+    from ..utils.performance_monitor import monitor_query_performance
+    
+    @monitor_query_performance(threshold=0.2)  # Monitor endpoint performance
+    def _get_products():
+        try:
+            validated_params = ProductSearchSchema().load(request.args)
+        except ValidationError as err:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Invalid query parameters",
+                        "errors": err.messages,
+                    }
+                ),
+                400,
+            )
 
-    try:
-        products_pagination = product_service.get_all_products_paginated(
-            page=validated_params.get("page", 1),
-            per_page=validated_params.get("per_page", 24),
-            filters=validated_params,
-        )
-        return jsonify(
-            {
-                "status": "success",
-                "data": ProductSchema(many=True).dump(products_pagination.items),
-                "total": products_pagination.total,
-                "pages": products_pagination.pages,
-                "current_page": products_pagination.page,
-            }
-        )
-    except Exception as e:
-        logger.error(f"Error fetching products: {e}", exc_info=True)
-        return (
-            jsonify(
+        try:
+            products_pagination = product_service.get_all_products_paginated(
+                page=validated_params.get("page", 1),
+                per_page=validated_params.get("per_page", 24),
+                filters=validated_params,
+            )
+            return jsonify(
                 {
-                    "status": "error",
-                    "message": "An error occurred while fetching products.",
+                    "status": "success",
+                    "data": ProductSchema(many=True).dump(products_pagination.items),
+                    "total": products_pagination.total,
+                    "pages": products_pagination.pages,
+                    "current_page": products_pagination.page,
                 }
-            ),
-            500,
-        )
+            )
+        except Exception as e:
+            logger.error(f"Error fetching products: {e}", exc_info=True)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "An error occurred while fetching products.",
+                    }
+                ),
+                500,
+            )
+    
+    return _get_products()
 
 
 @products_bp.route("/<slug>", methods=["GET"])

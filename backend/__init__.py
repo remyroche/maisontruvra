@@ -27,6 +27,7 @@ from .extensions import (
 from .logger_and_error_handler import register_error_handlers
 from .loggers import api_logger, database_logger, security_logger, setup_logging
 from .utils.vite import Vite
+from .utils.performance_monitor import setup_performance_monitoring
 from .middleware import check_staff_session, mfa_check_middleware, setup_middleware
 from .utils.input_sanitizer import init_app_middleware
 from .utils.vite import vite_asset
@@ -197,6 +198,7 @@ def _register_admin_blueprints(app: Flask) -> None:
     from .admin_api.session_routes import admin_session_bp
     from .admin_api.recommendation_routes import admin_recommendation_bp
     from backend.admin_api.recycling_bin_routes import recycling_bin_bp
+    from backend.admin_api.performance_routes import performance_bp
 
     app.register_blueprint(admin_auth_bp, url_prefix="/api/admin/auth")
     app.register_blueprint(admin_dashboard_bp, url_prefix="/api/admin/dashboard")
@@ -217,6 +219,7 @@ def _register_admin_blueprints(app: Flask) -> None:
     app.register_blueprint(admin_session_bp, url_prefix="/api/admin/sessions")
     app.register_blueprint(admin_recommendation_bp)
     app.register_blueprint(recycling_bin_bp)
+    app.register_blueprint(performance_bp)
 
 
 def create_app(config_class=config.Config):
@@ -244,6 +247,9 @@ def create_app(config_class=config.Config):
     # Setup logging and error handling
     setup_logging(app)
     register_error_handlers(app)
+    
+    # Setup performance monitoring
+    setup_performance_monitoring(app)
     
     # Register all blueprints
     _setup_blueprints(app)

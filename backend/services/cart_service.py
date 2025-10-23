@@ -30,30 +30,40 @@ class CartService:
         self.logger = logger or logging.getLogger(__name__)
 
     def _get_or_create_cart(self, user_id: int) -> Cart:
-        """Private helper to retrieve a user's cart, creating one if it doesn't exist."""
-        cart = Cart.query.filter_by(user_id=user_id, is_active=True).first()
-        if not cart:
-            self.logger.info(
-                f"No active cart found for user {user_id}. Creating a new one."
-            )
-            cart = Cart(user_id=user_id)
-            db.session.add(cart)
-            # We don't commit here; the calling function will handle the transaction.
-            db.session.flush()  # Flush to get the cart ID
-        return cart
+        """Private helper to retrieve a user's cart with optimization, creating one if it doesn't exist."""
+        from ..utils.performance_monitor import monitor_query_performance
+        
+        @monitor_query_performance(threshold=0.05)  # Monitor queries > 50ms
+        def _get_cart():
+            cart = Cart.query.filter_by(user_id=user_id, is_active=True).first()
+            if not cart:
+                self.logger.info(
+                    f"No active cart found for user {user_id}. Creating a new one."
+                )
+                cart = Cart(user_id=user_id)
+                db.session.add(cart)
+                # We don't commit here; the calling function will handle the transaction.
+                db.session.flush()  # Flush to get the cart ID
+            return cart
+        
+        return _get_cart()
 
     def get_cart_details(self, user_id: int) -> dict:
         """
-        Retrieves full cart details for a user, applying B2B tiered pricing if applicable.
+        Retrieves full cart details for a user with optimization, applying B2B tiered pricing if applicable.
         This is the primary method for fetching the current state of a user's cart.
         """
-        user = User.query.options(
-            joinedload(User.tier),
-            joinedload(User.carts).joinedload(Cart.items).joinedload(CartItem.product),
-        ).get(user_id)
+        from ..utils.query_optimizer import QueryOptimizer
+        from ..utils.performance_monitor import monitor_query_performance
+        
+        @monitor_query_performance(threshold=0.1)  # Monitor queries > 100ms
+        def _get_cart_details():
+            # Use optimized query with comprehensive eager loading
+            query = QueryOptimizer.get_optimized_user_query()
+            user = query.filter_by(id=user_id).first()
 
-        if not user:
-            raise NotFoundException("User not found.")
+            if not user:
+                raise NotFoundException("User not found.")
 
         cart = next((c for c in user.carts if c.is_active), None)
         if not cart:
@@ -98,16 +108,18 @@ class CartService:
         total = sum(Decimal(i["line_total"]) for i in items_details)
         total_discount = subtotal - total
 
-        return {
-            "cart_id": cart.id,
-            "items": items_details,
-            "subtotal": str(subtotal.quantize(Decimal("0.01"))),
-            "discount": str(total_discount.quantize(Decimal("0.01"))),
-            "total": str(total.quantize(Decimal("0.01"))),
-            "tier_name": user.tier.name
-            if user.user_type == UserType.B2B and user.tier
-            else None,
-        }
+            return {
+                "cart_id": cart.id,
+                "items": items_details,
+                "subtotal": str(subtotal.quantize(Decimal("0.01"))),
+                "discount": str(total_discount.quantize(Decimal("0.01"))),
+                "total": str(total.quantize(Decimal("0.01"))),
+                "tier_name": user.tier.name
+                if user.user_type == UserType.B2B and user.tier
+                else None,
+            }
+        
+        return _get_cart_details()
 
     def add_item(
         self, user_id: int, product_id: int, quantity: int, custom_price: Decimal = None

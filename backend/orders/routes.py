@@ -48,14 +48,19 @@ def get_order_details(order_id):
 @login_required
 def get_user_orders():
     """
-    Get all orders for the currently logged-in user.
+    Get all orders for the currently logged-in user with optimization.
     """
-    orders = (
-        Order.query.filter_by(user_id=current_user.id)
-        .order_by(Order.created_at.desc())
-        .all()
-    )
-    return jsonify([order.to_dict() for order in orders])
+    from ..utils.query_optimizer import QueryOptimizer
+    from ..utils.performance_monitor import monitor_query_performance
+    
+    @monitor_query_performance(threshold=0.2)  # Monitor endpoint performance
+    def _get_user_orders():
+        # Use optimized query with eager loading
+        query = QueryOptimizer.get_optimized_order_query()
+        orders = query.filter_by(user_id=current_user.id).order_by(Order.created_at.desc()).all()
+        return [order.to_dict() for order in orders]
+    
+    return jsonify(_get_user_orders())
 
 
 def get_session_id():

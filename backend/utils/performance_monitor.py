@@ -119,5 +119,18 @@ def analyze_query_patterns():
     return {
         'total_slow_queries': len(slow_queries),
         'patterns': patterns,
-        'recommendations': recommendations
+        'recommendations': recommendations,
+        'last_updated': time.time()
     }
+
+
+def setup_performance_monitoring(app):
+    """
+    Setup performance monitoring for the Flask application.
+    
+    Args:
+        app: Flask application instance
+    """
+    # Performance monitoring is already set up via SQLAlchemy event listeners
+    # This function can be used for additional setup if needed
+    app.logger.info("Performance monitoring initialized")
