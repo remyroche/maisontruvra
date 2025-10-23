@@ -80,8 +80,12 @@ def _setup_extensions(app: Flask) -> None:
     migrate.init_app(app, db)
     login_manager.init_app(app)
     csrf.init_app(app)
+    # Get allowed origins from environment variable or use default
+    allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
     cors.init_app(
-        app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}}
+        app, 
+        supports_credentials=True, 
+        resources={r"/api/*": {"origins": allowed_origins}}
     )
     mail.init_app(app)
     celery.config_from_object(app.config, namespace="CELERY")
