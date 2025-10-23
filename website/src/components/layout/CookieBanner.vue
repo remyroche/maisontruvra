@@ -39,19 +39,20 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { safeStorage } from '@/utils/secureStorage';
 
 const showBanner = ref(false);
 
 onMounted(() => {
   // Check if user has already made a choice
-  const cookieConsent = localStorage.getItem('cookieConsent');
+  const cookieConsent = safeStorage.getItem('cookieConsent');
   if (!cookieConsent) {
     showBanner.value = true;
   }
 });
 
 function acceptCookies() {
-  localStorage.setItem('cookieConsent', 'accepted');
+  safeStorage.setItem('cookieConsent', 'accepted', { expires: 365 * 24 * 60 * 60 * 1000 }); // 1 year
   showBanner.value = false;
   
   // Enable analytics and other tracking cookies here
@@ -59,7 +60,7 @@ function acceptCookies() {
 }
 
 function declineCookies() {
-  localStorage.setItem('cookieConsent', 'declined');
+  safeStorage.setItem('cookieConsent', 'declined', { expires: 365 * 24 * 60 * 60 * 1000 }); // 1 year
   showBanner.value = false;
   
   // Disable analytics and other tracking cookies here

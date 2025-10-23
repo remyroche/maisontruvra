@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import api from '@/services/api';
+import { safeStorage } from '@/utils/secureStorage';
 
 export const useProductStore = defineStore('product', () => {
     // --- STATE ---
@@ -11,7 +12,7 @@ export const useProductStore = defineStore('product', () => {
     const error = ref(null);
 
     // --- NEW STATE for Recently Viewed ---
-    const recentlyViewedIds = ref(JSON.parse(localStorage.getItem('recentlyViewed') || '[]'));
+    const recentlyViewedIds = ref(safeStorage.getItem('recentlyViewed') || []);
     const recentlyViewedProducts = ref([]);
     const recentlyViewedLoading = ref(false);
 
@@ -70,8 +71,8 @@ export const useProductStore = defineStore('product', () => {
             recentlyViewedIds.value.pop();
         }
 
-        // Persist to localStorage
-        localStorage.setItem('recentlyViewed', JSON.stringify(recentlyViewedIds.value));
+        // Persist to secure storage
+        safeStorage.setItem('recentlyViewed', recentlyViewedIds.value, { expires: 30 * 24 * 60 * 60 * 1000 }); // 30 days
     }
 
     async function fetchRecentlyViewedProducts() {

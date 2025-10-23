@@ -1,9 +1,10 @@
 import { reactive, toRefs } from 'vue';
 import { setLocale as setVeeValidateLocale } from '@vee-validate/i18n';
+import { safeStorage } from '@/utils/secureStorage';
 
 // --- State ---
 const state = reactive({
-    currentLocale: localStorage.getItem('locale') || 'fr',
+    currentLocale: safeStorage.getItem('locale') || 'fr',
     translations: {},
 });
 
@@ -51,7 +52,7 @@ const i18n = {
             return;
         }
         state.currentLocale = locale;
-        localStorage.setItem('locale', locale);
+        safeStorage.setItem('locale', locale, { expires: 365 * 24 * 60 * 60 * 1000 }); // 1 year
         document.querySelector('html').setAttribute('lang', locale);
         
         // Also set the locale for VeeValidate messages
