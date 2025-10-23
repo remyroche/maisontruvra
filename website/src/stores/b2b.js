@@ -13,9 +13,15 @@ export const useB2BStore = defineStore('b2b', () => {
   const profile = ref(null);
   const users = ref([]);
   const quotes = ref([]);
+  const orders = ref([]);
   const currentQuote = ref(null);
   const isLoading = ref(false);
   const error = ref(null);
+  
+  // Dashboard data
+  const pendingQuotes = ref(0);
+  const activeOrders = ref(0);
+  const totalRevenue = ref(0);
 
   // --- ACTIONS ---
 
@@ -142,19 +148,82 @@ export const useB2BStore = defineStore('b2b', () => {
     }
   }
 
+  // --- Dashboard Data ---
+
+  /**
+   * Loads dashboard data including stats and recent activity.
+   */
+  async function loadDashboardData() {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await api.get('/b2b/dashboard');
+      const data = response.data;
+      pendingQuotes.value = data.pendingQuotes || 0;
+      activeOrders.value = data.activeOrders || 0;
+      totalRevenue.value = data.totalRevenue || 0;
+    } catch (err) {
+      error.value = 'Failed to load dashboard data.';
+      useNotificationStore().addNotification(error.value, 'error');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /**
+   * Loads quotes for the current B2B account.
+   */
+  async function loadQuotes() {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await api.get('/b2b/quotes');
+      quotes.value = response.data;
+    } catch (err) {
+      error.value = 'Failed to load quotes.';
+      useNotificationStore().addNotification(error.value, 'error');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /**
+   * Loads orders for the current B2B account.
+   */
+  async function loadOrders() {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await api.get('/b2b/orders');
+      orders.value = response.data;
+    } catch (err) {
+      error.value = 'Failed to load orders.';
+      useNotificationStore().addNotification(error.value, 'error');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   // Expose state and actions
   return {
     profile,
     users,
     quotes,
+    orders,
     currentQuote,
     isLoading,
     error,
+    pendingQuotes,
+    activeOrders,
+    totalRevenue,
     fetchB2BProfile,
     deleteB2BAccount,
     fetchB2BUsers,
     submitQuoteRequest,
     fetchB2BQuotes,
     fetchB2BQuoteDetails,
+    loadDashboardData,
+    loadQuotes,
+    loadOrders,
   };
 });

@@ -12,10 +12,11 @@ export const useAdminAuthStore = defineStore('adminAuth', {
     failedRequest: null,
   }),
   actions: {
-    async login(credentials) {
+    async login(email, password) {
       this.isLoading = true;
+      this.error = null;
       try {
-        await adminApiClient.post('/auth/login', credentials);
+        await adminApiClient.post('/auth/login', { email, password });
         await this.checkAuth();
         if (this.isAuthenticated) {
             router.push({ name: 'AdminDashboard' });
