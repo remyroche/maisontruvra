@@ -10,12 +10,7 @@ from .extensions import cache
 # Configure a logger for this file
 logger = logging.getLogger(__name__)
 
-# Import services at module level to avoid import issues
-from .services.order_service import OrderService
-from .services.invoice_service import InvoiceService
-from .services.notification_service import NotificationService
-from .services.b2b_service import B2BService
-from .services.loyalty_service import LoyaltyService
+# Services will be imported locally in functions to avoid circular imports
 
 # ==============================================================================
 # 1. USER-FACING & TRANSACTIONAL TASKS
@@ -33,6 +28,7 @@ def finalize_order_task(self, order_id):
     """
     logger.info("Executing 'finalize_order_task' for order ID: %s", order_id)
     try:
+        from .services.order_service import OrderService
         order_service = OrderService()
         order = order_service.get_order_by_id(order_id)
         if not order:
@@ -62,6 +58,7 @@ def generate_invoice_pdf_task(self, invoice_id):
     """Celery task to generate a PDF invoice by calling the InvoiceService."""
     logger.info("Starting PDF generation for Invoice ID: %s", invoice_id)
     try:
+        from .services.invoice_service import InvoiceService
         invoice_service = InvoiceService()
         # Note: This method may not exist, needs to be implemented
         # invoice_service.generate_invoice_pdf(invoice_id)
@@ -137,6 +134,7 @@ def process_b2b_quick_order_task(self, b2b_user_id, file_content_str):
     """
     logger.info("Starting B2B quick order processing for user %s.", b2b_user_id)
     try:
+        from .services.b2b_service import B2BService
         b2b_service = B2BService()
         # Note: This method may not exist, needs to be implemented
         # b2b_service.create_order_from_csv(b2b_user_id, file_content_str)
@@ -186,6 +184,7 @@ def update_all_user_tiers_task(self):
     """
     logger.info("Starting scheduled user tier recalculation task.")
     try:
+        from .services.loyalty_service import LoyaltyService
         loyalty_service = LoyaltyService()
         # Note: This method may not exist, needs to be implemented
         # result_message = loyalty_service.update_all_user_tiers()
@@ -210,6 +209,7 @@ def expire_loyalty_points_task(self):
     """Scheduled task to expire old loyalty points."""
     logger.info("Starting scheduled task: expire_loyalty_points_task")
     try:
+        from .services.loyalty_service import LoyaltyService
         loyalty_service = LoyaltyService()
         count = loyalty_service.expire_points()
         logger.info(
@@ -265,6 +265,7 @@ def notify_user_of_loyalty_points_task(user_id, points_earned):
     try:
         # Instantiate services within the task to ensure they run
         # in the Celery worker's application context.
+        from .services.notification_service import NotificationService
         notification_service = NotificationService()
         notification_service.send_loyalty_points_notification(user_id, points_earned)
     except (ValueError, TypeError, AttributeError) as e:

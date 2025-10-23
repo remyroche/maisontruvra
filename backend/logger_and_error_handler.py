@@ -86,35 +86,19 @@ def handle_http_exception(e):
 @error_handler_bp.app_errorhandler(NotFoundException)
 def handle_not_found(error):
     """Handles our custom NotFoundException and returns a 404."""
+    from ..utils.error_handlers import handle_service_exception
     current_app.logger.info(f"Resource not found at {request.path}: {error}")
-    response = jsonify(
-        {
-            "error": {
-                "code": 404,
-                "message": str(error) or "The requested resource was not found.",
-            }
-        }
-    )
-    response.status_code = 404
-    return response
+    return handle_service_exception(error, getattr(request, 'id', None))
 
 
 @error_handler_bp.app_errorhandler(ValidationException)
 def handle_validation_error(error):
     """Handles our custom ValidationException and returns a 400."""
+    from ..utils.error_handlers import handle_service_exception
     current_app.logger.warning(
         f"Validation failed for request to {request.path}: {error}"
     )
-    response = jsonify(
-        {
-            "error": {
-                "code": 400,
-                "message": str(error) or "A validation error occurred.",
-            }
-        }
-    )
-    response.status_code = 400
-    return response
+    return handle_service_exception(error, getattr(request, 'id', None))
 
 
 @error_handler_bp.app_errorhandler(AuthorizationException)
